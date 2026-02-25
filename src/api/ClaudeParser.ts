@@ -170,7 +170,7 @@ export class ClaudeParser {
  * Load a fallback level from pre-generated JSON
  */
 export async function loadFallbackLevel(chapterNumber: number): Promise<LevelData> {
-  const path = `/assets/fallback/chapter_${chapterNumber}.json`;
+  const path = `${import.meta.env.BASE_URL}assets/fallback/chapter_${chapterNumber}.json`;
 
   try {
     const response = await fetch(path);
