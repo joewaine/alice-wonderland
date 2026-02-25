@@ -22,13 +22,10 @@ try {
   process.exit(1);
 }
 
-// Skybox style prefix for consistent look
-const SKYBOX_STYLE = `equirectangular panorama, 360 degree hdri skybox, seamless,
-fantastical whimsical dreamscape, Alice in Wonderland style, magical atmosphere,
-pastel colors, no figures, no text, environmental only`;
+// Skybox style prefix for seamless equirectangular panoramas
+const SKYBOX_STYLE = `equirectangular 360 panorama, seamless tileable hdri skybox, perfect horizontal wrap, continuous horizon, no visible seams, fantastical whimsical dreamscape, Alice in Wonderland style, magical atmosphere, pastel colors, no figures, no text, environmental landscape only, symmetric edges`;
 
-const NEGATIVE_PROMPT = `realistic, photograph, modern, text, watermark,
-people, figures, animals, characters, seams, artifacts`;
+const NEGATIVE_PROMPT = `realistic, photograph, modern, text, watermark, people, figures, animals, characters, visible seams, discontinuity, broken horizon, asymmetric, artifacts, borders`;
 
 // Chapter-specific prompts
 const CHAPTER_SKYBOXES = [
@@ -63,10 +60,10 @@ async function generateSkybox(chapterNum: number, prompt: string): Promise<strin
       "class_type": "KSampler",
       "inputs": {
         "seed": Math.floor(Math.random() * 1000000),
-        "steps": 25,
-        "cfg": 7.5,
-        "sampler_name": "euler_ancestral",
-        "scheduler": "normal",
+        "steps": 35,
+        "cfg": 8,
+        "sampler_name": "dpmpp_2m",
+        "scheduler": "karras",
         "denoise": 1,
         "model": ["4", 0],
         "positive": ["6", 0],
@@ -83,8 +80,8 @@ async function generateSkybox(chapterNum: number, prompt: string): Promise<strin
     "5": {
       "class_type": "EmptyLatentImage",
       "inputs": {
-        "width": 1024,  // Wide for panoramic
-        "height": 512,
+        "width": 2048,  // High-res equirectangular (2:1 ratio)
+        "height": 1024,
         "batch_size": 1
       }
     },
