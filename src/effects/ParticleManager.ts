@@ -205,6 +205,58 @@ export class ParticleManager {
   }
 
   /**
+   * Landing dust effect
+   */
+  createLandingDust(position: THREE.Vector3, intensity: number = 1): void {
+    const count = Math.floor(15 * intensity);
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+      // Start at ground level
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y - 0.5;
+      positions[i * 3 + 2] = position.z;
+
+      // Spread outward along ground
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 2 + 1;
+
+      velocities[i * 3] = Math.cos(angle) * speed;
+      velocities[i * 3 + 1] = Math.random() * 1.5; // Slight upward
+      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.PointsMaterial({
+      color: 0xccbb99, // Dusty tan color
+      size: 0.2,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.NormalBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.5,
+      isLooping: false,
+      elapsed: 0
+    });
+  }
+
+  /**
    * Gate unlock effect
    */
   createGateUnlockEffect(position: THREE.Vector3): void {

@@ -64,6 +64,94 @@ export class AudioManager {
   }
 
   /**
+   * Play falling/death sound
+   */
+  playFall(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(400, this.audioContext.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, this.audioContext.currentTime + 0.8);
+
+    gain.gain.setValueAtTime(0.3, this.audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.8);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.audioContext.currentTime + 0.8);
+  }
+
+  /**
+   * Play respawn sound
+   */
+  playRespawn(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    // Ascending sparkle
+    const notes = [262, 330, 392, 523];
+    notes.forEach((freq, i) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      const startTime = this.audioContext!.currentTime + i * 0.1;
+      gain.gain.setValueAtTime(0.2, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(startTime);
+      osc.stop(startTime + 0.35);
+    });
+  }
+
+  /**
+   * Play footstep sound
+   */
+  playFootstep(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+    const filter = this.audioContext.createBiquadFilter();
+
+    // Vary pitch slightly for natural feel
+    const basePitch = 80 + Math.random() * 40;
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(basePitch, this.audioContext.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, this.audioContext.currentTime + 0.05);
+
+    // Quick, quiet tap
+    gain.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.06);
+
+    // Low-pass filter for softness
+    filter.type = 'lowpass';
+    filter.frequency.value = 300;
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.audioContext.currentTime + 0.08);
+  }
+
+  /**
    * Play land sound (thud)
    */
   playLand(): void {
@@ -282,6 +370,20 @@ export class AudioManager {
   toggleMute(): boolean {
     this.muted = !this.muted;
     return this.muted;
+  }
+
+  /**
+   * Get mute state
+   */
+  getMuted(): boolean {
+    return this.muted;
+  }
+
+  /**
+   * Set mute state
+   */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
   }
 
   /**

@@ -14,7 +14,10 @@ import { SizePickup } from './world/SizePickup';
 import { NPCController } from './npcs/NPCController';
 import { ParticleManager } from './effects/ParticleManager';
 import { MainMenu } from './ui/MainMenu';
+import { LoadingScreen } from './ui/LoadingScreen';
 import { audioManager } from './audio/AudioManager';
+import { musicManager } from './audio/MusicManager';
+import { assetLoader } from './engine/AssetLoader';
 
 export class Game {
   // Three.js core
@@ -38,7 +41,7 @@ export class Game {
 
   // Player
   private playerBody: RAPIER.RigidBody | null = null;
-  private playerMesh: THREE.Mesh | null = null;
+  private playerMesh: THREE.Object3D | null = null;
   private sizeManager: SizeManager | null = null;
 
   // Size pickups (spawned per level)
@@ -52,6 +55,7 @@ export class Game {
 
   // Menu system
   private mainMenu: MainMenu;
+  private loadingScreen: LoadingScreen;
 
   // Current player config
   private moveSpeed: number = 8;
@@ -65,6 +69,28 @@ export class Game {
 
   // HUD elements
   private instructionsDiv: HTMLDivElement | null = null;
+
+  // Audio state
+  private isMuted: boolean = false;
+  private wasMutePressed: boolean = false;
+  private footstepTimer: number = 0;
+  private footstepInterval: number = 0.35; // Seconds between footsteps
+
+  // Respawn state
+  private isRespawning: boolean = false;
+
+  // Landing detection
+  private wasAirborne: boolean = false;
+
+  // Chapter switch debounce
+  private lastChapterKey: string = '';
+
+  // Squash/stretch animation
+  private targetSquash: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
+  private currentSquash: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
+
+  // Chapter loading state
+  private isLoadingChapter: boolean = false;
 
   constructor() {
     // Create renderer
@@ -104,6 +130,9 @@ export class Game {
     // Main menu
     this.mainMenu = new MainMenu();
 
+    // Loading screen
+    this.loadingScreen = new LoadingScreen();
+
     // Handle window resize
     window.addEventListener('resize', () => this.onResize());
 
@@ -117,18 +146,25 @@ export class Game {
   async init(): Promise<void> {
     console.log('Initializing game...');
 
+    // Show loading screen
+    this.loadingScreen.show();
+    this.loadingScreen.setProgress(10, 'Initializing physics...');
+
     // Initialize Rapier physics
     await RAPIER.init();
     console.log('Rapier physics initialized');
+    this.loadingScreen.setProgress(30, 'Creating world...');
 
     // Create physics world
     const gravity = new RAPIER.Vector3(0, -20, 0);
     this.world = new RAPIER.World(gravity);
     this.physicsReady = true;
+    this.loadingScreen.setProgress(50, 'Setting up player...');
 
     // Setup base systems
     this.setupLighting();
-    this.setupPlayer();
+    await this.setupPlayer();
+    this.loadingScreen.setProgress(70, 'Preparing levels...');
 
     // Create scene manager for level loading
     this.sceneManager = new SceneManager(this.scene, this.world);
@@ -165,6 +201,7 @@ export class Game {
     this.mainMenu.onStart = async () => {
       audioManager.init(); // Initialize audio on first user interaction
       await this.loadChapter(1);
+      musicManager.play(); // Start background music
       this.start();
     };
 
@@ -181,7 +218,10 @@ export class Game {
       this.gameLoop();
     };
 
-    // Show main menu
+    // Complete loading and show main menu
+    this.loadingScreen.setProgress(100, 'Welcome to Wonderland!');
+    await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause to show completion
+    this.loadingScreen.hide();
     this.mainMenu.show();
 
     console.log('Game initialized!');
@@ -191,23 +231,68 @@ export class Game {
    * Load a chapter level
    */
   private async loadChapter(chapterNumber: number): Promise<void> {
-    if (!this.sceneManager || !this.world) return;
+    if (!this.sceneManager || !this.world || this.isLoadingChapter) return;
 
-    // Clear old size pickups
-    this.clearSizePickups();
+    this.isLoadingChapter = true;
 
-    // Load the level
-    await this.sceneManager.loadLevel(chapterNumber);
+    try {
+      // Clear old size pickups
+      this.clearSizePickups();
 
-    // Wire up NPCs for dialogue
-    const npcs = this.sceneManager.getNPCs();
-    this.npcController.setNPCs(npcs);
+      // Load the level
+      await this.sceneManager.loadLevel(chapterNumber);
 
-    // Setup ambient particles for atmosphere
-    this.particleManager.createAmbientParticles(0xffeedd, 150);
+      // Wire up NPCs for dialogue
+      const npcs = this.sceneManager.getNPCs();
+      this.npcController.setNPCs(npcs);
 
-    // Add size pickups for the level
-    this.setupSizePickups();
+      // Setup ambient particles for atmosphere
+      this.particleManager.createAmbientParticles(0xffeedd, 150);
+
+      // Update music mood for chapter
+      musicManager.setChapterMood(chapterNumber);
+
+      // Add size pickups for the level
+      this.setupSizePickups();
+    } catch (error) {
+      console.error(`Failed to load chapter ${chapterNumber}:`, error);
+      // Fall back to chapter 1 if not already on it
+      if (chapterNumber !== 1) {
+        console.log('Falling back to chapter 1');
+        this.isLoadingChapter = false;
+        await this.loadChapter(1);
+      }
+    } finally {
+      this.isLoadingChapter = false;
+    }
+  }
+
+  /**
+   * Handle player death - fade to black, respawn, fade back in
+   */
+  private async handleDeath(): Promise<void> {
+    if (!this.sceneManager || this.isRespawning) return;
+
+    this.isRespawning = true;
+
+    try {
+      // Play falling sound
+      audioManager.playFall();
+
+      // Fade to black
+      await this.sceneManager.fadeToBlack();
+
+      // Respawn player
+      this.spawnPlayerAt(new THREE.Vector3(0, 5, 0));
+
+      // Play respawn sound
+      audioManager.playRespawn();
+
+      // Fade back in
+      await this.sceneManager.fadeIn();
+    } finally {
+      this.isRespawning = false;
+    }
   }
 
   /**
@@ -258,15 +343,37 @@ export class Game {
   /**
    * Setup player
    */
-  private setupPlayer(): void {
+  private async setupPlayer(): Promise<void> {
     if (!this.world) return;
 
-    // Player visual
-    const capsuleGeo = new THREE.CapsuleGeometry(0.4, 1, 8, 16);
-    const capsuleMat = new THREE.MeshStandardMaterial({ color: 0x4fc3f7 });
-    this.playerMesh = new THREE.Mesh(capsuleGeo, capsuleMat);
-    this.playerMesh.castShadow = true;
-    this.scene.add(this.playerMesh);
+    // Load Alice 3D model
+    try {
+      const model = await assetLoader.loadModel('/assets/models/alice.glb');
+
+      // Scale down and center
+      model.scale.setScalar(0.5);
+
+      // Ground the model
+      const box = new THREE.Box3().setFromObject(model);
+      model.position.y = -box.min.y * 0.5;
+
+      // Wrap in container for positioning
+      const container = new THREE.Group();
+      container.add(model);
+      this.playerMesh = container;
+      this.playerMesh.castShadow = true;
+      this.scene.add(this.playerMesh);
+
+      console.log('Loaded Alice player model');
+    } catch {
+      // Fallback to capsule
+      console.log('Using fallback player capsule');
+      const capsuleGeo = new THREE.CapsuleGeometry(0.4, 1, 8, 16);
+      const capsuleMat = new THREE.MeshStandardMaterial({ color: 0x4fc3f7 });
+      this.playerMesh = new THREE.Mesh(capsuleGeo, capsuleMat);
+      this.playerMesh.castShadow = true;
+      this.scene.add(this.playerMesh);
+    }
 
     // Player physics
     const playerBodyDesc = RAPIER.RigidBodyDesc.dynamic()
@@ -300,6 +407,9 @@ export class Game {
           audioManager.playGrow();
         }
       }
+
+      // Update HUD size indicator
+      this.sceneManager?.updateSize(size);
     };
 
     this.camera.position.set(0, 5, 10);
@@ -394,14 +504,37 @@ export class Game {
 
     // Update NPC interactions
     const isInteractPressed = this.input.isKeyDown('e');
-    this.npcController.update(playerPos, isInteractPressed);
+    this.npcController.update(playerPos, isInteractPressed, dt);
   }
 
   /**
    * Update player movement and camera
    */
-  private updatePlayer(_dt: number): void {
+  private updatePlayer(dt: number): void {
     if (!this.playerBody || !this.world || !this.sizeManager) return;
+
+    // Mute toggle (M key)
+    const isMutePressed = this.input.isKeyDown('m');
+    if (isMutePressed && !this.wasMutePressed) {
+      this.isMuted = !this.isMuted;
+      audioManager.setMuted(this.isMuted);
+      musicManager.setMuted(this.isMuted);
+      this.sceneManager?.setMuted(this.isMuted);
+    }
+    this.wasMutePressed = isMutePressed;
+
+    // Debug: Jump to chapter (1-4 keys)
+    let chapterKeyPressed = '';
+    for (let i = 1; i <= 4; i++) {
+      if (this.input.isKeyDown(i.toString())) {
+        chapterKeyPressed = i.toString();
+        break;
+      }
+    }
+    if (chapterKeyPressed && chapterKeyPressed !== this.lastChapterKey) {
+      this.loadChapter(parseInt(chapterKeyPressed));
+    }
+    this.lastChapterKey = chapterKeyPressed;
 
     // Size controls (Q to shrink, R to grow - E is reserved for interact)
     if (this.input.isKeyDown('q')) {
@@ -445,26 +578,76 @@ export class Game {
       true
     );
 
+    // Footstep sounds when moving and grounded
+    const isMoving = length > 0;
+    if (isMoving && this.isGrounded()) {
+      this.footstepTimer += dt;
+      if (this.footstepTimer >= this.footstepInterval) {
+        audioManager.playFootstep();
+        this.footstepTimer = 0;
+      }
+    } else {
+      this.footstepTimer = 0;
+    }
+
     // Jumping
-    if (this.input.jump && this.isGrounded()) {
+    const grounded = this.isGrounded();
+    if (this.input.jump && grounded) {
       this.playerBody.setLinvel(
         new RAPIER.Vector3(vel.x, this.jumpForce, vel.z),
         true
       );
       audioManager.playJump();
+      // Stretch on jump
+      this.targetSquash.set(0.8, 1.3, 0.8);
     }
+
+    // Landing detection
+    if (grounded && this.wasAirborne) {
+      // Just landed - play sound and create dust
+      audioManager.playLand();
+      const pos = this.playerBody.translation();
+      const landPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+
+      // Intensity based on fall velocity (clamped)
+      const fallSpeed = Math.abs(vel.y);
+      const intensity = Math.min(fallSpeed / 15, 1.5);
+      if (intensity > 0.2) {
+        this.particleManager.createLandingDust(landPos, intensity);
+      }
+
+      // Squash on landing
+      this.targetSquash.set(1.3, 0.7, 1.3);
+    }
+    this.wasAirborne = !grounded;
+
+    // Return to normal when grounded
+    if (grounded && !this.input.jump) {
+      this.targetSquash.set(1, 1, 1);
+    }
+
+    // Animate squash/stretch
+    this.currentSquash.lerp(this.targetSquash, 0.2);
 
     // Position
     const pos = this.playerBody.translation();
 
-    // Respawn if fallen
-    if (pos.y < -50) {
-      this.spawnPlayerAt(new THREE.Vector3(0, 5, 0));
+    // Respawn if fallen (with fade effect)
+    if (pos.y < -50 && !this.isRespawning) {
+      this.handleDeath();
     }
 
     // Update player mesh
     if (this.playerMesh) {
       this.playerMesh.position.set(pos.x, pos.y, pos.z);
+
+      // Apply squash/stretch (combine with size scale)
+      const sizeScale = this.sizeManager?.config.scale || 1;
+      this.playerMesh.scale.set(
+        this.currentSquash.x * sizeScale,
+        this.currentSquash.y * sizeScale,
+        this.currentSquash.z * sizeScale
+      );
     }
 
     // Camera
@@ -571,6 +754,8 @@ export class Game {
       <p style="margin:5px 0"><b>Space</b> - Jump</p>
       <p style="margin:5px 0"><b>Q/R</b> - Shrink/Grow</p>
       <p style="margin:5px 0"><b>E</b> - Talk to NPCs</p>
+      <p style="margin:5px 0"><b>M</b> - Mute</p>
+      <p style="margin:5px 0"><b>1-4</b> - Jump to Chapter</p>
     `;
     document.body.appendChild(this.instructionsDiv);
   }

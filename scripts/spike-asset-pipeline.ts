@@ -12,8 +12,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load API keys from config
-const CONFIG_PATH = '/Users/josephwaine/fractal/dantes-inferno-game/config.json';
+// Load API keys from local config
+const CONFIG_PATH = path.join(__dirname, '../config.json');
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
 
 const COMFY_API_KEY = config.comfy_cloud_api_key;
@@ -190,24 +190,27 @@ async function generateImageComfyUI(): Promise<string> {
           const historyData = await historyRes.json();
           console.log('History data:', JSON.stringify(historyData, null, 2).slice(0, 500));
 
-          if (historyData.outputs) {
-            for (const nodeId in historyData.outputs) {
-              const nodeOutput = historyData.outputs[nodeId];
-              if (nodeOutput.images && nodeOutput.images.length > 0) {
-                const imageInfo = nodeOutput.images[0];
-                const params = new URLSearchParams({
-                  filename: imageInfo.filename,
-                  subfolder: imageInfo.subfolder || '',
-                  type: 'output'
-                });
+          // History data is wrapped in prompt ID key
+          const jobData = historyData[promptId] || historyData;
+          const outputs = jobData.outputs || {};
 
-                const viewRes = await fetch(`${BASE_URL}/api/view?${params}`, {
-                  headers: { 'X-API-Key': COMFY_API_KEY },
-                  redirect: 'follow'
-                });
+          for (const nodeId in outputs) {
+            const nodeOutput = outputs[nodeId];
+            if (nodeOutput.images && nodeOutput.images.length > 0) {
+              const imageInfo = nodeOutput.images[0];
+              const params = new URLSearchParams({
+                filename: imageInfo.filename,
+                subfolder: imageInfo.subfolder || '',
+                type: 'output'
+              });
 
-                return viewRes.url;
-              }
+              const viewRes = await fetch(`${BASE_URL}/api/view?${params}`, {
+                headers: { 'X-API-Key': COMFY_API_KEY },
+                redirect: 'follow'
+              });
+
+              console.log('Image URL:', viewRes.url);
+              return viewRes.url;
             }
           }
         }

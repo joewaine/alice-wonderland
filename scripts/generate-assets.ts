@@ -16,8 +16,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load API keys from config
-const CONFIG_PATH = '/Users/josephwaine/fractal/dantes-inferno-game/config.json';
+// Load API keys from local config
+const CONFIG_PATH = path.join(__dirname, '../config.json');
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
 
 const ANTHROPIC_API_KEY = config.anthropic_api_key;

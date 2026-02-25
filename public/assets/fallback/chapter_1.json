@@ -280,6 +280,7 @@
   "npcs": [
     {
       "name": "White Rabbit",
+      "model_id": "white_rabbit",
       "position": {
         "x": 8,
         "y": -118,
