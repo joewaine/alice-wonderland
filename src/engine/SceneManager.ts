@@ -212,6 +212,20 @@ export class SceneManager {
   }
 
   /**
+   * Set mute indicator
+   */
+  setMuted(muted: boolean): void {
+    this.hud.setMuted(muted);
+  }
+
+  /**
+   * Update size indicator
+   */
+  updateSize(size: 'small' | 'normal' | 'large'): void {
+    this.hud.updateSize(size);
+  }
+
+  /**
    * Clean up
    */
   dispose(): void {

@@ -248,6 +248,15 @@ export class MusicManager {
   getIsPlaying(): boolean {
     return this.isPlaying;
   }
+
+  /**
+   * Set muted state
+   */
+  setMuted(muted: boolean): void {
+    if (this.masterGain) {
+      this.masterGain.gain.value = muted ? 0 : 0.15;
+    }
+  }
 }
 
 // Singleton

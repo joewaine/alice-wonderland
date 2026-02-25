@@ -69,6 +69,12 @@ export class Game {
   // HUD elements
   private instructionsDiv: HTMLDivElement | null = null;
 
+  // Audio state
+  private isMuted: boolean = false;
+  private wasMutePressed: boolean = false;
+  private footstepTimer: number = 0;
+  private footstepInterval: number = 0.35; // Seconds between footsteps
+
   constructor() {
     // Create renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -320,6 +326,9 @@ export class Game {
           audioManager.playGrow();
         }
       }
+
+      // Update HUD size indicator
+      this.sceneManager?.updateSize(size);
     };
 
     this.camera.position.set(0, 5, 10);
@@ -420,8 +429,18 @@ export class Game {
   /**
    * Update player movement and camera
    */
-  private updatePlayer(_dt: number): void {
+  private updatePlayer(dt: number): void {
     if (!this.playerBody || !this.world || !this.sizeManager) return;
+
+    // Mute toggle (M key)
+    const isMutePressed = this.input.isKeyDown('m');
+    if (isMutePressed && !this.wasMutePressed) {
+      this.isMuted = !this.isMuted;
+      audioManager.setMuted(this.isMuted);
+      musicManager.setMuted(this.isMuted);
+      this.sceneManager?.setMuted(this.isMuted);
+    }
+    this.wasMutePressed = isMutePressed;
 
     // Size controls (Q to shrink, R to grow - E is reserved for interact)
     if (this.input.isKeyDown('q')) {
@@ -464,6 +483,18 @@ export class Game {
       new RAPIER.Vector3(worldX * this.moveSpeed, vel.y, worldZ * this.moveSpeed),
       true
     );
+
+    // Footstep sounds when moving and grounded
+    const isMoving = length > 0;
+    if (isMoving && this.isGrounded()) {
+      this.footstepTimer += dt;
+      if (this.footstepTimer >= this.footstepInterval) {
+        audioManager.playFootstep();
+        this.footstepTimer = 0;
+      }
+    } else {
+      this.footstepTimer = 0;
+    }
 
     // Jumping
     if (this.input.jump && this.isGrounded()) {
@@ -591,6 +622,7 @@ export class Game {
       <p style="margin:5px 0"><b>Space</b> - Jump</p>
       <p style="margin:5px 0"><b>Q/R</b> - Shrink/Grow</p>
       <p style="margin:5px 0"><b>E</b> - Talk to NPCs</p>
+      <p style="margin:5px 0"><b>M</b> - Mute</p>
     `;
     document.body.appendChild(this.instructionsDiv);
   }
