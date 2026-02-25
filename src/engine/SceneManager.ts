@@ -12,6 +12,7 @@ import { LevelBuilder, type BuiltLevel } from '../world/LevelBuilder';
 import { CollectibleManager } from '../world/Collectible';
 import { Gate } from '../world/Gate';
 import { HUD } from '../ui/HUD';
+import { audioManager } from '../audio/AudioManager';
 
 export class SceneManager {
   private scene: THREE.Scene;
@@ -123,19 +124,26 @@ export class SceneManager {
     if (!this.gate?.getIsUnlocked()) return;
 
     const nextChapter = this.currentChapter + 1;
+    const stats = this.collectibleManager.getState();
+
+    // Play celebration jingle
+    audioManager.playChapterComplete();
 
     // Check if we have more chapters
     if (nextChapter > 4) {
-      this.hud.showMessage('Congratulations! You completed the demo!', 5000);
+      this.hud.showChapterComplete(this.currentChapter, stats, () => {
+        this.hud.showMessage('Congratulations! You completed the demo!', 5000);
+      });
       return;
     }
 
-    this.hud.showMessage(`Entering Chapter ${nextChapter}...`);
-
-    // Notify game to transition
-    if (this.onChapterComplete) {
-      this.onChapterComplete(nextChapter);
-    }
+    // Show chapter complete celebration
+    this.hud.showChapterComplete(this.currentChapter, stats, () => {
+      // Notify game to transition
+      if (this.onChapterComplete) {
+        this.onChapterComplete(nextChapter);
+      }
+    });
   }
 
   /**
