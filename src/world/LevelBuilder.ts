@@ -346,7 +346,7 @@ export class LevelBuilder {
 
       // Try to load model if model_id is specified
       if (npc.model_id) {
-        const modelPath = `/assets/models/${npc.model_id}.glb`;
+        const modelPath = `${import.meta.env.BASE_URL}assets/models/${npc.model_id}.glb`;
         try {
           group = await assetLoader.loadModelWithFallback(modelPath, 0x9370db);
 
@@ -554,17 +554,15 @@ export class LevelBuilder {
     }
     this.createdBodies = [];
 
-    // Remove meshes
+    // Remove meshes and dispose resources
     for (const mesh of this.createdMeshes) {
       this.scene.remove(mesh);
       mesh.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
           obj.geometry.dispose();
-          if (Array.isArray(obj.material)) {
-            obj.material.forEach(m => m.dispose());
-          } else {
-            obj.material.dispose();
-          }
+          this.disposeMaterial(obj.material);
+        } else if (obj instanceof THREE.Sprite) {
+          this.disposeMaterial(obj.material);
         }
       });
     }
@@ -575,5 +573,23 @@ export class LevelBuilder {
     this.scene.background = new THREE.Color(0x87ceeb);
 
     console.log('Level cleaned up');
+  }
+
+  /**
+   * Dispose material and its textures
+   */
+  private disposeMaterial(material: THREE.Material | THREE.Material[]): void {
+    const materials = Array.isArray(material) ? material : [material];
+    for (const mat of materials) {
+      // Dispose textures (check for common texture properties)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const m = mat as any;
+      if (m.map?.dispose) m.map.dispose();
+      if (m.normalMap?.dispose) m.normalMap.dispose();
+      if (m.roughnessMap?.dispose) m.roughnessMap.dispose();
+      if (m.metalnessMap?.dispose) m.metalnessMap.dispose();
+      if (m.emissiveMap?.dispose) m.emissiveMap.dispose();
+      mat.dispose();
+    }
   }
 }

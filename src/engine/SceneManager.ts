@@ -106,7 +106,7 @@ export class SceneManager {
    */
   private async fetchLevelData(chapterNumber: number): Promise<LevelData | null> {
     try {
-      const response = await fetch(`/assets/fallback/chapter_${chapterNumber}.json`);
+      const response = await fetch(`${import.meta.env.BASE_URL}assets/fallback/chapter_${chapterNumber}.json`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
