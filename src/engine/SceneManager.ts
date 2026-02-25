@@ -16,6 +16,7 @@ import { audioManager } from '../audio/AudioManager';
 
 export class SceneManager {
   private scene: THREE.Scene;
+  private renderer: THREE.WebGLRenderer;
   private levelBuilder: LevelBuilder;
   private collectibleManager: CollectibleManager;
   private hud: HUD;
@@ -23,6 +24,7 @@ export class SceneManager {
   private currentLevel: BuiltLevel | null = null;
   private currentChapter: number = 1;
   private currentSkyboxTexture: THREE.Texture | null = null;
+  private skyboxMesh: THREE.Mesh | null = null;
 
   // Callbacks
   public onChapterComplete: ((nextChapter: number) => void) | null = null;
@@ -30,8 +32,9 @@ export class SceneManager {
   public onCollectiblePickup: ((type: string, position: THREE.Vector3) => void) | null = null;
   public onGateUnlock: ((position: THREE.Vector3) => void) | null = null;
 
-  constructor(scene: THREE.Scene, world: RAPIER.World) {
+  constructor(scene: THREE.Scene, world: RAPIER.World, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
+    this.renderer = renderer;
     this.levelBuilder = new LevelBuilder(scene, world);
     this.collectibleManager = new CollectibleManager();
     this.hud = new HUD();
@@ -106,61 +109,99 @@ export class SceneManager {
   }
 
   /**
-   * Create seamless procedural skybox for the chapter
+   * Load skybox as a large inverted sphere
    */
   private async loadSkybox(chapterNumber: number): Promise<void> {
-    // Dispose previous skybox texture
+    // Dispose previous skybox
     if (this.currentSkyboxTexture) {
       this.currentSkyboxTexture.dispose();
       this.currentSkyboxTexture = null;
     }
+    if (this.skyboxMesh) {
+      this.scene.remove(this.skyboxMesh);
+      this.skyboxMesh.geometry.dispose();
+      (this.skyboxMesh.material as THREE.Material).dispose();
+      this.skyboxMesh = null;
+    }
 
-    // Chapter-specific color palettes (top, middle, bottom)
-    const skyPalettes: Record<number, { top: string; mid: string; bottom: string; stars?: boolean }> = {
-      1: { top: '#1a0a2e', mid: '#4a2c6e', bottom: '#9370db', stars: true },  // Rabbit hole - purple vortex
-      2: { top: '#2d3a4f', mid: '#5a6f8f', bottom: '#8ba5c4' },                // Pool of tears - stormy blue
-      3: { top: '#ff7e5f', mid: '#feb47b', bottom: '#ffedbc' },                // Caucus race - sunset
-      4: { top: '#87ceeb', mid: '#b8d4e8', bottom: '#fff8dc' }                 // Rabbit's house - afternoon
+    const skyboxPath = `${import.meta.env.BASE_URL}assets/skyboxes/chapter_${chapterNumber}.png`;
+
+    try {
+      const texture = await new Promise<THREE.Texture>((resolve, reject) => {
+        const loader = new THREE.TextureLoader();
+        loader.load(
+          skyboxPath,
+          (tex) => resolve(tex),
+          undefined,
+          () => reject(new Error(`Failed to load skybox`))
+        );
+      });
+
+      // Configure texture filtering for maximum quality
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.generateMipmaps = true;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.needsUpdate = true;
+      this.currentSkyboxTexture = texture;
+
+      // Create inverted sphere for skybox (texture on inside)
+      const geometry = new THREE.SphereGeometry(500, 64, 32);
+      geometry.scale(-1, 1, 1);
+
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        side: THREE.FrontSide,
+        depthWrite: false
+      });
+
+      this.skyboxMesh = new THREE.Mesh(geometry, material);
+      this.skyboxMesh.renderOrder = -1;
+      this.scene.add(this.skyboxMesh);
+
+      // Clear scene background color
+      this.scene.background = null;
+
+      console.log(`Loaded skybox sphere for chapter ${chapterNumber}`);
+    } catch {
+      // Fallback to gradient
+      this.createGradientSkybox(chapterNumber);
+    }
+  }
+
+  /**
+   * Create fallback gradient skybox
+   */
+  private createGradientSkybox(chapterNumber: number): void {
+    const palettes: Record<number, { top: string; mid: string; bottom: string }> = {
+      1: { top: '#1a0a2e', mid: '#4a2c6e', bottom: '#9370db' },
+      2: { top: '#2d3a4f', mid: '#5a6f8f', bottom: '#8ba5c4' },
+      3: { top: '#ff7e5f', mid: '#feb47b', bottom: '#ffedbc' },
+      4: { top: '#87ceeb', mid: '#b8d4e8', bottom: '#fff8dc' }
     };
 
-    const palette = skyPalettes[chapterNumber] || skyPalettes[1];
+    const palette = palettes[chapterNumber] || palettes[1];
 
-    // Create gradient canvas (seamless because it's just vertical bands)
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
 
-    // Vertical gradient
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, palette.top);
-    gradient.addColorStop(0.4, palette.mid);
+    gradient.addColorStop(0.5, palette.mid);
     gradient.addColorStop(1, palette.bottom);
 
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Add stars for night scenes
-    if (palette.stars) {
-      ctx.fillStyle = 'white';
-      for (let i = 0; i < 100; i++) {
-        const x = Math.random() * canvas.width;
-        const y = Math.random() * canvas.height * 0.6; // Stars in upper portion
-        const size = Math.random() * 2 + 0.5;
-        ctx.globalAlpha = Math.random() * 0.8 + 0.2;
-        ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-    }
-
     const texture = new THREE.CanvasTexture(canvas);
-    texture.mapping = THREE.EquirectangularReflectionMapping;
-
     this.scene.background = texture;
     this.currentSkyboxTexture = texture;
-    console.log(`Created procedural skybox for chapter ${chapterNumber}`);
+    console.log(`Using gradient fallback for chapter ${chapterNumber}`);
   }
 
   /**
@@ -351,6 +392,11 @@ export class SceneManager {
     }
     if (this.currentSkyboxTexture) {
       this.currentSkyboxTexture.dispose();
+    }
+    if (this.skyboxMesh) {
+      this.scene.remove(this.skyboxMesh);
+      this.skyboxMesh.geometry.dispose();
+      (this.skyboxMesh.material as THREE.Material).dispose();
     }
     this.hud.dispose();
   }

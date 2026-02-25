@@ -167,7 +167,7 @@ export class Game {
     this.loadingScreen.setProgress(70, 'Preparing levels...');
 
     // Create scene manager for level loading
-    this.sceneManager = new SceneManager(this.scene, this.world);
+    this.sceneManager = new SceneManager(this.scene, this.world, this.renderer);
 
     // Handle player spawning
     this.sceneManager.onPlayerSpawn = (position) => {
