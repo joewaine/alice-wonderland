@@ -236,7 +236,7 @@ export class NPCController {
     npc.dialogueIndex = 0;
 
     const line = npc.dialogue[0] || 'Hello there!';
-    this.dialogueUI.show(npc.name, line);
+    this.dialogueUI.show(npc.name, line, npc.modelId);
   }
 
   /**
@@ -254,7 +254,7 @@ export class NPCController {
     } else {
       // Show next line
       const line = this.currentNPC.dialogue[this.currentNPC.dialogueIndex];
-      this.dialogueUI.show(this.currentNPC.name, line);
+      this.dialogueUI.show(this.currentNPC.name, line, this.currentNPC.modelId);
     }
   }
 
