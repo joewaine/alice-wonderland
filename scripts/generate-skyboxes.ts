@@ -22,47 +22,47 @@ try {
   process.exit(1);
 }
 
-// Skybox style prefix for seamless equirectangular panoramas
-const SKYBOX_STYLE = `equirectangular 360 panorama, seamless tileable hdri skybox, perfect horizontal wrap, continuous horizon, no visible seams, fantastical whimsical dreamscape, Alice in Wonderland style, magical atmosphere, pastel colors, no figures, no text, environmental landscape only, symmetric edges`;
+// Enhanced skybox style - pure sky only, no objects or figures
+const SKYBOX_STYLE = `equirectangular sky panorama, 360 degree seamless sky environment, ONLY clouds and sky, pure atmospheric sky gradient, fantasy sky illustration, painterly volumetric clouds, soft ethereal glow, magical ambient lighting, endless sky above clouds, masterpiece quality, highly detailed`;
 
-const NEGATIVE_PROMPT = `realistic, photograph, modern, text, watermark, people, figures, animals, characters, visible seams, discontinuity, broken horizon, asymmetric, artifacts, borders`;
+const NEGATIVE_PROMPT = `ground, horizon, landscape, terrain, mountains, trees, buildings, structures, objects, spheres, people, figures, faces, bodies, characters, silhouettes, text, watermark, split image, seam, distorted, low quality, blurry, jpeg artifacts`;
 
-// Chapter-specific prompts
+// Chapter-specific prompts - pure sky scenes, no ground or objects
 const CHAPTER_SKYBOXES = [
   {
     chapter: 1,
     name: 'Down the Rabbit-Hole',
-    prompt: 'falling through endless tunnel, floating objects, pocket watches, keys, playing cards, swirling purple and gold colors, magical vortex, dreamy'
+    prompt: 'deep purple twilight sky gradient fading to cosmic black above, swirling violet nebula clouds, scattered stars, aurora wisps, dreamlike sky only, no ground no objects'
   },
   {
     chapter: 2,
     name: 'The Pool of Tears',
-    prompt: 'vast sea of tears, floating islands, giant mushrooms in distance, stormy purple sky, crying clouds, melancholy but magical, oceanic dreamscape'
+    prompt: 'dramatic grey storm clouds filling the sky, silver-grey cloudscape, moody blue grey sky gradient, silver linings, emotional overcast sky only, no ground no objects'
   },
   {
     chapter: 3,
     name: 'A Caucus-Race and a Long Tale',
-    prompt: 'whimsical beach at sunset, strange creatures silhouettes, golden hour lighting, carnival atmosphere, playful clouds, sandy shores'
+    prompt: 'warm sunset sky gradient with orange pink and gold clouds, golden hour sky, cotton candy clouds, soft peachy sky gradient, sky only, no ground no objects no figures'
   },
   {
     chapter: 4,
     name: 'The Rabbit Sends in a Little Bill',
-    prompt: 'cozy cottage interior becoming outdoor garden, chimney smoke, cucumber frames, broken glass sparkling, warm afternoon, domestic wonderland'
+    prompt: 'bright blue afternoon sky with fluffy white cumulus clouds, soft light blue gradient, peaceful sunny sky, scattered clouds, sky only, no ground no objects'
   }
 ];
 
 async function generateSkybox(chapterNum: number, prompt: string): Promise<string> {
   const fullPrompt = `${SKYBOX_STYLE}, ${prompt}`;
 
-  // ComfyUI workflow for panoramic generation
+  // ComfyUI workflow for high-quality panoramic generation
   const workflow = {
     "3": {
       "class_type": "KSampler",
       "inputs": {
         "seed": Math.floor(Math.random() * 1000000),
-        "steps": 35,
-        "cfg": 8,
-        "sampler_name": "dpmpp_2m",
+        "steps": 40,
+        "cfg": 7,
+        "sampler_name": "dpmpp_2m_sde",
         "scheduler": "karras",
         "denoise": 1,
         "model": ["4", 0],
