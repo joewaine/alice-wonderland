@@ -12,6 +12,7 @@ import { LevelBuilder, type BuiltLevel } from '../world/LevelBuilder';
 import { CollectibleManager } from '../world/Collectible';
 import { Gate } from '../world/Gate';
 import { HUD } from '../ui/HUD';
+import { audioManager } from '../audio/AudioManager';
 
 export class SceneManager {
   private scene: THREE.Scene;
@@ -74,8 +75,8 @@ export class SceneManager {
 
     this.currentChapter = chapterNumber;
 
-    // Build the level
-    this.currentLevel = this.levelBuilder.build(levelData);
+    // Build the level (async to load NPC models)
+    this.currentLevel = await this.levelBuilder.build(levelData);
 
     // Setup collectibles
     this.collectibleManager.setCollectibles(this.currentLevel.collectibles);
@@ -123,19 +124,26 @@ export class SceneManager {
     if (!this.gate?.getIsUnlocked()) return;
 
     const nextChapter = this.currentChapter + 1;
+    const stats = this.collectibleManager.getState();
+
+    // Play celebration jingle
+    audioManager.playChapterComplete();
 
     // Check if we have more chapters
     if (nextChapter > 4) {
-      this.hud.showMessage('Congratulations! You completed the demo!', 5000);
+      this.hud.showChapterComplete(this.currentChapter, stats, () => {
+        this.hud.showMessage('Congratulations! You completed the demo!', 5000);
+      });
       return;
     }
 
-    this.hud.showMessage(`Entering Chapter ${nextChapter}...`);
-
-    // Notify game to transition
-    if (this.onChapterComplete) {
-      this.onChapterComplete(nextChapter);
-    }
+    // Show chapter complete celebration
+    this.hud.showChapterComplete(this.currentChapter, stats, () => {
+      // Notify game to transition
+      if (this.onChapterComplete) {
+        this.onChapterComplete(nextChapter);
+      }
+    });
   }
 
   /**
@@ -152,6 +160,47 @@ export class SceneManager {
 
     // Check size puzzle zones
     this.checkSizePuzzleZones(playerPosition);
+
+    // Update bouncy platforms
+    this.updateBouncyPlatforms(dt, playerPosition);
+  }
+
+  /**
+   * Update bouncy platform compression animation
+   */
+  private updateBouncyPlatforms(dt: number, playerPosition: THREE.Vector3): void {
+    if (!this.currentLevel) return;
+
+    for (const platform of this.currentLevel.bouncyPlatforms) {
+      const mesh = platform.mesh;
+      const bounds = new THREE.Box3().setFromObject(mesh);
+
+      // Check if player is on this platform (above it and within horizontal bounds)
+      const onPlatform =
+        playerPosition.x >= bounds.min.x &&
+        playerPosition.x <= bounds.max.x &&
+        playerPosition.z >= bounds.min.z &&
+        playerPosition.z <= bounds.max.z &&
+        playerPosition.y >= bounds.max.y - 0.5 &&
+        playerPosition.y <= bounds.max.y + 1.5;
+
+      // Compress when player is on platform
+      const targetCompression = onPlatform ? 0.3 : 0;
+      platform.compressionAmount += (targetCompression - platform.compressionAmount) * dt * 10;
+
+      // Spring back quickly
+      if (!onPlatform && platform.compressionAmount > 0.01) {
+        platform.compressionAmount *= 0.85;
+      }
+
+      // Apply compression to mesh scale
+      const scaleY = 1 - platform.compressionAmount;
+      const scaleXZ = 1 + platform.compressionAmount * 0.3; // Squash out slightly
+      mesh.scale.set(scaleXZ, scaleY, scaleXZ);
+
+      // Adjust position to keep top surface stable
+      mesh.position.y = platform.baseY - platform.compressionAmount * 0.2;
+    }
   }
 
   /**
@@ -201,6 +250,34 @@ export class SceneManager {
    */
   getCurrentChapter(): number {
     return this.currentChapter;
+  }
+
+  /**
+   * Set mute indicator
+   */
+  setMuted(muted: boolean): void {
+    this.hud.setMuted(muted);
+  }
+
+  /**
+   * Update size indicator
+   */
+  updateSize(size: 'small' | 'normal' | 'large'): void {
+    this.hud.updateSize(size);
+  }
+
+  /**
+   * Fade screen to black (for death)
+   */
+  fadeToBlack(): Promise<void> {
+    return this.hud.fadeToBlack();
+  }
+
+  /**
+   * Fade screen back in (for respawn)
+   */
+  fadeIn(): Promise<void> {
+    return this.hud.fadeIn();
   }
 
   /**

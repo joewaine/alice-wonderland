@@ -19,6 +19,14 @@ export class NPCController {
   // Interaction prompt
   private promptElement: HTMLDivElement;
 
+  // Speech bubble indicators
+  private speechBubbles: Map<NPCObject, THREE.Sprite> = new Map();
+  private bubbleTexture: THREE.CanvasTexture | null = null;
+  private bobTime: number = 0;
+
+  // Idle animation
+  private idleTime: number = 0;
+
   constructor() {
     this.dialogueUI = new DialogueUI();
 
@@ -46,14 +54,86 @@ export class NPCController {
     this.dialogueUI.onDismiss = () => {
       this.currentNPC = null;
     };
+
+    // Create speech bubble texture
+    this.bubbleTexture = this.createBubbleTexture();
+  }
+
+  /**
+   * Create the speech bubble canvas texture
+   */
+  private createBubbleTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+
+    // Draw speech bubble
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(32, 28, 24, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw tail
+    ctx.beginPath();
+    ctx.moveTo(26, 48);
+    ctx.lineTo(32, 60);
+    ctx.lineTo(38, 48);
+    ctx.fill();
+
+    // Draw "..." dots
+    ctx.fillStyle = '#666';
+    ctx.beginPath();
+    ctx.arc(22, 28, 4, 0, Math.PI * 2);
+    ctx.arc(32, 28, 4, 0, Math.PI * 2);
+    ctx.arc(42, 28, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
   }
 
   /**
    * Set NPCs to manage
    */
   setNPCs(npcs: NPCObject[]): void {
+    // Clean up old speech bubbles
+    this.clearSpeechBubbles();
+
     this.npcs = npcs;
     this.currentNPC = null;
+
+    // Create speech bubbles for each NPC
+    if (this.bubbleTexture) {
+      for (const npc of npcs) {
+        const material = new THREE.SpriteMaterial({
+          map: this.bubbleTexture,
+          transparent: true,
+          opacity: 0
+        });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(0.8, 0.8, 1);
+
+        // Position above NPC's head (local to NPC mesh)
+        sprite.position.set(0, 2.5, 0);
+
+        // Add as child of NPC mesh
+        npc.mesh.add(sprite);
+        this.speechBubbles.set(npc, sprite);
+      }
+    }
+  }
+
+  /**
+   * Clear speech bubble sprites
+   */
+  private clearSpeechBubbles(): void {
+    for (const [, sprite] of this.speechBubbles) {
+      sprite.parent?.remove(sprite);
+      sprite.material.dispose();
+    }
+    this.speechBubbles.clear();
   }
 
   /**
@@ -61,8 +141,12 @@ export class NPCController {
    */
   update(
     playerPosition: THREE.Vector3,
-    isInteractPressed: boolean
+    isInteractPressed: boolean,
+    dt: number = 0.016
   ): void {
+    // Update bob animation time
+    this.bobTime += dt * 3;
+
     // Check if player walked away from current NPC
     if (this.currentNPC && this.dialogueUI.getIsVisible()) {
       const distance = playerPosition.distanceTo(this.currentNPC.position);
@@ -82,6 +166,20 @@ export class NPCController {
         nearestNPC = npc;
         nearestDistance = distance;
       }
+    }
+
+    // Update speech bubble visibility and animation
+    for (const [npc, sprite] of this.speechBubbles) {
+      const distance = playerPosition.distanceTo(npc.position);
+      const shouldShow = distance < this.interactDistance * 1.2 && !this.dialogueUI.getIsVisible();
+
+      // Fade in/out
+      const material = sprite.material as THREE.SpriteMaterial;
+      const targetOpacity = shouldShow ? 1 : 0;
+      material.opacity += (targetOpacity - material.opacity) * 0.1;
+
+      // Bob up and down when visible (local coordinates)
+      sprite.position.y = 2.5 + (shouldShow ? Math.sin(this.bobTime) * 0.15 : 0);
     }
 
     // Show/hide interaction prompt
@@ -108,13 +206,25 @@ export class NPCController {
       }
     }
 
-    // Make NPCs face the player (simple rotation)
+    // Update idle animation time
+    this.idleTime += dt;
+
+    // Make NPCs face the player and animate idle
     for (const npc of this.npcs) {
+      // Face player
       const direction = new THREE.Vector3()
         .subVectors(playerPosition, npc.position)
         .normalize();
       const angle = Math.atan2(direction.x, direction.z);
       npc.mesh.rotation.y = angle;
+
+      // Subtle idle bob
+      const bobOffset = Math.sin(this.idleTime * 2 + npc.position.x) * 0.05;
+      npc.mesh.position.y = npc.position.y + bobOffset;
+
+      // Subtle scale pulse
+      const scalePulse = 1 + Math.sin(this.idleTime * 1.5 + npc.position.z) * 0.02;
+      npc.mesh.scale.setScalar(scalePulse);
     }
   }
 
@@ -160,6 +270,10 @@ export class NPCController {
    */
   dispose(): void {
     this.dialogueUI.dispose();
+    this.clearSpeechBubbles();
+    if (this.bubbleTexture) {
+      this.bubbleTexture.dispose();
+    }
     document.body.removeChild(this.promptElement);
   }
 }
