@@ -348,7 +348,7 @@ export class Game {
 
     // Load Alice 3D model
     try {
-      const model = await assetLoader.loadModel('/assets/models/alice.glb');
+      const model = await assetLoader.loadModel(`${import.meta.env.BASE_URL}assets/models/alice.glb`);
 
       // Scale down and center
       model.scale.setScalar(0.5);
