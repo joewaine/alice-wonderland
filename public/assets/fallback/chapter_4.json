@@ -1,0 +1,347 @@
+{
+  "chapter_number": 4,
+  "chapter_title": "The Rabbit Sends in a Little Bill",
+  "setting": "White Rabbit's cozy house with multiple rooms, a garden with cucumber frames, and surrounding woodland. The house has narrow passages, a chimney, and windows. Outside features broken glass, scattered tools, and a thick forest beyond.",
+  "atmosphere": {
+    "sky_color": "#87CEEB",
+    "fog_color": "#E6E6FA",
+    "fog_near": 25,
+    "fog_far": 80,
+    "ambient_light": "#FFF8DC"
+  },
+  "platforms": [
+    {
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "size": {
+        "x": 8,
+        "y": 1,
+        "z": 8
+      },
+      "type": "solid",
+      "color": "#8B4513"
+    },
+    {
+      "position": {
+        "x": 12,
+        "y": 2,
+        "z": 5
+      },
+      "size": {
+        "x": 6,
+        "y": 1,
+        "z": 4
+      },
+      "type": "solid",
+      "color": "#D2691E"
+    },
+    {
+      "position": {
+        "x": -10,
+        "y": 3,
+        "z": -8
+      },
+      "size": {
+        "x": 5,
+        "y": 1,
+        "z": 5
+      },
+      "type": "solid",
+      "color": "#CD853F"
+    },
+    {
+      "position": {
+        "x": 5,
+        "y": 5,
+        "z": -15
+      },
+      "size": {
+        "x": 4,
+        "y": 1,
+        "z": 6
+      },
+      "type": "solid",
+      "color": "#DEB887"
+    },
+    {
+      "position": {
+        "x": -15,
+        "y": 1,
+        "z": 10
+      },
+      "size": {
+        "x": 7,
+        "y": 1,
+        "z": 3
+      },
+      "type": "solid",
+      "color": "#F4A460"
+    },
+    {
+      "position": {
+        "x": 20,
+        "y": 4,
+        "z": -5
+      },
+      "size": {
+        "x": 5,
+        "y": 1,
+        "z": 5
+      },
+      "type": "solid",
+      "color": "#DAA520"
+    },
+    {
+      "position": {
+        "x": -5,
+        "y": 7,
+        "z": 15
+      },
+      "size": {
+        "x": 6,
+        "y": 1,
+        "z": 4
+      },
+      "type": "solid",
+      "color": "#B8860B"
+    },
+    {
+      "position": {
+        "x": 15,
+        "y": 6,
+        "z": 12
+      },
+      "size": {
+        "x": 4,
+        "y": 1,
+        "z": 7
+      },
+      "type": "solid",
+      "color": "#8B7355"
+    },
+    {
+      "position": {
+        "x": -20,
+        "y": 5,
+        "z": -12
+      },
+      "size": {
+        "x": 5,
+        "y": 1,
+        "z": 5
+      },
+      "type": "solid",
+      "color": "#A0522D"
+    },
+    {
+      "position": {
+        "x": 8,
+        "y": 8,
+        "z": 20
+      },
+      "size": {
+        "x": 6,
+        "y": 1,
+        "z": 4
+      },
+      "type": "solid",
+      "color": "#D2B48C"
+    },
+    {
+      "position": {
+        "x": -12,
+        "y": 9,
+        "z": -20
+      },
+      "size": {
+        "x": 4,
+        "y": 1,
+        "z": 6
+      },
+      "type": "solid",
+      "color": "#DEB887"
+    },
+    {
+      "position": {
+        "x": 0,
+        "y": 3,
+        "z": -8
+      },
+      "size": {
+        "x": 3,
+        "y": 1,
+        "z": 3
+      },
+      "type": "bouncy",
+      "color": "#FF69B4"
+    },
+    {
+      "position": {
+        "x": -8,
+        "y": 6,
+        "z": 8
+      },
+      "size": {
+        "x": 3,
+        "y": 1,
+        "z": 3
+      },
+      "type": "bouncy",
+      "color": "#FF69B4"
+    }
+  ],
+  "collectibles": [
+    {
+      "type": "key",
+      "position": {
+        "x": 12,
+        "y": 3,
+        "z": 5
+      }
+    },
+    {
+      "type": "star",
+      "position": {
+        "x": -10,
+        "y": 4,
+        "z": -8
+      }
+    },
+    {
+      "type": "star",
+      "position": {
+        "x": 20,
+        "y": 5,
+        "z": -5
+      }
+    },
+    {
+      "type": "star",
+      "position": {
+        "x": -5,
+        "y": 8,
+        "z": 15
+      }
+    },
+    {
+      "type": "card",
+      "position": {
+        "x": 5,
+        "y": 6,
+        "z": -15
+      }
+    },
+    {
+      "type": "card",
+      "position": {
+        "x": -15,
+        "y": 2,
+        "z": 10
+      }
+    },
+    {
+      "type": "card",
+      "position": {
+        "x": 15,
+        "y": 7,
+        "z": 12
+      }
+    },
+    {
+      "type": "card",
+      "position": {
+        "x": -20,
+        "y": 6,
+        "z": -12
+      }
+    },
+    {
+      "type": "card",
+      "position": {
+        "x": 8,
+        "y": 9,
+        "z": 20
+      }
+    }
+  ],
+  "npcs": [
+    {
+      "name": "White Rabbit",
+      "position": {
+        "x": -8,
+        "y": 1,
+        "z": 3
+      },
+      "dialogue": [
+        "Mary Ann! Where are my gloves and fan?",
+        "Oh my dear paws! The Duchess will have me executed!",
+        "Quick now! Fetch them from upstairs!",
+        "You there! You must be tiny to fit through my house door.",
+        "But be careful with the cakes - they make you GROW!"
+      ]
+    },
+    {
+      "name": "Bill the Lizard",
+      "position": {
+        "x": 18,
+        "y": 1,
+        "z": -10
+      },
+      "dialogue": [
+        "Well, I hardly know what happened...",
+        "Something came at me like a Jack-in-the-box!",
+        "Up I went like a sky-rocket!",
+        "They tried to send me down the chimney, and I shan't do it again!",
+        "The key to the garden gate is somewhere in the house.",
+        "Congratulations! You've completed the demo!"
+      ]
+    }
+  ],
+  "spawn_point": {
+    "x": 0,
+    "y": 2,
+    "z": 0
+  },
+  "gate_position": {
+    "x": -12,
+    "y": 10,
+    "z": -20
+  },
+  "size_puzzles": [
+    {
+      "area_bounds": {
+        "min": {
+          "x": 10,
+          "y": 2,
+          "z": 3
+        },
+        "max": {
+          "x": 14,
+          "y": 6,
+          "z": 7
+        }
+      },
+      "required_size": "small",
+      "hint": "You must be small enough to fit through the narrow doorway, just like Alice in the tiny house!"
+    },
+    {
+      "area_bounds": {
+        "min": {
+          "x": -7,
+          "y": 7,
+          "z": 13
+        },
+        "max": {
+          "x": -3,
+          "y": 10,
+          "z": 17
+        }
+      },
+      "required_size": "large",
+      "hint": "Only when you're large enough can you reach the high chimney opening!"
+    }
+  ]
+}
