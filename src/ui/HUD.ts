@@ -11,6 +11,8 @@ export class HUD {
   private chapterTitle: HTMLDivElement;
   private collectiblesDisplay: HTMLDivElement;
   private messageDisplay: HTMLDivElement;
+  private muteIndicator: HTMLDivElement;
+  private sizeIndicator: HTMLDivElement;
   private messageTimeout: number | null = null;
 
   constructor() {
@@ -74,6 +76,40 @@ export class HUD {
       transition: opacity 0.3s;
     `;
     this.container.appendChild(this.messageDisplay);
+
+    // Mute indicator (top left)
+    this.muteIndicator = document.createElement('div');
+    this.muteIndicator.style.cssText = `
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      font-size: 24px;
+      background: rgba(0,0,0,0.7);
+      padding: 8px 12px;
+      border-radius: 8px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    `;
+    this.muteIndicator.textContent = '🔇 Muted (M)';
+    this.container.appendChild(this.muteIndicator);
+
+    // Size indicator (bottom right, above instructions)
+    this.sizeIndicator = document.createElement('div');
+    this.sizeIndicator.style.cssText = `
+      position: absolute;
+      bottom: 140px;
+      right: 20px;
+      color: white;
+      font-size: 18px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px 15px;
+      border-radius: 8px;
+      text-align: center;
+      transition: all 0.3s ease;
+    `;
+    this.sizeIndicator.innerHTML = '👤 Normal';
+    this.container.appendChild(this.sizeIndicator);
 
     document.body.appendChild(this.container);
 
@@ -149,6 +185,35 @@ export class HUD {
     setTimeout(() => {
       this.messageDisplay.style.fontSize = '28px';
     }, 4100);
+  }
+
+  /**
+   * Update mute indicator
+   */
+  setMuted(muted: boolean): void {
+    this.muteIndicator.style.opacity = muted ? '1' : '0';
+  }
+
+  /**
+   * Update size indicator
+   */
+  updateSize(size: 'small' | 'normal' | 'large'): void {
+    const sizeInfo = {
+      small: { icon: '🐁', label: 'Small', color: '#ff69b4' },
+      normal: { icon: '👤', label: 'Normal', color: '#ffffff' },
+      large: { icon: '🦣', label: 'Large', color: '#9370db' }
+    };
+
+    const info = sizeInfo[size];
+    this.sizeIndicator.innerHTML = `${info.icon} ${info.label}`;
+    this.sizeIndicator.style.color = info.color;
+    this.sizeIndicator.style.borderColor = info.color;
+
+    // Flash effect on change
+    this.sizeIndicator.style.transform = 'scale(1.2)';
+    setTimeout(() => {
+      this.sizeIndicator.style.transform = 'scale(1)';
+    }, 200);
   }
 
   /**
