@@ -14,6 +14,9 @@ import { Gate } from '../world/Gate';
 import { HUD } from '../ui/HUD';
 import { audioManager } from '../audio/AudioManager';
 
+// Texture loader for skyboxes
+const textureLoader = new THREE.TextureLoader();
+
 export class SceneManager {
   private scene: THREE.Scene;
   private levelBuilder: LevelBuilder;
@@ -22,6 +25,7 @@ export class SceneManager {
   private gate: Gate | null = null;
   private currentLevel: BuiltLevel | null = null;
   private currentChapter: number = 1;
+  private currentSkyboxTexture: THREE.Texture | null = null;
 
   // Callbacks
   public onChapterComplete: ((nextChapter: number) => void) | null = null;
@@ -87,6 +91,9 @@ export class SceneManager {
     this.gate.setup(this.scene);
     this.gate.onEnter = () => this.handleGateEnter();
 
+    // Load skybox
+    await this.loadSkybox(chapterNumber);
+
     // Show chapter title
     this.hud.showChapterTitle(
       `Chapter ${chapterNumber}`,
@@ -99,6 +106,41 @@ export class SceneManager {
     }
 
     console.log(`Loaded: ${levelData.chapter_title}`);
+  }
+
+  /**
+   * Load skybox texture for the chapter
+   */
+  private async loadSkybox(chapterNumber: number): Promise<void> {
+    // Dispose previous skybox texture
+    if (this.currentSkyboxTexture) {
+      this.currentSkyboxTexture.dispose();
+      this.currentSkyboxTexture = null;
+    }
+
+    const skyboxPath = `${import.meta.env.BASE_URL}assets/skyboxes/chapter_${chapterNumber}.png`;
+
+    try {
+      const texture = await new Promise<THREE.Texture>((resolve, reject) => {
+        textureLoader.load(
+          skyboxPath,
+          (tex) => resolve(tex),
+          undefined,
+          () => reject(new Error(`Failed to load skybox: ${skyboxPath}`))
+        );
+      });
+
+      // Configure as equirectangular for spherical mapping
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      texture.colorSpace = THREE.SRGBColorSpace;
+
+      this.scene.background = texture;
+      this.currentSkyboxTexture = texture;
+      console.log(`Loaded skybox for chapter ${chapterNumber}`);
+    } catch {
+      // Fallback to solid color background (already set by LevelBuilder atmosphere)
+      console.log(`Skybox not found for chapter ${chapterNumber}, using fallback color`);
+    }
   }
 
   /**
@@ -286,6 +328,9 @@ export class SceneManager {
   dispose(): void {
     if (this.currentLevel) {
       this.currentLevel.cleanup();
+    }
+    if (this.currentSkyboxTexture) {
+      this.currentSkyboxTexture.dispose();
     }
     this.hud.dispose();
   }
