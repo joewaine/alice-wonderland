@@ -35,26 +35,22 @@ const CHAPTER_SKYBOXES = [
   {
     chapter: 1,
     name: 'Down the Rabbit-Hole',
-    prompt: 'falling through endless tunnel, floating objects, pocket watches, keys,
-playing cards, swirling purple and gold colors, magical vortex, dreamy'
+    prompt: 'falling through endless tunnel, floating objects, pocket watches, keys, playing cards, swirling purple and gold colors, magical vortex, dreamy'
   },
   {
     chapter: 2,
     name: 'The Pool of Tears',
-    prompt: 'vast sea of tears, floating islands, giant mushrooms in distance,
-stormy purple sky, crying clouds, melancholy but magical, oceanic dreamscape'
+    prompt: 'vast sea of tears, floating islands, giant mushrooms in distance, stormy purple sky, crying clouds, melancholy but magical, oceanic dreamscape'
   },
   {
     chapter: 3,
     name: 'A Caucus-Race and a Long Tale',
-    prompt: 'whimsical beach at sunset, strange creatures silhouettes,
-golden hour lighting, carnival atmosphere, playful clouds, sandy shores'
+    prompt: 'whimsical beach at sunset, strange creatures silhouettes, golden hour lighting, carnival atmosphere, playful clouds, sandy shores'
   },
   {
     chapter: 4,
     name: 'The Rabbit Sends in a Little Bill',
-    prompt: 'cozy cottage interior becoming outdoor garden, chimney smoke,
-cucumber frames, broken glass sparkling, warm afternoon, domestic wonderland'
+    prompt: 'cozy cottage interior becoming outdoor garden, chimney smoke, cucumber frames, broken glass sparkling, warm afternoon, domestic wonderland'
   }
 ];
 
