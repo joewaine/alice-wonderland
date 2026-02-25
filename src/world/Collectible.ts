@@ -26,6 +26,13 @@ export class CollectibleManager {
     totalCards: 0
   };
 
+  // Hover glow settings
+  private glowDistance: number = 4; // Distance at which glow starts
+  private pulseTime: number = 0;
+
+  // Cached mesh references for performance (avoid traverse every frame)
+  private meshCache: Map<CollectibleObject, THREE.Mesh[]> = new Map();
+
   // Callback when something is collected
   public onCollect: ((type: string, state: CollectionState, position: THREE.Vector3) => void) | null = null;
   public onKeyCollected: (() => void) | null = null;
@@ -35,6 +42,18 @@ export class CollectibleManager {
    */
   setCollectibles(collectibles: CollectibleObject[]): void {
     this.collectibles = collectibles;
+    this.meshCache.clear();
+
+    // Cache mesh references for each collectible
+    for (const collectible of collectibles) {
+      const meshes: THREE.Mesh[] = [];
+      collectible.mesh.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          meshes.push(child);
+        }
+      });
+      this.meshCache.set(collectible, meshes);
+    }
 
     // Count totals
     this.state.totalStars = collectibles.filter(c => c.type === 'star').length;
@@ -48,6 +67,9 @@ export class CollectibleManager {
    * Update collectible animations and check for pickups
    */
   update(dt: number, playerPosition: THREE.Vector3, playerRadius: number): void {
+    // Update pulse time for glow animation
+    this.pulseTime += dt * 4;
+
     for (const collectible of this.collectibles) {
       if (collectible.collected) continue;
 
@@ -58,6 +80,37 @@ export class CollectibleManager {
       // Check distance to player
       const distance = collectible.mesh.position.distanceTo(playerPosition);
       const pickupRadius = 1.0 + playerRadius;
+
+      // Hover glow effect based on distance
+      const cachedMeshes = this.meshCache.get(collectible) || [];
+
+      if (distance < this.glowDistance) {
+        // Calculate glow intensity (stronger when closer)
+        const proximity = 1 - (distance / this.glowDistance);
+        const pulse = 0.5 + 0.5 * Math.sin(this.pulseTime);
+        const intensity = proximity * (0.6 + pulse * 0.4);
+
+        // Apply to cached meshes (no traverse needed)
+        for (const mesh of cachedMeshes) {
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          if (mat.emissiveIntensity !== undefined) {
+            mat.emissiveIntensity = 0.3 + intensity;
+          }
+        }
+
+        // Scale up slightly when close
+        const scale = 1 + proximity * 0.15;
+        collectible.mesh.scale.setScalar(scale);
+      } else {
+        // Reset to default when far
+        for (const mesh of cachedMeshes) {
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          if (mat.emissiveIntensity !== undefined) {
+            mat.emissiveIntensity = 0.3;
+          }
+        }
+        collectible.mesh.scale.setScalar(1);
+      }
 
       if (distance < pickupRadius) {
         this.collect(collectible);

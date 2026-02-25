@@ -11,15 +11,23 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle } from '../data/LevelData';
+import { assetLoader } from '../engine/AssetLoader';
 
 export interface BuiltLevel {
   platforms: THREE.Mesh[];
+  bouncyPlatforms: BouncyPlatform[];
   collectibles: CollectibleObject[];
   npcs: NPCObject[];
   sizePuzzleZones: SizePuzzleZone[];
   spawnPoint: THREE.Vector3;
   gatePosition: THREE.Vector3;
   cleanup: () => void;
+}
+
+export interface BouncyPlatform {
+  mesh: THREE.Mesh;
+  baseY: number;
+  compressionAmount: number;
 }
 
 export interface CollectibleObject {
@@ -59,20 +67,20 @@ export class LevelBuilder {
   /**
    * Build a complete level from LevelData
    */
-  build(levelData: LevelData): BuiltLevel {
+  async build(levelData: LevelData): Promise<BuiltLevel> {
     console.log(`Building level: ${levelData.chapter_title}`);
 
     // Apply atmosphere first
     this.applyAtmosphere(levelData.atmosphere);
 
     // Build platforms
-    const platforms = this.buildPlatforms(levelData.platforms);
+    const { meshes: platforms, bouncy: bouncyPlatforms } = this.buildPlatforms(levelData.platforms);
 
     // Create collectibles
     const collectibles = this.buildCollectibles(levelData.collectibles);
 
-    // Place NPCs
-    const npcs = this.buildNPCs(levelData.npcs);
+    // Place NPCs (async to load models)
+    const npcs = await this.buildNPCs(levelData.npcs);
 
     // Create size puzzle zones
     const sizePuzzleZones = this.buildSizePuzzleZones(levelData.size_puzzles);
@@ -95,6 +103,7 @@ export class LevelBuilder {
 
     return {
       platforms,
+      bouncyPlatforms,
       collectibles,
       npcs,
       sizePuzzleZones,
@@ -129,8 +138,9 @@ export class LevelBuilder {
   /**
    * Build platforms with physics
    */
-  private buildPlatforms(platforms: Platform[]): THREE.Mesh[] {
+  private buildPlatforms(platforms: Platform[]): { meshes: THREE.Mesh[], bouncy: BouncyPlatform[] } {
     const meshes: THREE.Mesh[] = [];
+    const bouncy: BouncyPlatform[] = [];
 
     for (const platform of platforms) {
       // Visual mesh
@@ -172,13 +182,20 @@ export class LevelBuilder {
         colliderDesc.setRestitution(1.5);
         // Make bouncy platforms visually distinct
         (mesh.material as THREE.MeshStandardMaterial).color.set(0xff69b4);
+
+        // Track for animation
+        bouncy.push({
+          mesh,
+          baseY: platform.position.y,
+          compressionAmount: 0
+        });
       }
 
       this.world.createCollider(colliderDesc, body);
     }
 
     console.log(`Built ${meshes.length} platforms`);
-    return meshes;
+    return { meshes, bouncy };
   }
 
   /**
@@ -318,30 +335,48 @@ export class LevelBuilder {
   }
 
   /**
-   * Build NPCs
+   * Build NPCs with optional GLB model loading
    */
-  private buildNPCs(npcs: NPC[]): NPCObject[] {
+  private async buildNPCs(npcs: NPC[]): Promise<NPCObject[]> {
     const objects: NPCObject[] = [];
 
     for (const npc of npcs) {
-      const group = new THREE.Group();
       const position = new THREE.Vector3(npc.position.x, npc.position.y, npc.position.z);
+      let group: THREE.Group;
 
-      // Simple capsule body for now
-      const bodyGeo = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8);
-      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x9370db });
-      const body = new THREE.Mesh(bodyGeo, bodyMat);
-      body.position.y = 0.7;
-      body.castShadow = true;
-      group.add(body);
+      // Try to load model if model_id is specified
+      if (npc.model_id) {
+        const modelPath = `/assets/models/${npc.model_id}.glb`;
+        try {
+          group = await assetLoader.loadModelWithFallback(modelPath, 0x9370db);
 
-      // Head
-      const headGeo = new THREE.SphereGeometry(0.25, 8, 8);
-      const headMat = new THREE.MeshStandardMaterial({ color: 0xffdab9 });
-      const head = new THREE.Mesh(headGeo, headMat);
-      head.position.y = 1.4;
-      head.castShadow = true;
-      group.add(head);
+          // Scale down generated models (they're typically too large)
+          group.scale.setScalar(0.8);
+
+          // Center and ground the model
+          const box = new THREE.Box3().setFromObject(group);
+          const center = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+
+          // Move so bottom is at y=0
+          group.position.y = -box.min.y;
+
+          // Center horizontally
+          group.position.x = -center.x;
+          group.position.z = -center.z;
+
+          // Wrap in container for proper positioning
+          const container = new THREE.Group();
+          container.add(group);
+          group = container;
+
+          console.log(`Loaded model for ${npc.name}: ${modelPath} (size: ${size.y.toFixed(1)})`);
+        } catch {
+          group = this.createFallbackNPC();
+        }
+      } else {
+        group = this.createFallbackNPC();
+      }
 
       // Name label
       this.addNameLabel(group, npc.name);
@@ -361,6 +396,31 @@ export class LevelBuilder {
 
     console.log(`Built ${objects.length} NPCs`);
     return objects;
+  }
+
+  /**
+   * Create fallback procedural NPC (capsule + head)
+   */
+  private createFallbackNPC(): THREE.Group {
+    const group = new THREE.Group();
+
+    // Simple capsule body
+    const bodyGeo = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x9370db });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.7;
+    body.castShadow = true;
+    group.add(body);
+
+    // Head
+    const headGeo = new THREE.SphereGeometry(0.25, 8, 8);
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xffdab9 });
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.y = 1.4;
+    head.castShadow = true;
+    group.add(head);
+
+    return group;
   }
 
   /**

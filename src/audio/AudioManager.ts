@@ -64,6 +64,60 @@ export class AudioManager {
   }
 
   /**
+   * Play falling/death sound
+   */
+  playFall(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(400, this.audioContext.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, this.audioContext.currentTime + 0.8);
+
+    gain.gain.setValueAtTime(0.3, this.audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.8);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.audioContext.currentTime + 0.8);
+  }
+
+  /**
+   * Play respawn sound
+   */
+  playRespawn(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    // Ascending sparkle
+    const notes = [262, 330, 392, 523];
+    notes.forEach((freq, i) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      const startTime = this.audioContext!.currentTime + i * 0.1;
+      gain.gain.setValueAtTime(0.2, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(startTime);
+      osc.stop(startTime + 0.35);
+    });
+  }
+
+  /**
    * Play footstep sound
    */
   playFootstep(): void {
