@@ -14,7 +14,9 @@ import { SizePickup } from './world/SizePickup';
 import { NPCController } from './npcs/NPCController';
 import { ParticleManager } from './effects/ParticleManager';
 import { MainMenu } from './ui/MainMenu';
+import { LoadingScreen } from './ui/LoadingScreen';
 import { audioManager } from './audio/AudioManager';
+import { musicManager } from './audio/MusicManager';
 
 export class Game {
   // Three.js core
@@ -52,6 +54,7 @@ export class Game {
 
   // Menu system
   private mainMenu: MainMenu;
+  private loadingScreen: LoadingScreen;
 
   // Current player config
   private moveSpeed: number = 8;
@@ -104,6 +107,9 @@ export class Game {
     // Main menu
     this.mainMenu = new MainMenu();
 
+    // Loading screen
+    this.loadingScreen = new LoadingScreen();
+
     // Handle window resize
     window.addEventListener('resize', () => this.onResize());
 
@@ -117,18 +123,25 @@ export class Game {
   async init(): Promise<void> {
     console.log('Initializing game...');
 
+    // Show loading screen
+    this.loadingScreen.show();
+    this.loadingScreen.setProgress(10, 'Initializing physics...');
+
     // Initialize Rapier physics
     await RAPIER.init();
     console.log('Rapier physics initialized');
+    this.loadingScreen.setProgress(30, 'Creating world...');
 
     // Create physics world
     const gravity = new RAPIER.Vector3(0, -20, 0);
     this.world = new RAPIER.World(gravity);
     this.physicsReady = true;
+    this.loadingScreen.setProgress(50, 'Setting up player...');
 
     // Setup base systems
     this.setupLighting();
     this.setupPlayer();
+    this.loadingScreen.setProgress(70, 'Preparing levels...');
 
     // Create scene manager for level loading
     this.sceneManager = new SceneManager(this.scene, this.world);
@@ -165,6 +178,7 @@ export class Game {
     this.mainMenu.onStart = async () => {
       audioManager.init(); // Initialize audio on first user interaction
       await this.loadChapter(1);
+      musicManager.play(); // Start background music
       this.start();
     };
 
@@ -181,7 +195,10 @@ export class Game {
       this.gameLoop();
     };
 
-    // Show main menu
+    // Complete loading and show main menu
+    this.loadingScreen.setProgress(100, 'Welcome to Wonderland!');
+    await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause to show completion
+    this.loadingScreen.hide();
     this.mainMenu.show();
 
     console.log('Game initialized!');
@@ -205,6 +222,9 @@ export class Game {
 
     // Setup ambient particles for atmosphere
     this.particleManager.createAmbientParticles(0xffeedd, 150);
+
+    // Update music mood for chapter
+    musicManager.setChapterMood(chapterNumber);
 
     // Add size pickups for the level
     this.setupSizePickups();
