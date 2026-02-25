@@ -14,9 +14,6 @@ import { Gate } from '../world/Gate';
 import { HUD } from '../ui/HUD';
 import { audioManager } from '../audio/AudioManager';
 
-// Texture loader for skyboxes
-const textureLoader = new THREE.TextureLoader();
-
 export class SceneManager {
   private scene: THREE.Scene;
   private levelBuilder: LevelBuilder;
@@ -109,7 +106,7 @@ export class SceneManager {
   }
 
   /**
-   * Load skybox texture for the chapter
+   * Create seamless procedural skybox for the chapter
    */
   private async loadSkybox(chapterNumber: number): Promise<void> {
     // Dispose previous skybox texture
@@ -118,29 +115,52 @@ export class SceneManager {
       this.currentSkyboxTexture = null;
     }
 
-    const skyboxPath = `${import.meta.env.BASE_URL}assets/skyboxes/chapter_${chapterNumber}.png`;
+    // Chapter-specific color palettes (top, middle, bottom)
+    const skyPalettes: Record<number, { top: string; mid: string; bottom: string; stars?: boolean }> = {
+      1: { top: '#1a0a2e', mid: '#4a2c6e', bottom: '#9370db', stars: true },  // Rabbit hole - purple vortex
+      2: { top: '#2d3a4f', mid: '#5a6f8f', bottom: '#8ba5c4' },                // Pool of tears - stormy blue
+      3: { top: '#ff7e5f', mid: '#feb47b', bottom: '#ffedbc' },                // Caucus race - sunset
+      4: { top: '#87ceeb', mid: '#b8d4e8', bottom: '#fff8dc' }                 // Rabbit's house - afternoon
+    };
 
-    try {
-      const texture = await new Promise<THREE.Texture>((resolve, reject) => {
-        textureLoader.load(
-          skyboxPath,
-          (tex) => resolve(tex),
-          undefined,
-          () => reject(new Error(`Failed to load skybox: ${skyboxPath}`))
-        );
-      });
+    const palette = skyPalettes[chapterNumber] || skyPalettes[1];
 
-      // Configure as equirectangular for spherical mapping
-      texture.mapping = THREE.EquirectangularReflectionMapping;
-      texture.colorSpace = THREE.SRGBColorSpace;
+    // Create gradient canvas (seamless because it's just vertical bands)
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d')!;
 
-      this.scene.background = texture;
-      this.currentSkyboxTexture = texture;
-      console.log(`Loaded skybox for chapter ${chapterNumber}`);
-    } catch {
-      // Fallback to solid color background (already set by LevelBuilder atmosphere)
-      console.log(`Skybox not found for chapter ${chapterNumber}, using fallback color`);
+    // Vertical gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, palette.top);
+    gradient.addColorStop(0.4, palette.mid);
+    gradient.addColorStop(1, palette.bottom);
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Add stars for night scenes
+    if (palette.stars) {
+      ctx.fillStyle = 'white';
+      for (let i = 0; i < 100; i++) {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height * 0.6; // Stars in upper portion
+        const size = Math.random() * 2 + 0.5;
+        ctx.globalAlpha = Math.random() * 0.8 + 0.2;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+
+    this.scene.background = texture;
+    this.currentSkyboxTexture = texture;
+    console.log(`Created procedural skybox for chapter ${chapterNumber}`);
   }
 
   /**
