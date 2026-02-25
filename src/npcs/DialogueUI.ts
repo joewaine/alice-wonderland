@@ -7,6 +7,9 @@
 
 export class DialogueUI {
   private container: HTMLDivElement;
+  private contentWrapper: HTMLDivElement;
+  private portraitElement: HTMLImageElement;
+  private textWrapper: HTMLDivElement;
   private nameElement: HTMLDivElement;
   private textElement: HTMLDivElement;
   private isVisible: boolean = false;
@@ -22,7 +25,7 @@ export class DialogueUI {
       bottom: 100px;
       left: 50%;
       transform: translateX(-50%);
-      width: 600px;
+      width: 650px;
       max-width: 90vw;
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
       border: 3px solid #e94560;
@@ -37,6 +40,37 @@ export class DialogueUI {
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
     `;
 
+    // Content wrapper (portrait + text side by side)
+    this.contentWrapper = document.createElement('div');
+    this.contentWrapper.style.cssText = `
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+    `;
+    this.container.appendChild(this.contentWrapper);
+
+    // Portrait image
+    this.portraitElement = document.createElement('img');
+    this.portraitElement.style.cssText = `
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      border: 3px solid #e94560;
+      object-fit: cover;
+      background: #2a2a4e;
+      flex-shrink: 0;
+    `;
+    this.portraitElement.alt = 'Character portrait';
+    this.contentWrapper.appendChild(this.portraitElement);
+
+    // Text wrapper
+    this.textWrapper = document.createElement('div');
+    this.textWrapper.style.cssText = `
+      flex: 1;
+      min-width: 0;
+    `;
+    this.contentWrapper.appendChild(this.textWrapper);
+
     // Character name
     this.nameElement = document.createElement('div');
     this.nameElement.style.cssText = `
@@ -47,7 +81,7 @@ export class DialogueUI {
       text-transform: uppercase;
       letter-spacing: 2px;
     `;
-    this.container.appendChild(this.nameElement);
+    this.textWrapper.appendChild(this.nameElement);
 
     // Dialogue text
     this.textElement = document.createElement('div');
@@ -57,7 +91,7 @@ export class DialogueUI {
       font-style: italic;
       color: #eee;
     `;
-    this.container.appendChild(this.textElement);
+    this.textWrapper.appendChild(this.textElement);
 
     // Press E hint
     const hint = document.createElement('div');
@@ -74,11 +108,25 @@ export class DialogueUI {
   }
 
   /**
-   * Show dialogue
+   * Show dialogue with optional portrait
    */
-  show(name: string, text: string, autoDismissMs: number = 5000): void {
+  show(name: string, text: string, portraitId?: string, autoDismissMs: number = 5000): void {
     this.nameElement.textContent = name;
     this.textElement.textContent = `"${text}"`;
+
+    // Load portrait if available
+    if (portraitId) {
+      // Try to load portrait image, fallback to placeholder
+      const portraitPath = `${import.meta.env.BASE_URL}assets/portraits/${portraitId}.png`;
+      this.portraitElement.src = portraitPath;
+      this.portraitElement.onerror = () => {
+        // Use a data URL placeholder (simple colored circle with initial)
+        this.setPlaceholderPortrait(name);
+      };
+      this.portraitElement.style.display = 'block';
+    } else {
+      this.setPlaceholderPortrait(name);
+    }
 
     this.container.style.opacity = '1';
     this.isVisible = true;
@@ -92,6 +140,35 @@ export class DialogueUI {
     this.dismissTimeout = window.setTimeout(() => {
       this.hide();
     }, autoDismissMs);
+  }
+
+  /**
+   * Set a placeholder portrait with the character's initial
+   */
+  private setPlaceholderPortrait(name: string): void {
+    const initial = name.charAt(0).toUpperCase();
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 100;
+    const ctx = canvas.getContext('2d')!;
+
+    // Background gradient
+    const gradient = ctx.createRadialGradient(50, 50, 0, 50, 50, 50);
+    gradient.addColorStop(0, '#9370db');
+    gradient.addColorStop(1, '#6b4e9e');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(50, 50, 50, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Initial letter
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 48px Georgia';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(initial, 50, 52);
+
+    this.portraitElement.src = canvas.toDataURL();
   }
 
   /**
