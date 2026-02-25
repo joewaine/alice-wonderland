@@ -45,6 +45,7 @@ export interface NPCObject {
   position: THREE.Vector3;
   dialogue: string[];
   dialogueIndex: number;
+  modelId?: string;  // For portrait loading
 }
 
 export interface SizePuzzleZone {
@@ -390,7 +391,8 @@ export class LevelBuilder {
         name: npc.name,
         position,
         dialogue: npc.dialogue,
-        dialogueIndex: 0
+        dialogueIndex: 0,
+        modelId: npc.model_id
       });
     }
 
