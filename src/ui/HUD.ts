@@ -13,6 +13,7 @@ export class HUD {
   private messageDisplay: HTMLDivElement;
   private muteIndicator: HTMLDivElement;
   private sizeIndicator: HTMLDivElement;
+  private fadeOverlay: HTMLDivElement;
   private messageTimeout: number | null = null;
 
   constructor() {
@@ -110,6 +111,22 @@ export class HUD {
     `;
     this.sizeIndicator.innerHTML = '👤 Normal';
     this.container.appendChild(this.sizeIndicator);
+
+    // Fade overlay for death/respawn transitions
+    this.fadeOverlay = document.createElement('div');
+    this.fadeOverlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: black;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease-in-out;
+      z-index: 1000;
+    `;
+    this.container.appendChild(this.fadeOverlay);
 
     document.body.appendChild(this.container);
 
@@ -217,6 +234,26 @@ export class HUD {
   }
 
   /**
+   * Fade screen to black (for death)
+   */
+  fadeToBlack(): Promise<void> {
+    return new Promise((resolve) => {
+      this.fadeOverlay.style.opacity = '1';
+      setTimeout(resolve, 500); // Match transition duration
+    });
+  }
+
+  /**
+   * Fade screen back in (for respawn)
+   */
+  fadeIn(): Promise<void> {
+    return new Promise((resolve) => {
+      this.fadeOverlay.style.opacity = '0';
+      setTimeout(resolve, 500); // Match transition duration
+    });
+  }
+
+  /**
    * Show chapter complete celebration
    */
   showChapterComplete(
@@ -312,6 +349,7 @@ export class HUD {
       overlay.style.opacity = '0';
       setTimeout(() => {
         document.body.removeChild(overlay);
+        document.head.removeChild(style); // Clean up injected style
         onComplete();
       }, 500);
     }, 3000);

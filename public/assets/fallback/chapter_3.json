@@ -294,6 +294,7 @@
   "npcs": [
     {
       "name": "Dodo",
+      "model_id": "dodo",
       "position": {
         "x": 12,
         "y": 2,
@@ -309,6 +310,7 @@
     },
     {
       "name": "Mouse",
+      "model_id": "mouse",
       "position": {
         "x": -5,
         "y": 2,
@@ -323,6 +325,7 @@
     },
     {
       "name": "Lory",
+      "model_id": "lory",
       "position": {
         "x": 18,
         "y": 2,

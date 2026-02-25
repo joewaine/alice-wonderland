@@ -270,6 +270,7 @@
   "npcs": [
     {
       "name": "White Rabbit",
+      "model_id": "white_rabbit",
       "position": {
         "x": -8,
         "y": 1,
@@ -285,6 +286,7 @@
     },
     {
       "name": "Bill the Lizard",
+      "model_id": "bill_the_lizard",
       "position": {
         "x": 18,
         "y": 1,
