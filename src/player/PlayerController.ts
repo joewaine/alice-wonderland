@@ -19,7 +19,7 @@ import type { SurfaceType } from '../audio/AudioManager';
 export interface PlayerControllerCallbacks {
   onJumpAnticipation?: (isDoubleJump: boolean) => void;
   onJump?: (isDoubleJump: boolean) => void;
-  onLand?: (fallSpeed: number) => void;
+  onLand?: (fallSpeed: number, surface: SurfaceType) => void;
   onGroundPound?: () => void;
   onGroundPoundLand?: (position: THREE.Vector3) => void;
   onLongJump?: () => void;
@@ -348,7 +348,7 @@ export class PlayerController {
     // Landing detection (not while swimming)
     if (this.isGrounded && !this.wasGrounded && !this.inWater) {
       const fallSpeed = Math.abs(vel.y);
-      this.callbacks.onLand?.(fallSpeed);
+      this.callbacks.onLand?.(fallSpeed, this.currentSurface);
       // Trigger land animation
       this.animationManager?.setState('land');
 

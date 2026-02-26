@@ -120,6 +120,11 @@ export class CameraController {
   private readonly DIALOGUE_PITCH_REDUCTION = 0.06; // Lower camera angle slightly (radians)
   private readonly DIALOGUE_FOCUS_SPEED = 3;        // Lerp speed for smooth transition
 
+  // Size-based distance adjustment - camera pulls in when small, out when large
+  private sizeDistanceMultiplier: number = 1.0;       // Current multiplier (smoothly interpolated)
+  private targetSizeDistanceMultiplier: number = 1.0; // Target multiplier based on size
+  private readonly SIZE_DISTANCE_LERP_SPEED = 4;      // ~0.5s transition (1/0.25 = 4 for smooth lerp)
+
   // Landing dip state - brief vertical dip on landing impact
   private dipOffset: number = 0;           // Current dip amount (units)
   private dipVelocity: number = 0;         // Recovery velocity
@@ -336,8 +341,15 @@ export class CameraController {
       Math.min(1, this.DIALOGUE_FOCUS_SPEED * dt)
     );
 
+    // Smoothly interpolate size-based distance multiplier
+    this.sizeDistanceMultiplier = THREE.MathUtils.lerp(
+      this.sizeDistanceMultiplier,
+      this.targetSizeDistanceMultiplier,
+      Math.min(1, this.SIZE_DISTANCE_LERP_SPEED * dt)
+    );
+
     // Check wall collision and adjust distance
-    let desiredDistance = this.checkWallCollision(playerPos);
+    let desiredDistance = this.checkWallCollision(playerPos) * this.sizeDistanceMultiplier;
 
     // Apply dialogue focus distance reduction (subtle pull-in)
     if (this.dialogueFocusLerp > 0.001) {
@@ -520,6 +532,15 @@ export class CameraController {
    */
   setHeightOffset(offset: number): void {
     this.config.heightOffset = offset;
+  }
+
+  /**
+   * Set size-based distance multiplier (called when player size changes)
+   * Small: 0.6x (closer view), Normal: 1.0x, Large: 1.4x (wider view)
+   * Transition is smooth over ~0.5 seconds
+   */
+  setSizeDistanceMultiplier(multiplier: number): void {
+    this.targetSizeDistanceMultiplier = multiplier;
   }
 
   /**

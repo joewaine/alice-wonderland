@@ -36,6 +36,13 @@ export class NPCController {
   private bubbleTexture: THREE.CanvasTexture | null = null;
   private bobTime: number = 0;
 
+  // Breathing animation
+  private breathingPhaseOffsets: Map<NPCObject, number> = new Map();
+  private breathingTime: number = 0;
+  private readonly BREATHING_FREQUENCY = 2.5; // ~0.4 Hz (radians/sec)
+  private readonly BREATHING_SCALE_MIN = 1.0;
+  private readonly BREATHING_SCALE_MAX = 1.015;
+
   // Idle animation (procedural)
   private idleTime: number = 0;
 
@@ -136,12 +143,15 @@ export class NPCController {
     this.clearSpeechBubbles();
     this.animatedNPCs.clear();
     this.meshCache.clear();
+    this.breathingPhaseOffsets.clear();
 
     this.npcs = npcs;
     this.currentNPC = null;
 
-    // Create speech bubbles for each NPC, detect animated NPCs, and cache meshes
+    // Create speech bubbles for each NPC, detect animated NPCs, cache meshes, and assign breathing phase
     for (const npc of npcs) {
+      // Assign random phase offset for breathing variety
+      this.breathingPhaseOffsets.set(npc, Math.random() * Math.PI * 2);
       // Cache mesh references for performance (avoid traversal in update loop)
       const meshes: THREE.Mesh[] = [];
       npc.mesh.traverse((child) => {
@@ -278,8 +288,9 @@ export class NPCController {
       }
     }
 
-    // Update idle animation time and frame counter
+    // Update idle animation time, breathing time, and frame counter
     this.idleTime += dt;
+    this.breathingTime += dt;
     this.frameCount++;
 
     // Tiered NPC updates based on distance from player
@@ -311,9 +322,16 @@ export class NPCController {
     const angle = Math.atan2(direction.x, direction.z);
     npc.mesh.rotation.y = angle;
 
+    // Apply breathing animation (subtle Y scale oscillation)
+    const breathingPhase = this.breathingPhaseOffsets.get(npc) || 0;
+    const breathingT = (Math.sin(this.breathingTime * this.BREATHING_FREQUENCY + breathingPhase) + 1) * 0.5;
+    const breathingScaleY = this.BREATHING_SCALE_MIN + breathingT * (this.BREATHING_SCALE_MAX - this.BREATHING_SCALE_MIN);
+
     // Update skeletal animation if present
     if (this.animatedNPCs.has(npc) && npc.mixer) {
       npc.mixer.update(dt);
+      // Apply breathing to skeletal NPCs too
+      npc.mesh.scale.set(1, breathingScaleY, 1);
       return;
     }
 
@@ -322,7 +340,7 @@ export class NPCController {
     npc.mesh.position.y = npc.position.y + bobOffset;
 
     const scalePulse = 1 + Math.sin(this.idleTime * 1.5 + npc.position.z) * 0.02;
-    npc.mesh.scale.setScalar(scalePulse);
+    npc.mesh.scale.set(scalePulse, scalePulse * breathingScaleY, scalePulse);
   }
 
   /**
@@ -332,15 +350,22 @@ export class NPCController {
     // Only animate every other frame
     if (this.frameCount % 2 !== 0) return;
 
+    // Apply breathing animation (subtle Y scale oscillation)
+    const breathingPhase = this.breathingPhaseOffsets.get(npc) || 0;
+    const breathingT = (Math.sin(this.breathingTime * this.BREATHING_FREQUENCY + breathingPhase) + 1) * 0.5;
+    const breathingScaleY = this.BREATHING_SCALE_MIN + breathingT * (this.BREATHING_SCALE_MAX - this.BREATHING_SCALE_MIN);
+
     // Update skeletal animation at double delta to compensate
     if (this.animatedNPCs.has(npc) && npc.mixer) {
       npc.mixer.update(dt * 2);
+      npc.mesh.scale.set(1, breathingScaleY, 1);
       return;
     }
 
     // Reduced procedural animation
     const bobOffset = Math.sin(this.idleTime * 2 + npc.position.x) * 0.03;
     npc.mesh.position.y = npc.position.y + bobOffset;
+    npc.mesh.scale.set(1, breathingScaleY, 1);
   }
 
   /**
