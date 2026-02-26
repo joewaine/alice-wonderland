@@ -3,7 +3,7 @@
 ---
 title: "feat: The Queen's Garden Showcase Level"
 type: feat
-status: active
+status: completed
 date: 2026-02-26
 brainstorm: docs/brainstorms/2026-02-26-queens-garden-level-brainstorm.md
 ---
@@ -751,27 +751,27 @@ const GARDEN_CAMERA_ZONES: CameraZone[] = [
 
 ### Functional Requirements
 
-- [ ] Player spawns in Queen's Court and can explore freely
-- [ ] Talking to Queen of Hearts starts "Find the White Rabbit" quest
-- [ ] Finding White Rabbit completes quest and unlocks Tea Party Terrace
-- [ ] Stairs connect all three areas with smooth platforming
-- [ ] 8 NPCs have working dialogue and animations
-- [ ] Wonder Star challenge is completable
-- [ ] Level can be won by reaching the gate at Tea Party
+- [x] Player spawns in Queen's Court and can explore freely
+- [x] Talking to Queen of Hearts starts "Find the White Rabbit" quest
+- [x] Finding White Rabbit completes quest and unlocks Tea Party Terrace
+- [x] Stairs connect all three areas with smooth platforming
+- [x] 8 NPCs have working dialogue and animations
+- [x] Wonder Star challenge is completable
+- [x] Level can be won by reaching the gate at Tea Party
 
 ### Non-Functional Requirements
 
-- [ ] 60 FPS on desktop (MacBook Pro M1 baseline)
-- [ ] No frame drops when 4+ NPCs visible
-- [ ] Load time < 5 seconds
-- [ ] Cel-shader consistent across all objects
-- [ ] No visible texture seams on skybox
+- [x] 60 FPS on desktop (MacBook Pro M1 baseline)
+- [x] No frame drops when 4+ NPCs visible (tiered update system)
+- [x] Load time < 5 seconds
+- [x] Cel-shader consistent across all objects
+- [x] No visible texture seams on skybox (procedural sphere skybox)
 
 ### Quality Gates
 
-- [ ] Screenshots match BotW reference aesthetic
-- [ ] Quest state persists across browser refresh
-- [ ] No console errors during normal play
+- [x] Screenshots match BotW reference aesthetic (cel-shading + outlines)
+- [x] Quest state persists across browser refresh (localStorage)
+- [x] No console errors during normal play
 - [ ] Code review approval for new systems
 
 ---
