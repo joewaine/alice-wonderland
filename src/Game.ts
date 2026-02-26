@@ -242,6 +242,15 @@ export class Game {
     // Setup base systems
     this.setupLighting();
     await this.setupPlayer();
+
+    // Wire up NPC dialogue callbacks for camera focus
+    this.npcController.onDialogueStart = () => {
+      this.cameraController?.setDialogueFocus(true);
+    };
+    this.npcController.onDialogueEnd = () => {
+      this.cameraController?.setDialogueFocus(false);
+    };
+
     this.loadingScreen.setProgress(70, 'Preparing levels...');
 
     // Create scene manager for level loading
@@ -744,16 +753,22 @@ export class Game {
       // Scale animation speed based on size (small = faster, large = slower)
       this.playerController?.setAnimationSpeed(1.0 / config.scale);
 
-      // Particle effect and audio on size change
+      // Particle effect, audio, and screen effects on size change
       if (this.playerBody) {
         const pos = this.playerBody.translation();
         this.tempPosCache.set(pos.x, pos.y, pos.z);
         if (size === 'small') {
           this.particleManager.createSizeChangeBurst(this.tempPosCache, 'shrink');
           audioManager.playShrink();
+          // Screen shake and FOV narrow for shrink
+          this.cameraController?.shake(0.2);
+          this.cameraController?.kickFOV(55, 0.3);
         } else if (size === 'large') {
           this.particleManager.createSizeChangeBurst(this.tempPosCache, 'grow');
           audioManager.playGrow();
+          // Screen shake and FOV widen for grow
+          this.cameraController?.shake(0.2);
+          this.cameraController?.kickFOV(68, 0.3);
         }
       }
 
@@ -1181,6 +1196,10 @@ export class Game {
     if (this.cameraController) {
       this.playerPosCache.set(pos.x, pos.y, pos.z);
       this.cameraController.update(dt, this.playerPosCache, this.input);
+
+      // Enable underwater wobble when player is below water surface
+      const isUnderwater = this.playerController?.isUnderwater() ?? false;
+      this.cameraController.setUnderwaterWobble(isUnderwater);
     }
 
     // Pickup collisions (reuse cached position)

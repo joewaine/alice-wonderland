@@ -98,6 +98,21 @@ export class CameraController {
   private fovKickDuration: number = 0;
   private fovKickTimer: number = 0;
 
+  // Underwater wobble state
+  private underwaterWobbleEnabled: boolean = false;
+  private wobbleTime: number = 0;
+  private readonly WOBBLE_ROLL_FREQUENCY: number = 0.7;    // Hz - slow roll oscillation
+  private readonly WOBBLE_SWAY_FREQUENCY: number = 0.5;   // Hz - even slower sway
+  private readonly WOBBLE_ROLL_AMPLITUDE: number = 0.04;   // ~2.3 degrees in radians
+  private readonly WOBBLE_SWAY_AMPLITUDE: number = 0.1;    // Units of position sway
+
+  // Dialogue focus state - subtle camera pull-in during NPC conversations
+  private dialogueFocusEnabled: boolean = false;
+  private dialogueFocusLerp: number = 0;  // 0 = normal, 1 = full dialogue focus
+  private readonly DIALOGUE_DISTANCE_MULT = 0.85;   // Pull camera in to 85% of normal distance
+  private readonly DIALOGUE_PITCH_REDUCTION = 0.06; // Lower camera angle slightly (radians)
+  private readonly DIALOGUE_FOCUS_SPEED = 3;        // Lerp speed for smooth transition
+
   // Bound event handlers (stored for removal in dispose)
   private handleMouseDown = (e: MouseEvent): void => {
     if (e.button === 2) {
@@ -236,11 +251,15 @@ export class CameraController {
   /**
    * Calculate ideal camera position based on yaw/pitch
    * Uses pre-allocated vector to avoid per-frame allocations
+   * @param playerPos - Player position to orbit around
+   * @param distance - Distance from player
+   * @param pitchOverride - Optional pitch override (used for dialogue focus)
    */
-  private getIdealPosition(playerPos: THREE.Vector3, distance: number): THREE.Vector3 {
-    const x = playerPos.x + Math.sin(this.yaw) * Math.cos(this.pitch) * distance;
-    const y = playerPos.y + Math.sin(this.pitch) * distance + this.heightOffset;
-    const z = playerPos.z + Math.cos(this.yaw) * Math.cos(this.pitch) * distance;
+  private getIdealPosition(playerPos: THREE.Vector3, distance: number, pitchOverride?: number): THREE.Vector3 {
+    const pitch = pitchOverride ?? this.pitch;
+    const x = playerPos.x + Math.sin(this.yaw) * Math.cos(pitch) * distance;
+    const y = playerPos.y + Math.sin(pitch) * distance + this.heightOffset;
+    const z = playerPos.z + Math.cos(this.yaw) * Math.cos(pitch) * distance;
 
     return this.idealPosCache.set(x, y, z);
   }
@@ -293,8 +312,22 @@ export class CameraController {
     // Check for camera zones
     this.updateZone(playerPos);
 
+    // Update dialogue focus lerp (smooth transition in/out)
+    const targetFocusLerp = this.dialogueFocusEnabled ? 1 : 0;
+    this.dialogueFocusLerp = THREE.MathUtils.lerp(
+      this.dialogueFocusLerp,
+      targetFocusLerp,
+      Math.min(1, this.DIALOGUE_FOCUS_SPEED * dt)
+    );
+
     // Check wall collision and adjust distance
-    const desiredDistance = this.checkWallCollision(playerPos);
+    let desiredDistance = this.checkWallCollision(playerPos);
+
+    // Apply dialogue focus distance reduction (subtle pull-in)
+    if (this.dialogueFocusLerp > 0.001) {
+      const focusMult = THREE.MathUtils.lerp(1, this.DIALOGUE_DISTANCE_MULT, this.dialogueFocusLerp);
+      desiredDistance *= focusMult;
+    }
 
     // Smoothly interpolate current distance
     // Quick pull-in when hitting walls, slower pull-out when clear
@@ -315,8 +348,13 @@ export class CameraController {
       Math.min(1, this.config.followLerp * dt)
     );
 
+    // Calculate dialogue-adjusted pitch (slightly lower angle to frame conversation)
+    const dialoguePitch = this.dialogueFocusLerp > 0.001
+      ? this.pitch - (this.DIALOGUE_PITCH_REDUCTION * this.dialogueFocusLerp)
+      : undefined;
+
     // Calculate final camera position (uses pre-allocated vector)
-    const camPos = this.getIdealPosition(playerPos, this.currentDistance);
+    const camPos = this.getIdealPosition(playerPos, this.currentDistance, dialoguePitch);
 
     // Apply position with smoothing
     this.camera.position.lerp(camPos, Math.min(1, this.config.followLerp * dt));
@@ -365,6 +403,28 @@ export class CameraController {
       playerPos.z
     );
     this.camera.lookAt(this.lookAtCache);
+
+    // Apply underwater wobble effect after lookAt (so roll is applied correctly)
+    if (this.underwaterWobbleEnabled) {
+      this.wobbleTime += dt;
+
+      // Sinusoidal roll oscillation (gentle tilt left/right)
+      const rollAngle = Math.sin(this.wobbleTime * Math.PI * 2 * this.WOBBLE_ROLL_FREQUENCY)
+                        * this.WOBBLE_ROLL_AMPLITUDE;
+
+      // Sinusoidal position sway (gentle drift left/right and up/down)
+      const swayX = Math.sin(this.wobbleTime * Math.PI * 2 * this.WOBBLE_SWAY_FREQUENCY)
+                    * this.WOBBLE_SWAY_AMPLITUDE;
+      const swayY = Math.cos(this.wobbleTime * Math.PI * 2 * this.WOBBLE_SWAY_FREQUENCY * 0.7)
+                    * this.WOBBLE_SWAY_AMPLITUDE * 0.5;
+
+      // Apply roll to camera (rotate around the forward axis)
+      this.camera.rotateZ(rollAngle);
+
+      // Apply position sway
+      this.camera.position.x += swayX;
+      this.camera.position.y += swayY;
+    }
   }
 
   /**
@@ -436,6 +496,31 @@ export class CameraController {
     this.targetFOV = targetFOV;
     this.fovKickDuration = duration;
     this.fovKickTimer = 0;
+  }
+
+  /**
+   * Enable/disable underwater wobble effect
+   * Adds gentle sinusoidal camera roll and position sway for underwater feel
+   * @param enabled - Whether to enable the wobble effect
+   */
+  setUnderwaterWobble(enabled: boolean): void {
+    if (this.underwaterWobbleEnabled !== enabled) {
+      this.underwaterWobbleEnabled = enabled;
+      // Reset wobble time when enabling to start from a neutral position
+      if (enabled) {
+        this.wobbleTime = 0;
+      }
+    }
+  }
+
+  /**
+   * Enable/disable dialogue focus mode
+   * Subtly pulls camera closer and lowers angle to frame NPC conversations
+   * Transition is smooth - call this when dialogue starts/ends
+   * @param enabled - Whether to enable dialogue focus
+   */
+  setDialogueFocus(enabled: boolean): void {
+    this.dialogueFocusEnabled = enabled;
   }
 
   /**
