@@ -174,6 +174,13 @@ export class AreaGate {
   }
 
   /**
+   * Get the gate's position
+   */
+  getPosition(): THREE.Vector3 {
+    return this.originalPosition.clone();
+  }
+
+  /**
    * Dispose of mesh resources
    */
   private disposeMesh(): void {

@@ -203,7 +203,8 @@ export class SceneManager {
       1: { top: '#1a0a2e', mid: '#4a2c6e', bottom: '#9370db' },
       2: { top: '#2d3a4f', mid: '#5a6f8f', bottom: '#8ba5c4' },
       3: { top: '#ff7e5f', mid: '#feb47b', bottom: '#ffedbc' },
-      4: { top: '#87ceeb', mid: '#b8d4e8', bottom: '#fff8dc' }
+      4: { top: '#87ceeb', mid: '#b8d4e8', bottom: '#fff8dc' },
+      5: { top: '#87CEEB', mid: '#FAD7A0', bottom: '#FFE4B5' }  // Queen's Garden - golden hour
     };
 
     const palette = palettes[chapterNumber] || palettes[1];
@@ -390,6 +391,13 @@ export class SceneManager {
    */
   getBreakablePlatforms() {
     return this.currentLevel?.breakablePlatforms || [];
+  }
+
+  /**
+   * Get current level's platform meshes (for foliage animation)
+   */
+  getPlatformMeshes(): THREE.Mesh[] {
+    return this.currentLevel?.platforms || [];
   }
 
   /**

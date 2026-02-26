@@ -14,6 +14,7 @@ import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzz
 import { assetLoader } from '../engine/AssetLoader';
 import { createCelShaderMaterial } from '../shaders/CelShaderMaterial';
 import { addOutlinesToObject } from '../shaders/OutlineEffect';
+import { loadGardenAsset, hasGardenAsset } from './GardenAssetLoader';
 
 export interface BuiltLevel {
   platforms: THREE.Mesh[];
@@ -122,7 +123,7 @@ export class LevelBuilder {
     this.applyAtmosphere(levelData.atmosphere);
 
     // Build platforms
-    const { meshes: platforms, bouncy: bouncyPlatforms, breakable: breakablePlatforms } = this.buildPlatforms(levelData.platforms);
+    const { meshes: platforms, bouncy: bouncyPlatforms, breakable: breakablePlatforms } = await this.buildPlatforms(levelData.platforms);
 
     // Create collectibles
     const collectibles = this.buildCollectibles(levelData.collectibles);
@@ -203,55 +204,86 @@ export class LevelBuilder {
   /**
    * Build platforms with physics
    */
-  private buildPlatforms(platforms: Platform[]): { meshes: THREE.Mesh[], bouncy: BouncyPlatform[], breakable: BreakablePlatform[] } {
+  private async buildPlatforms(platforms: Platform[]): Promise<{ meshes: THREE.Mesh[], bouncy: BouncyPlatform[], breakable: BreakablePlatform[] }> {
     const meshes: THREE.Mesh[] = [];
     const bouncy: BouncyPlatform[] = [];
     const breakable: BreakablePlatform[] = [];
 
     for (const platform of platforms) {
-      // Visual mesh
-      const geometry = new THREE.BoxGeometry(
-        platform.size.x,
-        platform.size.y,
-        platform.size.z
-      );
+      let mesh: THREE.Mesh | THREE.Group;
 
-      // BotW-inspired color palette - natural, earthy tones
-      const celColors = [
-        0x8fbc8f,  // Dark sea green (grass/hedge)
-        0xdeb887,  // Burlywood (stone/earth)
-        0x9acd32,  // Yellow green (fresh grass)
-        0xd2b48c,  // Tan (sand/path)
-        0x87ceeb,  // Sky blue (sky platforms)
-        0xf5deb3,  // Wheat (light stone)
-      ];
-      const defaultColor = celColors[Math.floor(Math.random() * celColors.length)];
-      const color = platform.color ? new THREE.Color(platform.color) : new THREE.Color(defaultColor);
+      // Check if this platform uses a garden asset
+      if (platform.asset_id && hasGardenAsset(platform.asset_id)) {
+        // Load garden asset (already has cel-shader and outlines applied)
+        const assetGroup = await loadGardenAsset(platform.asset_id);
+        assetGroup.position.set(platform.position.x, platform.position.y, platform.position.z);
 
-      // Use cel-shader material for BotW look
-      const material = createCelShaderMaterial({
-        color,
-        shadowColor: 0x4a5568,   // Muted blue-gray shadow
-        highlightColor: 0xfff8e7, // Warm highlight
-        rimColor: 0x88ccff,       // Soft blue rim
-        rimPower: 3.0,
-        steps: 3,
-      });
+        // Apply rotation if specified
+        if (platform.rotation) {
+          assetGroup.rotation.set(
+            THREE.MathUtils.degToRad(platform.rotation.x || 0),
+            THREE.MathUtils.degToRad(platform.rotation.y || 0),
+            THREE.MathUtils.degToRad(platform.rotation.z || 0)
+          );
+        }
 
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(platform.position.x, platform.position.y, platform.position.z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
+        // Scale to match platform size (assets are designed for ~4x2x1 base size)
+        const baseSize = { x: 4, y: 2, z: 1 };
+        assetGroup.scale.set(
+          platform.size.x / baseSize.x,
+          platform.size.y / baseSize.y,
+          platform.size.z / baseSize.z
+        );
 
-      // Add outline for cel-shaded look
-      addOutlinesToObject(mesh, {
-        color: 0x2d3748,  // Dark blue-gray outline
-        thickness: 0.02,
-      });
+        this.scene.add(assetGroup);
+        this.createdMeshes.push(assetGroup as unknown as THREE.Mesh);
+        mesh = assetGroup as unknown as THREE.Mesh;
+      } else {
+        // Use procedural geometry (original behavior)
+        const geometry = new THREE.BoxGeometry(
+          platform.size.x,
+          platform.size.y,
+          platform.size.z
+        );
 
-      this.scene.add(mesh);
-      this.createdMeshes.push(mesh);
-      meshes.push(mesh);
+        // BotW-inspired color palette - natural, earthy tones
+        const celColors = [
+          0x8fbc8f,  // Dark sea green (grass/hedge)
+          0xdeb887,  // Burlywood (stone/earth)
+          0x9acd32,  // Yellow green (fresh grass)
+          0xd2b48c,  // Tan (sand/path)
+          0x87ceeb,  // Sky blue (sky platforms)
+          0xf5deb3,  // Wheat (light stone)
+        ];
+        const defaultColor = celColors[Math.floor(Math.random() * celColors.length)];
+        const color = platform.color ? new THREE.Color(platform.color) : new THREE.Color(defaultColor);
+
+        // Use cel-shader material for BotW look
+        const material = createCelShaderMaterial({
+          color,
+          shadowColor: 0x4a5568,   // Muted blue-gray shadow
+          highlightColor: 0xfff8e7, // Warm highlight
+          rimColor: 0x88ccff,       // Soft blue rim
+          rimPower: 3.0,
+          steps: 3,
+        });
+
+        mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(platform.position.x, platform.position.y, platform.position.z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        // Add outline for cel-shaded look
+        addOutlinesToObject(mesh, {
+          color: 0x2d3748,  // Dark blue-gray outline
+          thickness: 0.02,
+        });
+
+        this.scene.add(mesh);
+        this.createdMeshes.push(mesh);
+      }
+
+      meshes.push(mesh as THREE.Mesh);
 
       // Physics body
       const bodyDesc = RAPIER.RigidBodyDesc.fixed()
@@ -316,6 +348,86 @@ export class LevelBuilder {
 
     console.log(`Built ${meshes.length} platforms (${breakable.length} breakable)`);
     return { meshes, bouncy, breakable };
+  }
+
+  /**
+   * Build stairs between two points
+   * Creates a series of stepped platforms with physics colliders
+   */
+  buildStairs(
+    start: THREE.Vector3,
+    end: THREE.Vector3,
+    width: number = 3,
+    stepCount: number = 8,
+    color: number = 0xD2B48C  // Stone tan
+  ): THREE.Group {
+    const stairs = new THREE.Group();
+    const totalHeight = end.y - start.y;
+    const stepHeight = totalHeight / stepCount;
+
+    // Calculate horizontal distance
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+    const stepDepth = horizontalDist / stepCount;
+
+    // Direction vector (normalized)
+    const dirX = dx / horizontalDist;
+    const dirZ = dz / horizontalDist;
+
+    for (let i = 0; i < stepCount; i++) {
+      // Each step is a box
+      const geometry = new THREE.BoxGeometry(width, stepHeight, stepDepth);
+
+      const material = createCelShaderMaterial({
+        color: new THREE.Color(color),
+        shadowColor: 0x8B7355,
+        highlightColor: 0xFFF8E7,
+        rimColor: 0xE8DCC4,
+        rimPower: 3.0,
+        steps: 3,
+      });
+
+      const step = new THREE.Mesh(geometry, material);
+
+      // Position each step
+      const stepX = start.x + dirX * stepDepth * (i + 0.5);
+      const stepY = start.y + stepHeight * (i + 0.5);
+      const stepZ = start.z + dirZ * stepDepth * (i + 0.5);
+
+      step.position.set(stepX, stepY, stepZ);
+      step.castShadow = true;
+      step.receiveShadow = true;
+
+      // Rotate to face direction
+      step.rotation.y = Math.atan2(dirX, dirZ);
+
+      // Add outline
+      addOutlinesToObject(step, {
+        color: 0x2D3748,
+        thickness: 0.015,
+      });
+
+      stairs.add(step);
+      this.createdMeshes.push(step);
+
+      // Physics collider for each step
+      const bodyDesc = RAPIER.RigidBodyDesc.fixed()
+        .setTranslation(stepX, stepY, stepZ);
+      const body = this.world.createRigidBody(bodyDesc);
+      this.createdBodies.push(body);
+
+      const colliderDesc = RAPIER.ColliderDesc.cuboid(
+        width / 2,
+        stepHeight / 2,
+        stepDepth / 2
+      );
+      this.world.createCollider(colliderDesc, body);
+    }
+
+    this.scene.add(stairs);
+    console.log(`Built stairs with ${stepCount} steps`);
+    return stairs;
   }
 
   /**

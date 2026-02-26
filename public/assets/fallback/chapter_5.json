@@ -1,0 +1,589 @@
+{
+  "chapter_number": 5,
+  "chapter_title": "The Queen's Garden",
+  "setting": "A magnificent royal garden with hedge mazes, rose arbors, and towering topiaries bathed in eternal golden hour light",
+  "atmosphere": {
+    "sky_color": "#87CEEB",
+    "fog_color": "#FAD7A0",
+    "fog_near": 50,
+    "fog_far": 200,
+    "ambient_light": "#FFE4B5"
+  },
+  "platforms": [
+    {
+      "position": { "x": 0, "y": 0, "z": 0 },
+      "size": { "x": 30, "y": 1, "z": 30 },
+      "type": "solid",
+      "asset_id": "grass_platform"
+    },
+    {
+      "position": { "x": 0, "y": 0.5, "z": 0 },
+      "size": { "x": 3, "y": 2, "z": 3 },
+      "type": "solid",
+      "asset_id": "fountain"
+    },
+    {
+      "position": { "x": -12, "y": 0, "z": 0 },
+      "size": { "x": 8, "y": 3, "z": 2 },
+      "type": "solid",
+      "asset_id": "hedge_straight",
+      "rotation": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "position": { "x": 12, "y": 0, "z": 0 },
+      "size": { "x": 8, "y": 3, "z": 2 },
+      "type": "solid",
+      "asset_id": "hedge_straight",
+      "rotation": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "position": { "x": 0, "y": 0, "z": 12 },
+      "size": { "x": 2, "y": 3, "z": 8 },
+      "type": "solid",
+      "asset_id": "hedge_straight",
+      "rotation": { "x": 0, "y": 90, "z": 0 }
+    },
+    {
+      "position": { "x": 0, "y": 0, "z": -12 },
+      "size": { "x": 2, "y": 3, "z": 8 },
+      "type": "solid",
+      "asset_id": "hedge_straight",
+      "rotation": { "x": 0, "y": 90, "z": 0 }
+    },
+    {
+      "position": { "x": 8, "y": 0, "z": 8 },
+      "size": { "x": 1.5, "y": 1.5, "z": 1.5 },
+      "type": "solid",
+      "asset_id": "rose_bush_red"
+    },
+    {
+      "position": { "x": -8, "y": 0, "z": 8 },
+      "size": { "x": 1.5, "y": 1.5, "z": 1.5 },
+      "type": "solid",
+      "asset_id": "rose_bush_white"
+    },
+    {
+      "position": { "x": 8, "y": 0, "z": -8 },
+      "size": { "x": 1.5, "y": 1.5, "z": 1.5 },
+      "type": "solid",
+      "asset_id": "rose_bush_pink"
+    },
+    {
+      "position": { "x": -8, "y": 0, "z": -8 },
+      "size": { "x": 1.5, "y": 1.5, "z": 1.5 },
+      "type": "solid",
+      "asset_id": "topiary_heart"
+    },
+    {
+      "position": { "x": -40, "y": 0, "z": 0 },
+      "size": { "x": 25, "y": 1, "z": 20 },
+      "type": "solid",
+      "asset_id": "grass_platform"
+    },
+    {
+      "position": { "x": -40, "y": 0, "z": 0 },
+      "size": { "x": 3, "y": 0.8, "z": 3 },
+      "type": "solid",
+      "asset_id": "tea_table"
+    },
+    {
+      "position": { "x": -43, "y": 0, "z": 2 },
+      "size": { "x": 1, "y": 1, "z": 1 },
+      "type": "solid",
+      "asset_id": "chair_ornate"
+    },
+    {
+      "position": { "x": -37, "y": 0, "z": 2 },
+      "size": { "x": 1, "y": 1, "z": 1 },
+      "type": "solid",
+      "asset_id": "chair_ornate"
+    },
+    {
+      "position": { "x": -43, "y": 0, "z": -2 },
+      "size": { "x": 1, "y": 1, "z": 1 },
+      "type": "solid",
+      "asset_id": "chair_ornate"
+    },
+    {
+      "position": { "x": -37, "y": 0, "z": -2 },
+      "size": { "x": 1, "y": 1, "z": 1 },
+      "type": "solid",
+      "asset_id": "chair_ornate"
+    },
+    {
+      "position": { "x": -50, "y": 0, "z": -8 },
+      "size": { "x": 1.5, "y": 1.5, "z": 1.5 },
+      "type": "solid",
+      "asset_id": "rose_bush_red"
+    },
+    {
+      "position": { "x": -50, "y": 0, "z": 8 },
+      "size": { "x": 1.5, "y": 1.5, "z": 1.5 },
+      "type": "solid",
+      "asset_id": "rose_bush_pink"
+    },
+    {
+      "position": { "x": 40, "y": 0, "z": 0 },
+      "size": { "x": 30, "y": 1, "z": 25 },
+      "type": "solid",
+      "asset_id": "grass_platform"
+    },
+    {
+      "position": { "x": 35, "y": 0, "z": -10 },
+      "size": { "x": 2, "y": 0.3, "z": 15 },
+      "type": "solid",
+      "asset_id": "stone_path"
+    },
+    {
+      "position": { "x": 45, "y": 0, "z": -10 },
+      "size": { "x": 2, "y": 0.3, "z": 15 },
+      "type": "solid",
+      "asset_id": "stone_path"
+    },
+    {
+      "position": { "x": 55, "y": 0, "z": -10 },
+      "size": { "x": 2, "y": 0.3, "z": 15 },
+      "type": "solid",
+      "asset_id": "stone_path"
+    },
+    {
+      "position": { "x": 40, "y": 0, "z": 10 },
+      "size": { "x": 2, "y": 2, "z": 2 },
+      "type": "solid",
+      "asset_id": "topiary_sphere"
+    },
+    {
+      "position": { "x": 50, "y": 0, "z": 10 },
+      "size": { "x": 2, "y": 2, "z": 2 },
+      "type": "solid",
+      "asset_id": "topiary_spiral"
+    },
+    {
+      "position": { "x": -22, "y": 0, "z": 0 },
+      "size": { "x": 4, "y": 3, "z": 6 },
+      "type": "solid",
+      "asset_id": "hedge_straight",
+      "rotation": { "x": 0, "y": 90, "z": 0 }
+    },
+    {
+      "position": { "x": 22, "y": 0, "z": 0 },
+      "size": { "x": 4, "y": 3, "z": 6 },
+      "type": "solid",
+      "asset_id": "hedge_straight",
+      "rotation": { "x": 0, "y": 90, "z": 0 }
+    },
+    {
+      "position": { "x": 0, "y": 8, "z": -40 },
+      "size": { "x": 20, "y": 1, "z": 20 },
+      "type": "solid",
+      "asset_id": "grass_platform"
+    },
+    {
+      "position": { "x": 0, "y": 8.5, "z": -40 },
+      "size": { "x": 6, "y": 4, "z": 6 },
+      "type": "solid",
+      "asset_id": "gazebo"
+    },
+    {
+      "position": { "x": -6, "y": 8, "z": -35 },
+      "size": { "x": 2, "y": 0.6, "z": 2 },
+      "type": "solid",
+      "asset_id": "garden_bench"
+    },
+    {
+      "position": { "x": 6, "y": 8, "z": -35 },
+      "size": { "x": 2, "y": 0.6, "z": 2 },
+      "type": "solid",
+      "asset_id": "garden_bench"
+    },
+    {
+      "position": { "x": 0, "y": 1.5, "z": -17 },
+      "size": { "x": 4, "y": 0.5, "z": 4 },
+      "type": "solid",
+      "asset_id": "stairs_stone"
+    },
+    {
+      "position": { "x": 0, "y": 3, "z": -21 },
+      "size": { "x": 4, "y": 0.5, "z": 4 },
+      "type": "solid",
+      "asset_id": "stairs_stone"
+    },
+    {
+      "position": { "x": 0, "y": 4.5, "z": -25 },
+      "size": { "x": 4, "y": 0.5, "z": 4 },
+      "type": "solid",
+      "asset_id": "stairs_stone"
+    },
+    {
+      "position": { "x": 0, "y": 6, "z": -29 },
+      "size": { "x": 4, "y": 0.5, "z": 4 },
+      "type": "solid",
+      "asset_id": "stairs_stone"
+    },
+    {
+      "position": { "x": 0, "y": 0, "z": -18 },
+      "size": { "x": 6, "y": 3, "z": 2 },
+      "type": "solid",
+      "asset_id": "hedge_straight"
+    }
+  ],
+  "collectibles": [
+    { "type": "star", "position": { "x": 5, "y": 2, "z": 5 } },
+    { "type": "star", "position": { "x": -5, "y": 2, "z": -5 } },
+    { "type": "star", "position": { "x": -40, "y": 2, "z": 5 } },
+    { "type": "star", "position": { "x": 45, "y": 2, "z": -5 } },
+    { "type": "star", "position": { "x": 0, "y": 10, "z": -45 } },
+    { "type": "card", "position": { "x": 10, "y": 2, "z": 0 }, "card_suit": "hearts", "card_value": 1 },
+    { "type": "card", "position": { "x": -45, "y": 2, "z": 0 }, "card_suit": "hearts", "card_value": 2 },
+    { "type": "card", "position": { "x": 50, "y": 2, "z": 5 }, "card_suit": "hearts", "card_value": 3 },
+    { "type": "card", "position": { "x": 5, "y": 10, "z": -40 }, "card_suit": "hearts", "card_value": 4 },
+    { "type": "key", "position": { "x": 0, "y": 10, "z": -38 } }
+  ],
+  "npcs": [
+    {
+      "name": "Queen of Hearts",
+      "model_id": "queen_of_hearts",
+      "position": { "x": 0, "y": 1, "z": -5 },
+      "dialogue": [
+        "Welcome to MY garden, child!",
+        "The roses must be RED! Always RED!",
+        "Off with their heads if they displease me!",
+        "Hmm... you seem useful. Perhaps you can help my gardeners."
+      ],
+      "quest_ids": ["quest_paint_roses"]
+    },
+    {
+      "name": "Card Painter Two",
+      "model_id": "card_painter",
+      "position": { "x": 6, "y": 1, "z": 6 },
+      "dialogue": [
+        "Shh! We're painting the roses red!",
+        "The Queen will have our heads if she sees white roses!",
+        "Please, help us find more red paint!",
+        "The paint supplies are scattered around the garden..."
+      ],
+      "quest_ids": ["quest_find_paint"]
+    },
+    {
+      "name": "Card Painter Five",
+      "model_id": "card_painter",
+      "position": { "x": -6, "y": 1, "z": 6 },
+      "dialogue": [
+        "Two always worries too much.",
+        "I heard the Mad Hatter has extra paint at his tea party.",
+        "But the path to the terrace is blocked by hedges..."
+      ]
+    },
+    {
+      "name": "White Rabbit",
+      "model_id": "white_rabbit",
+      "position": { "x": -3, "y": 1, "z": 3 },
+      "dialogue": [
+        "Oh my! Oh my! The Queen's croquet match!",
+        "It starts soon! I must prepare the mallets!",
+        "The croquet lawn is to the east, but it's not ready!",
+        "The flamingos have escaped! Can you help round them up?"
+      ],
+      "quest_ids": ["quest_find_flamingos"]
+    },
+    {
+      "name": "Mad Hatter",
+      "model_id": "mad_hatter",
+      "position": { "x": -40, "y": 1, "z": 0 },
+      "dialogue": [
+        "A very merry unbirthday to YOU!",
+        "Tea? More tea? Always time for tea!",
+        "Why is a raven like a writing desk?",
+        "Oh, you need paint? Check behind the teapot!",
+        "The Dormouse hid something there, I think..."
+      ],
+      "appears_after_quest": "quest_find_paint"
+    },
+    {
+      "name": "March Hare",
+      "model_id": "march_hare",
+      "position": { "x": -43, "y": 1, "z": 3 },
+      "dialogue": [
+        "Have some wine! There isn't any!",
+        "Your hair wants cutting.",
+        "The Dormouse is sleeping again...",
+        "Wake him and he might tell you a secret!"
+      ],
+      "appears_after_quest": "quest_find_paint"
+    },
+    {
+      "name": "Dormouse",
+      "model_id": "dormouse",
+      "position": { "x": -37, "y": 1, "z": 3 },
+      "dialogue": [
+        "*yawn* Treacle... treacle...",
+        "They lived at the bottom of a well...",
+        "Hmm? Paint? I put it in the gazebo...",
+        "The gazebo on the hill... *snore*"
+      ],
+      "appears_after_quest": "quest_find_paint",
+      "quest_ids": ["quest_gazebo_paint"]
+    },
+    {
+      "name": "Cheshire Cat",
+      "model_id": "cheshire_cat",
+      "position": { "x": 0, "y": 9, "z": -35 },
+      "dialogue": [
+        "We're all mad here. I'm mad. You're mad.",
+        "How do you know I'm mad?",
+        "You must be, or you wouldn't have come here.",
+        "The paint you seek is inside the gazebo..."
+      ],
+      "appears_after_quest": "quest_gazebo_paint"
+    },
+    {
+      "name": "Flamingo Fred",
+      "model_id": "flamingo",
+      "position": { "x": 35, "y": 1, "z": -8 },
+      "dialogue": [
+        "*indignant squawk*",
+        "I refuse to be a croquet mallet!",
+        "Find me some fish and I'll cooperate...",
+        "There are fish in the fountain, I believe."
+      ],
+      "appears_after_quest": "quest_find_flamingos"
+    },
+    {
+      "name": "Hedgehog Henry",
+      "model_id": "hedgehog",
+      "position": { "x": 45, "y": 1, "z": 5 },
+      "dialogue": [
+        "*curl up defensively*",
+        "Please don't hit me with a flamingo!",
+        "I just want to find my family...",
+        "My children are hiding in the rose bushes."
+      ],
+      "appears_after_quest": "quest_find_flamingos"
+    }
+  ],
+  "spawn_point": { "x": 0, "y": 2, "z": 10 },
+  "gate_position": { "x": 0, "y": 9, "z": -50 },
+  "size_puzzles": [
+    {
+      "area_bounds": {
+        "min": { "x": -10, "y": 0, "z": -10 },
+        "max": { "x": 10, "y": 5, "z": 10 }
+      },
+      "required_size": "small",
+      "hint": "Shrink to explore the hidden paths between the hedges"
+    }
+  ],
+  "areas": [
+    {
+      "id": "central_hub",
+      "name": "Royal Fountain Plaza",
+      "bounds": {
+        "min": { "x": -15, "y": -1, "z": -15 },
+        "max": { "x": 15, "y": 10, "z": 15 }
+      },
+      "camera_config": {
+        "targetDistance": 12,
+        "heightOffset": 4
+      }
+    },
+    {
+      "id": "tea_party_terrace",
+      "name": "Mad Tea Party Terrace",
+      "bounds": {
+        "min": { "x": -55, "y": -1, "z": -12 },
+        "max": { "x": -25, "y": 10, "z": 12 }
+      },
+      "locked_by_quest": "quest_find_paint",
+      "camera_config": {
+        "targetDistance": 15,
+        "heightOffset": 5
+      }
+    },
+    {
+      "id": "croquet_lawn",
+      "name": "Royal Croquet Lawn",
+      "bounds": {
+        "min": { "x": 25, "y": -1, "z": -15 },
+        "max": { "x": 60, "y": 10, "z": 15 }
+      },
+      "locked_by_quest": "quest_find_flamingos",
+      "camera_config": {
+        "targetDistance": 18,
+        "heightOffset": 6
+      }
+    },
+    {
+      "id": "gazebo_hill",
+      "name": "Cheshire Gazebo",
+      "bounds": {
+        "min": { "x": -12, "y": 7, "z": -52 },
+        "max": { "x": 12, "y": 15, "z": -28 }
+      },
+      "locked_by_quest": "quest_gazebo_paint",
+      "camera_config": {
+        "targetDistance": 14,
+        "heightOffset": 5
+      }
+    }
+  ],
+  "quests": [
+    {
+      "id": "quest_paint_roses",
+      "name": "Paint the Roses Red",
+      "giver_npc": "Queen of Hearts",
+      "dialogue_before": [
+        "Those FOOLS have planted WHITE roses!",
+        "Find paint and help them fix this disaster!",
+        "Or it's OFF WITH THEIR HEADS!"
+      ],
+      "dialogue_during": [
+        "Why are you still here?",
+        "Find the paint! NOW!"
+      ],
+      "dialogue_after": [
+        "Hmph. Adequate work, I suppose.",
+        "You may explore my garden further.",
+        "But mind the croquet match!"
+      ],
+      "requirements": {
+        "complete_quest": "quest_gazebo_paint"
+      },
+      "rewards": {
+        "unlock_area": "gazebo_hill"
+      }
+    },
+    {
+      "id": "quest_find_paint",
+      "name": "Search for Red Paint",
+      "giver_npc": "Card Painter Two",
+      "dialogue_before": [
+        "The Mad Hatter might have paint!",
+        "Please go to the Tea Party Terrace and ask him!",
+        "I'll unlock the hedge gate for you..."
+      ],
+      "dialogue_during": [
+        "Any luck with the paint?",
+        "The Hatter is quite mad, but helpful sometimes..."
+      ],
+      "dialogue_after": [
+        "You found where it is? The gazebo?",
+        "Thank you! We might survive after all!"
+      ],
+      "requirements": {
+        "talk_to_npc": "Dormouse"
+      },
+      "rewards": {
+        "unlock_area": "tea_party_terrace",
+        "spawn_npc": "Mad Hatter"
+      }
+    },
+    {
+      "id": "quest_gazebo_paint",
+      "name": "Retrieve the Paint",
+      "giver_npc": "Dormouse",
+      "dialogue_before": [
+        "*yawn* The paint...",
+        "I hid it in the gazebo on the hill...",
+        "Climb the stairs to find it... *snore*"
+      ],
+      "dialogue_during": [
+        "Zzz... gazebo... stairs... zzz..."
+      ],
+      "dialogue_after": [
+        "*snort* You found it?",
+        "Wonderful... now let me sleep..."
+      ],
+      "requirements": {
+        "reach_position": { "x": 0, "y": 9, "z": -40 },
+        "reach_radius": 5
+      },
+      "rewards": {
+        "spawn_npc": "Cheshire Cat"
+      }
+    },
+    {
+      "id": "quest_find_flamingos",
+      "name": "Round Up the Flamingos",
+      "giver_npc": "White Rabbit",
+      "dialogue_before": [
+        "Oh dear! The croquet match!",
+        "The flamingos have escaped to the lawn!",
+        "Please, go to the Croquet Lawn and find them!",
+        "I'll open the east gate for you!"
+      ],
+      "dialogue_during": [
+        "Have you found the flamingos yet?",
+        "The Queen will be SO upset if the match is delayed!"
+      ],
+      "dialogue_after": [
+        "You found them! Splendid!",
+        "Now we can prepare for the match!",
+        "Oh, but they want fish... from the fountain..."
+      ],
+      "requirements": {
+        "talk_to_npc": "Flamingo Fred"
+      },
+      "rewards": {
+        "unlock_area": "croquet_lawn",
+        "spawn_npc": "Flamingo Fred"
+      }
+    }
+  ],
+  "wonder_stars": [
+    {
+      "id": "qg_star_1",
+      "name": "Garden Explorer",
+      "position": { "x": 0, "y": 3, "z": 0 },
+      "challenge_type": "exploration",
+      "requirements": {
+        "reach_position": { "x": 0, "y": 9, "z": -40 },
+        "reach_radius": 5
+      },
+      "hint": "Reach the gazebo at the top of the garden",
+      "spawn_near": { "x": 0, "y": 2, "z": 10 }
+    },
+    {
+      "id": "qg_star_2",
+      "name": "Tea Party Guest",
+      "position": { "x": -40, "y": 3, "z": 3 },
+      "challenge_type": "exploration",
+      "requirements": {
+        "reach_position": { "x": -40, "y": 1, "z": 0 },
+        "reach_radius": 5
+      },
+      "hint": "Join the Mad Tea Party",
+      "spawn_near": { "x": 0, "y": 2, "z": 10 }
+    },
+    {
+      "id": "qg_star_3",
+      "name": "Croquet Champion",
+      "position": { "x": 45, "y": 3, "z": 0 },
+      "challenge_type": "skill",
+      "requirements": {
+        "perform_ground_pounds": 3
+      },
+      "hint": "Perform 3 ground pounds on the croquet lawn",
+      "spawn_near": { "x": 40, "y": 2, "z": 0 }
+    },
+    {
+      "id": "qg_star_4",
+      "name": "Card Collector",
+      "position": { "x": -8, "y": 3, "z": -8 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_cards": 4
+      },
+      "hint": "Collect all 4 Hearts cards hidden in the garden"
+    },
+    {
+      "id": "qg_star_5",
+      "name": "Stargazer",
+      "position": { "x": 10, "y": 3, "z": 10 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_stars": 5
+      },
+      "hint": "Find all 5 stars scattered throughout the garden"
+    }
+  ]
+}
