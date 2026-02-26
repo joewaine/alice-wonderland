@@ -15,6 +15,42 @@ import { assetLoader } from '../engine/AssetLoader';
 import { createCelShaderMaterial } from '../shaders/CelShaderMaterial';
 import { addOutlinesToObject } from '../shaders/OutlineEffect';
 import { loadGardenAsset, hasGardenAsset } from './GardenAssetLoader';
+import type { SurfaceType } from '../audio/AudioManager';
+
+/**
+ * Determine surface type from asset_id for footstep sounds
+ */
+function getSurfaceType(assetId?: string): SurfaceType {
+  if (!assetId) return 'grass'; // Default for procedural platforms in garden
+
+  // Stone surfaces
+  if (assetId.startsWith('stone') || assetId.startsWith('stairs_stone')) {
+    return 'stone';
+  }
+
+  // Wood surfaces
+  if (
+    assetId.includes('chair') ||
+    assetId.includes('bench') ||
+    assetId.includes('table') ||
+    assetId.startsWith('gazebo')
+  ) {
+    return 'wood';
+  }
+
+  // Grass/hedge surfaces (default for garden)
+  if (
+    assetId.startsWith('hedge') ||
+    assetId.startsWith('grass') ||
+    assetId.startsWith('topiary') ||
+    assetId.startsWith('stairs_grass')
+  ) {
+    return 'grass';
+  }
+
+  // Default to grass for garden setting
+  return 'grass';
+}
 
 export interface BuiltLevel {
   platforms: THREE.Mesh[];
@@ -284,6 +320,9 @@ export class LevelBuilder {
       }
 
       meshes.push(mesh as THREE.Mesh);
+
+      // Store surface type for footstep sounds
+      mesh.userData.surfaceType = getSurfaceType(platform.asset_id);
 
       // Physics body
       const bodyDesc = RAPIER.RigidBodyDesc.fixed()

@@ -2,8 +2,10 @@
  * AudioManager - Procedural sound effects using Web Audio API
  *
  * Generates retro-style sound effects without external audio files.
- * Sounds: jump, land, collect, size change, gate unlock
+ * Sounds: jump, land, collect, size change, gate unlock, surface-based footsteps
  */
+
+export type SurfaceType = 'grass' | 'stone' | 'wood' | 'default';
 
 export class AudioManager {
   private audioContext: AudioContext | null = null;
@@ -118,37 +120,166 @@ export class AudioManager {
   }
 
   /**
-   * Play footstep sound
+   * Play footstep sound based on surface type
    */
-  playFootstep(): void {
+  playFootstep(surface: SurfaceType = 'default'): void {
+    switch (surface) {
+      case 'grass':
+        this.playFootstepGrass();
+        break;
+      case 'stone':
+        this.playFootstepStone();
+        break;
+      case 'wood':
+        this.playFootstepWood();
+        break;
+      default:
+        this.playFootstepGrass(); // Default to grass for garden setting
+    }
+  }
+
+  /**
+   * Play grass footstep sound - soft, muffled thud
+   */
+  playFootstepGrass(): void {
     if (this.muted) return;
     this.ensureContext();
     if (!this.audioContext || !this.masterGain) return;
 
     const osc = this.audioContext.createOscillator();
+    const noise = this.audioContext.createOscillator();
     const gain = this.audioContext.createGain();
+    const noiseGain = this.audioContext.createGain();
     const filter = this.audioContext.createBiquadFilter();
 
-    // Vary pitch slightly for natural feel
-    const basePitch = 80 + Math.random() * 40;
+    // Low frequency thud with slight variation
+    const basePitch = 60 + Math.random() * 30;
     osc.type = 'sine';
     osc.frequency.setValueAtTime(basePitch, this.audioContext.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(40, this.audioContext.currentTime + 0.05);
+    osc.frequency.exponentialRampToValueAtTime(30, this.audioContext.currentTime + 0.06);
 
-    // Quick, quiet tap
-    gain.gain.setValueAtTime(0.1, this.audioContext.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.06);
+    // Add subtle noise for grass texture
+    noise.type = 'triangle';
+    noise.frequency.setValueAtTime(200 + Math.random() * 100, this.audioContext.currentTime);
 
-    // Low-pass filter for softness
+    // Quick, muffled tap
+    gain.gain.setValueAtTime(0.08, this.audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.07);
+
+    noiseGain.gain.setValueAtTime(0.02, this.audioContext.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.04);
+
+    // Heavy low-pass filter for muffled grass sound
     filter.type = 'lowpass';
-    filter.frequency.value = 300;
+    filter.frequency.value = 250;
 
     osc.connect(filter);
+    noise.connect(noiseGain);
+    noiseGain.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain);
 
     osc.start();
+    noise.start();
     osc.stop(this.audioContext.currentTime + 0.08);
+    noise.stop(this.audioContext.currentTime + 0.05);
+  }
+
+  /**
+   * Play stone footstep sound - harder, clicking
+   */
+  playFootstepStone(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    const osc = this.audioContext.createOscillator();
+    const osc2 = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+    const gain2 = this.audioContext.createGain();
+    const filter = this.audioContext.createBiquadFilter();
+
+    // Higher pitched click with variation
+    const basePitch = 400 + Math.random() * 200;
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(basePitch, this.audioContext.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(150, this.audioContext.currentTime + 0.03);
+
+    // Secondary low thud for impact
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(100, this.audioContext.currentTime);
+    osc2.frequency.exponentialRampToValueAtTime(50, this.audioContext.currentTime + 0.04);
+
+    // Sharp attack, quick decay
+    gain.gain.setValueAtTime(0.06, this.audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.04);
+
+    gain2.gain.setValueAtTime(0.05, this.audioContext.currentTime);
+    gain2.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.05);
+
+    // Slight high-pass to make it crisp
+    filter.type = 'highpass';
+    filter.frequency.value = 150;
+
+    osc.connect(filter);
+    filter.connect(gain);
+    osc2.connect(gain2);
+    gain.connect(this.masterGain);
+    gain2.connect(this.masterGain);
+
+    osc.start();
+    osc2.start();
+    osc.stop(this.audioContext.currentTime + 0.05);
+    osc2.stop(this.audioContext.currentTime + 0.06);
+  }
+
+  /**
+   * Play wood footstep sound - hollow, wooden
+   */
+  playFootstepWood(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    const osc = this.audioContext.createOscillator();
+    const osc2 = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+    const gain2 = this.audioContext.createGain();
+    const filter = this.audioContext.createBiquadFilter();
+
+    // Hollow resonant tone with variation
+    const basePitch = 180 + Math.random() * 60;
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(basePitch, this.audioContext.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, this.audioContext.currentTime + 0.08);
+
+    // Higher harmonic for wood character
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(basePitch * 2.5, this.audioContext.currentTime);
+    osc2.frequency.exponentialRampToValueAtTime(basePitch, this.audioContext.currentTime + 0.04);
+
+    // Quick attack, medium decay (wood resonance)
+    gain.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.1);
+
+    gain2.gain.setValueAtTime(0.04, this.audioContext.currentTime);
+    gain2.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.06);
+
+    // Band-pass for hollow wood sound
+    filter.type = 'bandpass';
+    filter.frequency.value = 300;
+    filter.Q.value = 2;
+
+    osc.connect(filter);
+    osc2.connect(gain2);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+    gain2.connect(this.masterGain);
+
+    osc.start();
+    osc2.start();
+    osc.stop(this.audioContext.currentTime + 0.12);
+    osc2.stop(this.audioContext.currentTime + 0.07);
   }
 
   /**
