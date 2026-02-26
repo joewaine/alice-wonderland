@@ -24,7 +24,6 @@ export class SceneManager {
   private hud: HUD;
   private gate: Gate | null = null;
   private currentLevel: BuiltLevel | null = null;
-  private currentChapter: number = 1;
   private currentSkyboxTexture: THREE.Texture | null = null;
   private skyboxMesh: THREE.Mesh | null = null;
   private currentLevelData: LevelData | null = null;
@@ -33,7 +32,6 @@ export class SceneManager {
   private boundsCache: THREE.Box3 = new THREE.Box3();
 
   // Callbacks
-  public onChapterComplete: ((nextChapter: number) => void) | null = null;
   public onPlayerSpawn: ((position: THREE.Vector3) => void) | null = null;
   public onCollectiblePickup: ((type: string, position: THREE.Vector3) => void) | null = null;
   public onGateUnlock: ((position: THREE.Vector3) => void) | null = null;
@@ -77,10 +75,10 @@ export class SceneManager {
   }
 
   /**
-   * Load a level from JSON file
+   * Load The Queen's Garden level
    */
-  async loadLevel(chapterNumber: number): Promise<void> {
-    console.log(`Loading chapter ${chapterNumber}...`);
+  async loadLevel(): Promise<void> {
+    console.log(`Loading The Queen's Garden...`);
 
     // Clean up previous level
     if (this.currentLevel) {
@@ -88,13 +86,11 @@ export class SceneManager {
     }
 
     // Fetch level data
-    const levelData = await this.fetchLevelData(chapterNumber);
+    const levelData = await this.fetchLevelData();
     if (!levelData) {
-      console.error(`Failed to load chapter ${chapterNumber}`);
+      console.error(`Failed to load The Queen's Garden`);
       return;
     }
-
-    this.currentChapter = chapterNumber;
 
     // Build the level (async to load NPC models)
     this.currentLevel = await this.levelBuilder.build(levelData);
@@ -103,7 +99,7 @@ export class SceneManager {
     this.collectibleManager.setCollectibles(this.currentLevel.collectibles);
     this.hud.updateCollectibles(this.collectibleManager.getState());
 
-    // Setup gate
+    // Setup gate (completion gate for end of level)
     this.gate = new Gate(this.currentLevel.gatePosition);
     this.gate.setup(this.scene);
     this.gate.onEnter = () => this.handleGateEnter();
@@ -115,12 +111,12 @@ export class SceneManager {
     }
 
     // Load skybox
-    await this.loadSkybox(chapterNumber);
+    await this.loadSkybox();
 
-    // Show chapter title
+    // Show welcome title
     this.hud.showChapterTitle(
-      `Chapter ${chapterNumber}`,
-      levelData.chapter_title
+      "The Queen's Garden",
+      levelData.setting || "Welcome to Wonderland"
     );
 
     // Spawn player
@@ -128,13 +124,13 @@ export class SceneManager {
       this.onPlayerSpawn(this.currentLevel.spawnPoint);
     }
 
-    console.log(`Loaded: ${levelData.chapter_title}`);
+    console.log(`Loaded: The Queen's Garden`);
   }
 
   /**
    * Load skybox as a large inverted sphere
    */
-  private async loadSkybox(chapterNumber: number): Promise<void> {
+  private async loadSkybox(): Promise<void> {
     // Dispose previous skybox
     if (this.currentSkyboxTexture) {
       this.currentSkyboxTexture.dispose();
@@ -147,7 +143,7 @@ export class SceneManager {
       this.skyboxMesh = null;
     }
 
-    const skyboxPath = `${import.meta.env.BASE_URL}assets/skyboxes/chapter_${chapterNumber}.png`;
+    const skyboxPath = `${import.meta.env.BASE_URL}assets/skyboxes/queens_garden.png`;
 
     try {
       const texture = await new Promise<THREE.Texture>((resolve, reject) => {
@@ -188,26 +184,19 @@ export class SceneManager {
       // Clear scene background color
       this.scene.background = null;
 
-      console.log(`Loaded skybox sphere for chapter ${chapterNumber}`);
+      console.log(`Loaded skybox for The Queen's Garden`);
     } catch {
       // Fallback to gradient
-      this.createGradientSkybox(chapterNumber);
+      this.createGradientSkybox();
     }
   }
 
   /**
-   * Create fallback gradient skybox
+   * Create fallback gradient skybox - Queen's Garden golden hour
    */
-  private createGradientSkybox(chapterNumber: number): void {
-    const palettes: Record<number, { top: string; mid: string; bottom: string }> = {
-      1: { top: '#1a0a2e', mid: '#4a2c6e', bottom: '#9370db' },
-      2: { top: '#2d3a4f', mid: '#5a6f8f', bottom: '#8ba5c4' },
-      3: { top: '#ff7e5f', mid: '#feb47b', bottom: '#ffedbc' },
-      4: { top: '#87ceeb', mid: '#b8d4e8', bottom: '#fff8dc' },
-      5: { top: '#87CEEB', mid: '#FAD7A0', bottom: '#FFE4B5' }  // Queen's Garden - golden hour
-    };
-
-    const palette = palettes[chapterNumber] || palettes[1];
+  private createGradientSkybox(): void {
+    // Queen's Garden palette - warm golden hour
+    const palette = { top: '#87CEEB', mid: '#FAD7A0', bottom: '#FFE4B5' };
 
     const canvas = document.createElement('canvas');
     canvas.width = 512;
@@ -225,15 +214,15 @@ export class SceneManager {
     const texture = new THREE.CanvasTexture(canvas);
     this.scene.background = texture;
     this.currentSkyboxTexture = texture;
-    console.log(`Using gradient fallback for chapter ${chapterNumber}`);
+    console.log(`Using golden hour gradient skybox`);
   }
 
   /**
    * Fetch level data from JSON file
    */
-  private async fetchLevelData(chapterNumber: number): Promise<LevelData | null> {
+  private async fetchLevelData(): Promise<LevelData | null> {
     try {
-      const response = await fetch(`${import.meta.env.BASE_URL}assets/fallback/chapter_${chapterNumber}.json`);
+      const response = await fetch(`${import.meta.env.BASE_URL}assets/fallback/queens_garden.json`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -245,31 +234,19 @@ export class SceneManager {
   }
 
   /**
-   * Handle player entering the gate
+   * Handle player entering the gate - level complete!
    */
   private handleGateEnter(): void {
     if (!this.gate?.getIsUnlocked()) return;
 
-    const nextChapter = this.currentChapter + 1;
     const stats = this.collectibleManager.getState();
 
     // Play celebration jingle
     audioManager.playChapterComplete();
 
-    // Check if we have more chapters
-    if (nextChapter > 4) {
-      this.hud.showChapterComplete(this.currentChapter, stats, () => {
-        this.hud.showMessage('Congratulations! You completed the demo!', 5000);
-      });
-      return;
-    }
-
-    // Show chapter complete celebration
-    this.hud.showChapterComplete(this.currentChapter, stats, () => {
-      // Notify game to transition
-      if (this.onChapterComplete) {
-        this.onChapterComplete(nextChapter);
-      }
+    // Show level complete celebration
+    this.hud.showLevelComplete("The Queen's Garden", stats, () => {
+      this.hud.showMessage('Congratulations! You conquered The Queen\'s Garden!', 5000);
     });
   }
 
@@ -460,12 +437,6 @@ export class SceneManager {
     this.hud.showMessage(text);
   }
 
-  /**
-   * Get current chapter
-   */
-  getCurrentChapter(): number {
-    return this.currentChapter;
-  }
 
   /**
    * Set mute indicator
@@ -525,12 +496,6 @@ export class SceneManager {
     return this.currentLevelData?.npcs || [];
   }
 
-  /**
-   * Get current chapter number
-   */
-  getCurrentChapterNumber(): number {
-    return this.currentLevelData?.chapter_number || 1;
-  }
 
   /**
    * Get collected star IDs

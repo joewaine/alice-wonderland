@@ -158,8 +158,7 @@ export interface Atmosphere {
 }
 
 export interface LevelData {
-  chapter_number: number;
-  chapter_title: string;
+  title: string;
   setting: string;
 
   atmosphere: Atmosphere;
@@ -194,8 +193,7 @@ export function validateLevelData(data: unknown): data is LevelData {
   const level = data as LevelData;
 
   // Check required fields
-  if (typeof level.chapter_number !== 'number') return false;
-  if (typeof level.chapter_title !== 'string') return false;
+  if (typeof level.title !== 'string') return false;
   if (typeof level.setting !== 'string') return false;
 
   // Check arrays exist

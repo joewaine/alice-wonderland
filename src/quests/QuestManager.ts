@@ -33,10 +33,10 @@ export class QuestManager {
   public callbacks: QuestManagerCallbacks = {};
 
   // Persistence
-  private storageKey: string = 'wonderland_quest_progress';
+  private storageKey: string = 'wonderland_queens_garden_progress';
 
-  constructor(chapterNumber: number) {
-    this.storageKey = `wonderland_quest_progress_ch${chapterNumber}`;
+  constructor() {
+    // Storage key is fixed for The Queen's Garden
   }
 
   /**

@@ -356,6 +356,109 @@ export class HUD {
   }
 
   /**
+   * Show level complete celebration (single level mode)
+   */
+  showLevelComplete(
+    levelName: string,
+    stats: { stars: number; totalStars: number; cards: number; totalCards: number },
+    onComplete: () => void
+  ): void {
+    // Create celebration overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Georgia', serif;
+      z-index: 500;
+      opacity: 0;
+      transition: opacity 0.5s;
+    `;
+
+    // Title
+    const title = document.createElement('h1');
+    title.textContent = 'Level Complete!';
+    title.style.cssText = `
+      font-size: 56px;
+      color: #ffd700;
+      text-shadow: 0 0 30px #ffd700;
+      margin: 0 0 20px 0;
+      animation: levelCelebrate 0.5s ease-out;
+    `;
+    overlay.appendChild(title);
+
+    // Level name
+    const levelNameElem = document.createElement('p');
+    levelNameElem.textContent = levelName;
+    levelNameElem.style.cssText = `
+      font-size: 28px;
+      color: #e94560;
+      margin: 0 0 40px 0;
+      font-style: italic;
+    `;
+    overlay.appendChild(levelNameElem);
+
+    // Stats
+    const statsDiv = document.createElement('div');
+    statsDiv.style.cssText = `
+      font-size: 24px;
+      color: white;
+      text-align: center;
+      margin-bottom: 40px;
+    `;
+    statsDiv.innerHTML = `
+      <p style="margin: 10px 0; color: #ffff00">Stars: ${stats.stars} / ${stats.totalStars}</p>
+      <p style="margin: 10px 0; color: #ff6b6b">Cards: ${stats.cards} / ${stats.totalCards}</p>
+    `;
+    overlay.appendChild(statsDiv);
+
+    // Completion message
+    const completeText = document.createElement('p');
+    completeText.textContent = 'You conquered Wonderland!';
+    completeText.style.cssText = `
+      font-size: 20px;
+      color: #9370db;
+      font-style: italic;
+    `;
+    overlay.appendChild(completeText);
+
+    // Add animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes levelCelebrate {
+        0% { transform: scale(0.5); opacity: 0; }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    document.body.appendChild(overlay);
+
+    // Fade in
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+
+    // Wait then fade out and callback
+    setTimeout(() => {
+      overlay.style.opacity = '0';
+      setTimeout(() => {
+        document.body.removeChild(overlay);
+        document.head.removeChild(style);
+        onComplete();
+      }, 500);
+    }, 4000);
+  }
+
+  /**
    * Clean up
    */
   dispose(): void {

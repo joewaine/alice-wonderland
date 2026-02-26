@@ -16,8 +16,7 @@ Given a chapter from the book, output a JSON LevelData object that describes a p
 
 Output ONLY valid JSON with this exact structure (no markdown, no explanation):
 {
-  "chapter_number": <number>,
-  "chapter_title": "<string>",
+  "title": "<string>",
   "setting": "<brief description of the environment>",
   "atmosphere": {
     "sky_color": "<hex color like #87CEEB>",
@@ -129,7 +128,7 @@ export class ClaudeParser {
         throw new Error('Invalid level data structure');
       }
 
-      console.log(`Generated level: "${levelData.chapter_title}"`);
+      console.log(`Generated level: "${levelData.title}"`);
       return levelData;
 
     } catch (error) {
