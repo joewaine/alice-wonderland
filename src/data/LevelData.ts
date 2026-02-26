@@ -83,6 +83,59 @@ export interface NPC {
   position: Vector3;
   model_id?: string;
   dialogue: string[];
+  quest_ids?: string[];            // Quests this NPC can give
+  appears_after_quest?: string;    // Only visible after this quest is complete
+}
+
+// ============================================================================
+// Quest System Types - For story-driven progression
+// ============================================================================
+
+export interface QuestRequirements {
+  talk_to_npc?: string;            // Must talk to this NPC
+  reach_position?: Vector3;        // Must reach this location
+  reach_radius?: number;           // Radius for reach_position check
+  collect_items?: { type: string; count: number }[];
+  complete_quest?: string;         // Prerequisite quest ID
+}
+
+export interface QuestRewards {
+  unlock_area?: string;            // Area ID to make accessible
+  spawn_npc?: string;              // Make NPC appear
+  give_item?: string;              // Item to add to inventory
+}
+
+export interface Quest {
+  id: string;                      // "quest_find_rabbit"
+  name: string;                    // "Find the White Rabbit"
+  giver_npc: string;               // NPC ID who gives quest
+  dialogue_before: string[];       // Lines before accepting
+  dialogue_during: string[];       // Lines while in progress
+  dialogue_after: string[];        // Lines after completion
+  requirements: QuestRequirements;
+  rewards: QuestRewards;
+}
+
+// ============================================================================
+// Area Types - For zone-based level structure
+// ============================================================================
+
+export interface AreaBounds {
+  min: Vector3;
+  max: Vector3;
+}
+
+export interface AreaCameraConfig {
+  targetDistance: number;
+  heightOffset: number;
+}
+
+export interface Area {
+  id: string;                      // "tea_party_terrace"
+  name: string;                    // "Tea Party Terrace"
+  bounds: AreaBounds;
+  locked_by_quest?: string;        // Quest that must be complete to access
+  camera_config?: AreaCameraConfig;
 }
 
 export interface SizePuzzle {
@@ -124,6 +177,10 @@ export interface LevelData {
   speed_boosts?: SpeedBoost[];
   checkpoints?: Checkpoint[];
   wonder_stars?: WonderStar[];
+
+  // Quest system (optional - for story-driven levels like Queen's Garden)
+  areas?: Area[];
+  quests?: Quest[];
 }
 
 /**

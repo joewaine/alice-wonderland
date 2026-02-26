@@ -1,0 +1,189 @@
+{
+  "description": "Per-room color profiles for The Queen's Garden level. Each room has a distinct palette while maintaining overall BotW aesthetic coherence.",
+
+  "rooms": {
+    "queens_court": {
+      "name": "Queen's Court",
+      "mood": "regal, imposing, golden hour warmth",
+      "dominant_hues": ["marble_white", "gold", "hedge_green"],
+      "atmosphere": {
+        "sky_color": "#87CEEB",
+        "fog_color": "#E8F4E8",
+        "fog_near": 40,
+        "fog_far": 120,
+        "ambient_light": "#8FAADC"
+      },
+      "accents": {
+        "primary": "#FFD700",
+        "secondary": "#C41E3A",
+        "tertiary": "#FFFFFF"
+      },
+      "materials_override": {
+        "platform_default": "marble",
+        "wall_default": "hedge"
+      },
+      "camera_config": {
+        "targetDistance": 10,
+        "heightOffset": 3
+      }
+    },
+
+    "rose_garden": {
+      "name": "Rose Garden",
+      "mood": "lush, romantic, slightly mysterious",
+      "dominant_hues": ["hedge_green", "rose_red", "grass_green"],
+      "atmosphere": {
+        "sky_color": "#87CEEB",
+        "fog_color": "#D8ECD8",
+        "fog_near": 30,
+        "fog_far": 100,
+        "ambient_light": "#7A9FCC"
+      },
+      "accents": {
+        "primary": "#C41E3A",
+        "secondary": "#FFFFFF",
+        "tertiary": "#FF69B4"
+      },
+      "materials_override": {
+        "platform_default": "grass",
+        "wall_default": "hedge"
+      },
+      "camera_config": {
+        "targetDistance": 8,
+        "heightOffset": 2.5
+      },
+      "particles": {
+        "rose_petals": {
+          "enabled": true,
+          "colors": ["#C41E3A", "#FF6B6B", "#FF69B4"],
+          "count": 50,
+          "drift_speed": 0.5
+        }
+      }
+    },
+
+    "tea_party_terrace": {
+      "name": "Tea Party Terrace",
+      "mood": "whimsical, warm, slightly chaotic",
+      "dominant_hues": ["warm_wood", "cream", "hedge_green"],
+      "atmosphere": {
+        "sky_color": "#FFE4B5",
+        "fog_color": "#FFF8E7",
+        "fog_near": 35,
+        "fog_far": 90,
+        "ambient_light": "#DEB887"
+      },
+      "accents": {
+        "primary": "#8B4513",
+        "secondary": "#FFD700",
+        "tertiary": "#9370DB"
+      },
+      "materials_override": {
+        "platform_default": "wood_dark",
+        "wall_default": "hedge"
+      },
+      "camera_config": {
+        "targetDistance": 6,
+        "heightOffset": 2
+      },
+      "lighting_override": {
+        "sun_intensity": 1.4,
+        "ambient_intensity": 0.5
+      }
+    },
+
+    "cheshire_perch": {
+      "name": "Cheshire Cat's Perch",
+      "mood": "mysterious, ethereal, slightly unsettling",
+      "dominant_hues": ["purple", "deep_green", "moonlight"],
+      "atmosphere": {
+        "sky_color": "#4B0082",
+        "fog_color": "#9370DB",
+        "fog_near": 20,
+        "fog_far": 70,
+        "ambient_light": "#9370DB"
+      },
+      "accents": {
+        "primary": "#FF69B4",
+        "secondary": "#00CED1",
+        "tertiary": "#FFD700"
+      },
+      "notes": "Future area - Cheshire Cat appears and disappears, striped purple/pink"
+    },
+
+    "mushroom_grove": {
+      "name": "Mushroom Grove",
+      "mood": "dreamy, psychedelic, contemplative",
+      "dominant_hues": ["mushroom_tan", "deep_blue", "purple"],
+      "atmosphere": {
+        "sky_color": "#191970",
+        "fog_color": "#483D8B",
+        "fog_near": 15,
+        "fog_far": 60,
+        "ambient_light": "#6A5ACD"
+      },
+      "accents": {
+        "primary": "#FF6347",
+        "secondary": "#00FA9A",
+        "tertiary": "#FFD700"
+      },
+      "notes": "Future area - Caterpillar on mushroom, smoke effects"
+    },
+
+    "mock_turtle_grotto": {
+      "name": "Mock Turtle Grotto",
+      "mood": "melancholic, underwater-like, echoing",
+      "dominant_hues": ["sea_green", "stone_grey", "deep_blue"],
+      "atmosphere": {
+        "sky_color": "#2F4F4F",
+        "fog_color": "#5F9EA0",
+        "fog_near": 10,
+        "fog_far": 50,
+        "ambient_light": "#20B2AA"
+      },
+      "accents": {
+        "primary": "#00CED1",
+        "secondary": "#B0C4DE",
+        "tertiary": "#FFD700"
+      },
+      "notes": "Future area - Underground, water reflections, sad music"
+    },
+
+    "overlook_tower": {
+      "name": "Overlook Tower",
+      "mood": "triumphant, panoramic, windy",
+      "dominant_hues": ["sky_blue", "marble_white", "gold"],
+      "atmosphere": {
+        "sky_color": "#87CEEB",
+        "fog_color": "#E0FFFF",
+        "fog_near": 80,
+        "fog_far": 200,
+        "ambient_light": "#B0E0E6"
+      },
+      "accents": {
+        "primary": "#FFD700",
+        "secondary": "#FFFFFF",
+        "tertiary": "#4169E1"
+      },
+      "notes": "Future area - Highest point, birds (Dodo, Lory, Eaglet)"
+    }
+  },
+
+  "color_definitions": {
+    "marble_white": "#FAFAFA",
+    "gold": "#FFD700",
+    "hedge_green": "#2D5A27",
+    "rose_red": "#C41E3A",
+    "grass_green": "#4A7C3F",
+    "warm_wood": "#5D4037",
+    "cream": "#FFFDD0",
+    "purple": "#9370DB",
+    "deep_green": "#1A3518",
+    "moonlight": "#F0F8FF",
+    "mushroom_tan": "#D2B48C",
+    "deep_blue": "#191970",
+    "sea_green": "#2E8B57",
+    "stone_grey": "#708090",
+    "sky_blue": "#87CEEB"
+  }
+}
