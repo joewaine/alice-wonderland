@@ -124,7 +124,7 @@ export class CollectibleManager {
       // Bobbing and rotation animation (relative to current base position)
       collectible.mesh.rotation.y += dt * 2;
       collectible.mesh.position.x = currentPos.x;
-      collectible.mesh.position.y = currentPos.y + Math.sin(Date.now() * 0.003) * 0.1;
+      collectible.mesh.position.y = currentPos.y + Math.sin(Date.now() * 0.00628) * 0.18;
       collectible.mesh.position.z = currentPos.z;
 
       // Update collectible.position to match drifted position for collection detection
