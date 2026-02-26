@@ -772,13 +772,13 @@ export class Game {
         const pos = this.playerBody.translation();
         this.tempPosCache.set(pos.x, pos.y, pos.z);
         if (size === 'small') {
-          this.particleManager.createSizeChangeBurst(this.tempPosCache, 'shrink');
+          this.particleManager.createSizeChangeBurst(this.tempPosCache, false);  // shrinking
           audioManager.playShrink();
           // Screen shake and FOV narrow for shrink
           this.cameraController?.shake(0.2);
           this.cameraController?.kickFOV(55, 0.3);
         } else if (size === 'large') {
-          this.particleManager.createSizeChangeBurst(this.tempPosCache, 'grow');
+          this.particleManager.createSizeChangeBurst(this.tempPosCache, true);  // growing
           audioManager.playGrow();
           // Screen shake and FOV widen for grow
           this.cameraController?.shake(0.2);
