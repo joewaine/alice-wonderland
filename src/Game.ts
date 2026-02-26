@@ -935,6 +935,7 @@ export class Game {
       onSpeedBoost: () => {
         // FOV kick for speed effect - kick to 68 degrees, return over 0.4s
         this.cameraController?.kickFOV(68, 0.4);
+        audioManager.playSpeedBoost();
       },
       onSpeedBoostActive: (position, direction) => {
         // Trail particles while in speed boost zone

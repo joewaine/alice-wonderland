@@ -565,6 +565,103 @@ export class AudioManager {
   }
 
   /**
+   * Play speed boost activation sound (rising whoosh)
+   */
+  playSpeedBoost(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    const startTime = this.audioContext.currentTime;
+    const duration = 0.3;
+
+    // Rising oscillator sweep for "whoosh" feel
+    const osc = this.audioContext.createOscillator();
+    const oscGain = this.audioContext.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, startTime);
+    osc.frequency.exponentialRampToValueAtTime(800, startTime + duration);
+
+    oscGain.gain.setValueAtTime(0.15, startTime);
+    oscGain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+    // Detuned oscillators for "wind" texture
+    const noiseOsc = this.audioContext.createOscillator();
+    const noiseOsc2 = this.audioContext.createOscillator();
+    const noiseGain = this.audioContext.createGain();
+    const noiseFilter = this.audioContext.createBiquadFilter();
+
+    noiseOsc.type = 'sawtooth';
+    noiseOsc.frequency.setValueAtTime(400, startTime);
+    noiseOsc.frequency.exponentialRampToValueAtTime(1200, startTime + duration);
+
+    noiseOsc2.type = 'sawtooth';
+    noiseOsc2.frequency.setValueAtTime(403, startTime);
+    noiseOsc2.frequency.exponentialRampToValueAtTime(1207, startTime + duration);
+
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.setValueAtTime(600, startTime);
+    noiseFilter.frequency.exponentialRampToValueAtTime(1500, startTime + duration);
+    noiseFilter.Q.value = 1;
+
+    noiseGain.gain.setValueAtTime(0.08, startTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+    // Connect oscillator
+    osc.connect(oscGain);
+    oscGain.connect(this.masterGain);
+
+    // Connect noise
+    noiseOsc.connect(noiseFilter);
+    noiseOsc2.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(this.masterGain);
+
+    osc.start(startTime);
+    noiseOsc.start(startTime);
+    noiseOsc2.start(startTime);
+
+    osc.stop(startTime + duration + 0.05);
+    noiseOsc.stop(startTime + duration + 0.05);
+    noiseOsc2.stop(startTime + duration + 0.05);
+  }
+
+  /**
+   * Play gate proximity chime (soft magical arpeggio)
+   * Played once when player enters range of an unlocked gate
+   */
+  playGateProximity(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    // C major chord arpeggio - gentle, magical feel
+    const frequencies = [523, 659, 784]; // C5, E5, G5
+
+    frequencies.forEach((freq, i) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      // Stagger notes for arpeggio effect
+      const startTime = this.audioContext!.currentTime + i * 0.08;
+      // Short attack, gentle decay
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.15, startTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.4);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(startTime);
+      osc.stop(startTime + 0.45);
+    });
+  }
+
+  /**
    * Toggle mute
    */
   toggleMute(): boolean {
