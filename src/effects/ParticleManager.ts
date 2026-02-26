@@ -429,6 +429,77 @@ export class ParticleManager {
   }
 
   /**
+   * Double jump expanding ring effect
+   * Cyan/white particles arranged in a circle that expand outward horizontally
+   */
+  createDoubleJumpRing(position: THREE.Vector3): void {
+    const count = 16;
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Ring color palette (cyan to white)
+    const ringColors = [
+      new THREE.Color(0x00FFFF),  // Cyan
+      new THREE.Color(0xFFFFFF),  // White
+      new THREE.Color(0x87CEEB),  // Sky blue
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start in a small circle around player
+      const angle = (i / count) * Math.PI * 2;
+      const startRadius = 0.2;
+
+      positions[i * 3] = position.x + Math.cos(angle) * startRadius;
+      positions[i * 3 + 1] = position.y;
+      positions[i * 3 + 2] = position.z + Math.sin(angle) * startRadius;
+
+      // Assign colors cycling through palette
+      const color = ringColors[i % ringColors.length];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Expand outward horizontally (no vertical movement)
+      // Speed calculated to reach ~2 unit radius in 0.4 seconds
+      const expandSpeed = 4.5;
+      velocities[i * 3] = Math.cos(angle) * expandSpeed;
+      velocities[i * 3 + 1] = 0;  // No vertical movement
+      velocities[i * 3 + 2] = Math.sin(angle) * expandSpeed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.2,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.4,  // 0.4 second duration
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Ring stays horizontal
+    });
+  }
+
+  /**
    * Double jump sparkle burst
    * Cyan/white spiral burst around player
    */

@@ -134,6 +134,8 @@ export class Game {
 
   // Screen vignette overlay
   private vignetteOverlay: HTMLDivElement | null = null;
+  private currentVignetteIntensity: number = 0.3;  // Base vignette darkness
+  private targetVignetteIntensity: number = 0.3;
 
   // Hitstop effect (freeze frames on ground pound impact)
   private hitstopRemaining: number = 0;
@@ -800,17 +802,24 @@ export class Game {
       onJumpAnticipation: (_isDoubleJump) => {
         // Brief squash before jump - wider and shorter for "crouch" feel
         this.targetSquash.set(1.2, 0.8, 1.2);
+        // Small dust puff at feet when player squats
+        if (this.playerBody) {
+          const pos = this.playerBody.translation();
+          this.tempPosCache.set(pos.x, pos.y, pos.z);
+          this.particleManager.createRunDustPuff(this.tempPosCache);
+        }
       },
       onJump: (isDoubleJump) => {
         audioManager.playJump();
         // Different squash for double jump
         if (isDoubleJump) {
           this.targetSquash.set(0.7, 1.4, 0.7);
-          // Sparkle burst for double jump
+          // Sparkle burst and expanding ring for double jump
           if (this.playerBody) {
             const pos = this.playerBody.translation();
             this.tempPosCache.set(pos.x, pos.y, pos.z);
             this.particleManager.createDoubleJumpSparkle(this.tempPosCache);
+            this.particleManager.createDoubleJumpRing(this.tempPosCache);
           }
         } else {
           this.targetSquash.set(0.8, 1.3, 0.8);
@@ -1212,6 +1221,9 @@ export class Game {
       }
       this.prevVerticalVelocity = vel.y;
 
+      // Speed-based vignette effect: intensifies at high speeds
+      this.updateSpeedVignette(vel.x, vel.z, dt);
+
       // Return to normal squash when grounded and not jumping
       // Apply subtle breathing animation when idle
       if (this.playerController.getIsGrounded() && !this.input.jump) {
@@ -1510,5 +1522,50 @@ export class Game {
       <div style="margin-top:5px;color:#888">Textures: ${textures}</div>
       <div style="color:#888">Geometries: ${geometries}</div>
     `;
+  }
+
+  /**
+   * Update speed-based vignette intensity
+   * At high speeds (>80% max), darken and tighten the vignette for a "tunnel vision" effect
+   */
+  private updateSpeedVignette(velX: number, velZ: number, dt: number): void {
+    if (!this.vignetteOverlay) return;
+
+    const horizontalSpeed = Math.sqrt(velX * velX + velZ * velZ);
+    const maxSpeed = 16;
+    const speedThreshold = maxSpeed * 0.8;  // Effect starts at 80% max speed
+
+    // Base vignette intensity (always present)
+    const baseIntensity = 0.3;
+    // Max additional intensity at full speed
+    const maxSpeedIntensity = 0.5;
+
+    if (horizontalSpeed > speedThreshold) {
+      // Calculate how far above threshold (0 to 1)
+      const speedFactor = Math.min((horizontalSpeed - speedThreshold) / (maxSpeed - speedThreshold), 1);
+      // Target intensity increases with speed
+      this.targetVignetteIntensity = baseIntensity + (maxSpeedIntensity - baseIntensity) * speedFactor;
+    } else {
+      // Return to base intensity
+      this.targetVignetteIntensity = baseIntensity;
+    }
+
+    // Smooth lerp toward target
+    const lerpSpeed = 5;  // Higher = faster response
+    this.currentVignetteIntensity += (this.targetVignetteIntensity - this.currentVignetteIntensity) * lerpSpeed * dt;
+
+    // Also tighten the vignette radius at high speeds for more pronounced tunnel effect
+    // Base: 50% transparent center, at high speed: 35% transparent center
+    const baseRadius = 50;
+    const minRadius = 35;
+    const speedFactor = (this.currentVignetteIntensity - baseIntensity) / (maxSpeedIntensity - baseIntensity);
+    const currentRadius = baseRadius - (baseRadius - minRadius) * speedFactor;
+
+    // Update CSS gradient
+    this.vignetteOverlay.style.background = `radial-gradient(
+      ellipse at center,
+      transparent ${currentRadius}%,
+      rgba(0, 0, 0, ${this.currentVignetteIntensity.toFixed(2)}) 100%
+    )`;
   }
 }
