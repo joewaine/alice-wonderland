@@ -6,12 +6,17 @@
  */
 
 import * as THREE from 'three';
+import { audioManager } from '../audio/AudioManager';
 
 export class Gate {
   private gateGroup: THREE.Group | null = null;
   private barrier: THREE.Mesh | null = null;
   private position: THREE.Vector3;
   private isUnlocked: boolean = false;
+  private isPlayerInProximity: boolean = false;
+  private lastProximityChimeTime: number = 0;
+  private static readonly PROXIMITY_RADIUS = 6;
+  private static readonly PROXIMITY_CHIME_COOLDOWN = 3000; // ms
 
   public onEnter: (() => void) | null = null;
 
@@ -84,6 +89,18 @@ export class Gate {
       Math.pow(playerPosition.x - gatePos.x, 2) +
       Math.pow(playerPosition.z - gatePos.z, 2)
     );
+
+    // Check proximity for chime (larger radius than entry)
+    const inProximity = distanceXZ < Gate.PROXIMITY_RADIUS && Math.abs(playerPosition.y - gatePos.y) < 5;
+
+    if (this.isUnlocked && inProximity && !this.isPlayerInProximity) {
+      const now = Date.now();
+      if (now - this.lastProximityChimeTime > Gate.PROXIMITY_CHIME_COOLDOWN) {
+        audioManager.playGateProximity();
+        this.lastProximityChimeTime = now;
+      }
+    }
+    this.isPlayerInProximity = inProximity;
 
     const nearGate = distanceXZ < 2 && Math.abs(playerPosition.y - gatePos.y) < 3;
 
