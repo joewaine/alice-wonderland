@@ -318,13 +318,14 @@ export class AudioManager {
     if (!this.audioContext || !this.masterGain) return;
 
     const frequencies = [523, 659, 784]; // C5, E5, G5 - major chord arpeggio
+    const pitchVariation = 0.9 + Math.random() * 0.2; // 0.9 to 1.1
 
     frequencies.forEach((freq, i) => {
       const osc = this.audioContext!.createOscillator();
       const gain = this.audioContext!.createGain();
 
       osc.type = 'sine';
-      osc.frequency.value = freq;
+      osc.frequency.value = freq * pitchVariation;
 
       const startTime = this.audioContext!.currentTime + i * 0.05;
       gain.gain.setValueAtTime(0, startTime);

@@ -29,6 +29,7 @@ export interface PlayerControllerCallbacks {
   onWaterEnter?: (position: THREE.Vector3, surfaceY: number) => void;
   onSwimmingSplash?: (position: THREE.Vector3, surfaceY: number) => void;
   onWallSlide?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
+  onWallJump?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
 }
 
 export interface AirCurrentZoneRef {
@@ -98,6 +99,10 @@ export class PlayerController {
   private readonly WALL_SLIDE_PARTICLE_INTERVAL: number = 0.1; // Seconds between wall slide particles
   private readonly WALL_CHECK_DISTANCE: number = 0.6; // Raycast distance for wall detection
   private readonly WALL_SLIDE_GRAVITY_SCALE: number = 0.4; // Reduced gravity when wall sliding
+
+  // Wall jump tuning
+  private readonly WALL_JUMP_VERTICAL: number = 12;
+  private readonly WALL_JUMP_HORIZONTAL: number = 8;
 
   // Tuning constants - movement (snappy, responsive feel)
   private readonly GROUND_ACCEL = 1.8;      // Fast acceleration
@@ -718,6 +723,13 @@ export class PlayerController {
       return;
     }
 
+    // Wall jump: jump while wall sliding
+    if (wantsToJump && this.isWallSliding) {
+      this.performWallJump();
+      this.jumpBufferTime = 0;
+      return;
+    }
+
     // Normal jump or double jump
     if (wantsToJump && this.jumpCount < 2 && !this.pendingJump) {
       // First jump requires being grounded or coyote time
@@ -790,6 +802,38 @@ export class PlayerController {
     this.isLongJumping = true;
     this.jumpCount++;
     this.callbacks.onLongJump?.();
+  }
+
+  /**
+   * Perform a wall jump (kick off wall)
+   */
+  private performWallJump(): void {
+    // Jump away from wall using stored wall normal
+    const horizontalBoost = this.WALL_JUMP_HORIZONTAL * this.speedMultiplier;
+    this.momentum.x = this.wallSlideNormal.x * horizontalBoost;
+    this.momentum.z = this.wallSlideNormal.z * horizontalBoost;
+
+    // Apply vertical jump
+    this.velocityCache!.x = this.momentum.x;
+    this.velocityCache!.y = this.WALL_JUMP_VERTICAL * this.jumpMultiplier;
+    this.velocityCache!.z = this.momentum.z;
+    this.playerBody.setLinvel(this.velocityCache!, true);
+
+    // Get position for particle spawn (at wall contact point)
+    const pos = this.playerBody.translation();
+    this.callbackPosCache.set(
+      pos.x - this.wallSlideNormal.x * 0.5,  // Offset toward wall
+      pos.y,
+      pos.z - this.wallSlideNormal.z * 0.5
+    );
+
+    // End wall slide state
+    this.isWallSliding = false;
+
+    // Reset jump count (allows double jump after wall jump)
+    this.jumpCount = 1;
+
+    this.callbacks.onWallJump?.(this.callbackPosCache, this.wallSlideNormal);
   }
 
   /**

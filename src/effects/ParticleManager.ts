@@ -636,6 +636,79 @@ export class ParticleManager {
   }
 
   /**
+   * Wall jump spark burst - impactful visual feedback for wall kicks
+   * White/yellow sparks that shoot away from wall
+   */
+  createWallJumpSpark(position: THREE.Vector3, wallNormal: THREE.Vector3): void {
+    const count = 12;
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Spark color palette (white to yellow/gold)
+    const sparkColors = [
+      new THREE.Color(0xFFFFFF),  // White
+      new THREE.Color(0xFFFACD),  // Lemon chiffon
+      new THREE.Color(0xFFD700),  // Gold
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start at wall contact point
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.2;
+      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.2;
+
+      // Assign random spark color
+      const color = sparkColors[Math.floor(Math.random() * sparkColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Particles shoot away from wall with spread
+      const baseSpeed = Math.random() * 4 + 3;  // Fast-moving sparks
+      const spreadAngle = (Math.random() - 0.5) * Math.PI * 0.5;  // Spread in a cone
+
+      // Calculate spread direction perpendicular to wall normal
+      const perpX = -wallNormal.z;
+      const perpZ = wallNormal.x;
+
+      velocities[i * 3] = wallNormal.x * baseSpeed + perpX * Math.sin(spreadAngle) * 2;
+      velocities[i * 3 + 1] = (Math.random() - 0.3) * 3;  // Slight upward bias
+      velocities[i * 3 + 2] = wallNormal.z * baseSpeed + perpZ * Math.sin(spreadAngle) * 2;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.1,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.4,  // 0.4 second duration
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Sparks float, don't fall
+    });
+  }
+
+  /**
    * Ground pound shockwave - expanding ring of particles
    */
   createGroundPoundShockwave(position: THREE.Vector3): void {
