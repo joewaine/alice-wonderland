@@ -870,6 +870,17 @@ export class PlayerController {
   }
 
   /**
+   * Check if underwater (below the water surface)
+   * Used for underwater camera effects
+   */
+  isUnderwater(): boolean {
+    if (!this.inWater) return false;
+    const pos = this.playerBody.translation();
+    // Consider underwater if player center is below the water surface
+    return pos.y < this.waterSurfaceY;
+  }
+
+  /**
    * Check if wall sliding
    */
   getIsWallSliding(): boolean {

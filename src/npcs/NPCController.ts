@@ -25,6 +25,8 @@ export class NPCController {
 
   // Callbacks
   public onDialogueComplete: ((npcName: string) => void) | null = null;
+  public onDialogueStart: (() => void) | null = null;
+  public onDialogueEnd: (() => void) | null = null;
 
   // Interaction prompt
   private promptElement: HTMLDivElement;
@@ -80,9 +82,11 @@ export class NPCController {
     `;
     document.body.appendChild(this.promptElement);
 
-    // Handle dialogue dismiss
+    // Handle dialogue dismiss (player walked away or timeout)
     this.dialogueUI.onDismiss = () => {
       this.currentNPC = null;
+      // Notify dialogue ended (for camera focus)
+      this.onDialogueEnd?.();
     };
 
     // Create speech bubble texture
@@ -374,6 +378,9 @@ export class NPCController {
 
     const line = this.currentDialogue[0] || 'Hello there!';
     this.dialogueUI.show(npc.name, line, npc.modelId);
+
+    // Notify dialogue started (for camera focus)
+    this.onDialogueStart?.();
   }
 
   /**
@@ -427,6 +434,9 @@ export class NPCController {
       this.dialogueUI.hide();
       this.currentNPC = null;
       this.currentDialogue = [];
+
+      // Notify dialogue ended (for camera focus)
+      this.onDialogueEnd?.();
     } else {
       // Show next line
       const line = this.currentDialogue[this.currentNPC.dialogueIndex];
