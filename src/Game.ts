@@ -744,12 +744,16 @@ export class Game {
         this.sceneManager?.trackGroundPound();
       },
       onGroundPoundLand: (position) => {
+        // Screen shake for impact
+        this.cameraController?.shake(0.4);
+
         // Check for breakable platforms
         if (this.sceneManager && this.sizeManager) {
           const currentSize = this.sizeManager.getCurrentSize();
           const broke = this.sceneManager.tryBreakPlatform(position, currentSize);
           if (broke) {
-            // Extra particles and sound for breaking
+            // Extra shake and particles for breaking
+            this.cameraController?.shake(0.3);  // Additional shake for breaking
             this.particleManager.createLandingDust(position, 2.0);
             audioManager.playLand();
             // Track for wonder star challenges
