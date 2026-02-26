@@ -12,6 +12,8 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle, AirCurrent, WaterZone, SpeedBoost, Checkpoint } from '../data/LevelData';
 import { assetLoader } from '../engine/AssetLoader';
+import { createCelShaderMaterial } from '../shaders/CelShaderMaterial';
+import { addOutlinesToObject } from '../shaders/OutlineEffect';
 
 export interface BuiltLevel {
   platforms: THREE.Mesh[];
@@ -51,6 +53,10 @@ export interface NPCObject {
   dialogue: string[];
   dialogueIndex: number;
   modelId?: string;  // For portrait loading
+  // Animation support
+  mixer?: THREE.AnimationMixer;
+  animations?: Map<string, THREE.AnimationAction>;
+  hasSkeletalAnimation?: boolean;
 }
 
 export interface SizePuzzleZone {
@@ -210,16 +216,39 @@ export class LevelBuilder {
         platform.size.z
       );
 
-      const color = platform.color ? new THREE.Color(platform.color) : new THREE.Color(0x8B4513);
-      const material = new THREE.MeshStandardMaterial({
+      // BotW-inspired color palette - natural, earthy tones
+      const celColors = [
+        0x8fbc8f,  // Dark sea green (grass/hedge)
+        0xdeb887,  // Burlywood (stone/earth)
+        0x9acd32,  // Yellow green (fresh grass)
+        0xd2b48c,  // Tan (sand/path)
+        0x87ceeb,  // Sky blue (sky platforms)
+        0xf5deb3,  // Wheat (light stone)
+      ];
+      const defaultColor = celColors[Math.floor(Math.random() * celColors.length)];
+      const color = platform.color ? new THREE.Color(platform.color) : new THREE.Color(defaultColor);
+
+      // Use cel-shader material for BotW look
+      const material = createCelShaderMaterial({
         color,
-        roughness: 0.8
+        shadowColor: 0x4a5568,   // Muted blue-gray shadow
+        highlightColor: 0xfff8e7, // Warm highlight
+        rimColor: 0x88ccff,       // Soft blue rim
+        rimPower: 3.0,
+        steps: 3,
       });
 
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(platform.position.x, platform.position.y, platform.position.z);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+
+      // Add outline for cel-shaded look
+      addOutlinesToObject(mesh, {
+        color: 0x2d3748,  // Dark blue-gray outline
+        thickness: 0.02,
+      });
+
       this.scene.add(mesh);
       this.createdMeshes.push(mesh);
       meshes.push(mesh);
@@ -237,11 +266,14 @@ export class LevelBuilder {
         platform.size.z / 2
       );
 
-      // Bouncy platforms
+      // Bouncy platforms - warm orange color for visibility
       if (platform.type === 'bouncy') {
         colliderDesc.setRestitution(1.5);
-        // Make bouncy platforms visually distinct
-        (mesh.material as THREE.MeshStandardMaterial).color.set(0xff69b4);
+        // Update cel-shader color uniform for bouncy platforms
+        const shaderMat = mesh.material as THREE.ShaderMaterial;
+        if (shaderMat.uniforms?.uColor) {
+          shaderMat.uniforms.uColor.value.set(0xffa07a); // Light salmon
+        }
 
         // Track for animation
         bouncy.push({
@@ -255,8 +287,12 @@ export class LevelBuilder {
 
       // Track breakable platforms
       if (platform.breakable) {
-        // Make breakable platforms visually distinct (cracked appearance)
-        (mesh.material as THREE.MeshStandardMaterial).color.multiplyScalar(0.7);
+        // Make breakable platforms visually distinct (darker, cracked appearance)
+        const shaderMat = mesh.material as THREE.ShaderMaterial;
+        if (shaderMat.uniforms?.uColor) {
+          const currentColor = shaderMat.uniforms.uColor.value as THREE.Color;
+          currentColor.multiplyScalar(0.7);
+        }
 
         const halfSize = new THREE.Vector3(
           platform.size.x / 2,
@@ -449,6 +485,9 @@ export class LevelBuilder {
           group.position.x = -center.x;
           group.position.z = -center.z;
 
+          // Apply cel-shading and outlines to NPC model
+          this.applyCelShaderToNPC(group);
+
           // Wrap in container for proper positioning
           const container = new THREE.Group();
           container.add(group);
@@ -484,26 +523,75 @@ export class LevelBuilder {
   }
 
   /**
-   * Create fallback procedural NPC (capsule + head)
+   * Apply cel-shading and outlines to NPC model
+   */
+  private applyCelShaderToNPC(model: THREE.Object3D): void {
+    model.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const originalMaterial = child.material as THREE.MeshStandardMaterial;
+
+        // Extract color from original material
+        const color = originalMaterial.color?.clone() || new THREE.Color(0x9370db);
+
+        // Create cel-shader material
+        child.material = createCelShaderMaterial({
+          color,
+          map: originalMaterial.map || null,
+          shadowColor: 0x5a4a6a,    // Purple-ish shadow for NPCs
+          highlightColor: 0xfff0f5, // Soft pink highlight
+          rimColor: 0xdda0dd,       // Plum rim for characters
+          rimPower: 2.5,
+          steps: 3,
+        });
+      }
+    });
+
+    // Add outlines
+    addOutlinesToObject(model, {
+      color: 0x2a2a3e,
+      thickness: 0.015,
+    });
+  }
+
+  /**
+   * Create fallback procedural NPC (capsule + head) with cel-shading
    */
   private createFallbackNPC(): THREE.Group {
     const group = new THREE.Group();
 
-    // Simple capsule body
+    // Simple capsule body with cel-shader
     const bodyGeo = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x9370db });
+    const bodyMat = createCelShaderMaterial({
+      color: 0x9370db,  // Medium purple
+      shadowColor: 0x5a4a6a,
+      highlightColor: 0xdda0dd,
+      rimColor: 0xb19cd9,
+      rimPower: 2.0,
+    });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.position.y = 0.7;
     body.castShadow = true;
     group.add(body);
 
-    // Head
+    // Head with cel-shader
     const headGeo = new THREE.SphereGeometry(0.25, 8, 8);
-    const headMat = new THREE.MeshStandardMaterial({ color: 0xffdab9 });
+    const headMat = createCelShaderMaterial({
+      color: 0xffdab9,  // Peach
+      shadowColor: 0xd4a574,
+      highlightColor: 0xfff0e6,
+      rimColor: 0xffc0cb,
+      rimPower: 2.0,
+    });
     const head = new THREE.Mesh(headGeo, headMat);
     head.position.y = 1.4;
     head.castShadow = true;
     group.add(head);
+
+    // Add outlines
+    addOutlinesToObject(group, {
+      color: 0x2a2a3e,
+      thickness: 0.015,
+    });
 
     return group;
   }
@@ -641,29 +729,29 @@ export class LevelBuilder {
         ? new THREE.Vector3(water.current.x, water.current.y, water.current.z)
         : new THREE.Vector3(0, 0, 0);
 
-      // Create water volume mesh with semi-transparent blue material
+      // Storybook water - soft teal/turquoise, dreamy and inviting
       const geo = new THREE.BoxGeometry(size.x, size.y, size.z);
       const mat = new THREE.MeshStandardMaterial({
-        color: 0x3399ff,
+        color: 0x88DDDD,        // Soft teal
         transparent: true,
-        opacity: 0.4,
+        opacity: 0.5,
         side: THREE.DoubleSide,
-        metalness: 0.1,
-        roughness: 0.2
+        metalness: 0.0,
+        roughness: 0.3
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.copy(pos);
       this.scene.add(mesh);
       this.createdMeshes.push(mesh);
 
-      // Create surface plane for visual effect
+      // Create surface plane - sparkly water surface
       const surfaceGeo = new THREE.PlaneGeometry(size.x, size.z);
       const surfaceMat = new THREE.MeshStandardMaterial({
-        color: 0x66ccff,
+        color: 0xAAEEEE,        // Light aqua
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.7,
         side: THREE.DoubleSide,
-        metalness: 0.3,
+        metalness: 0.1,
         roughness: 0.1
       });
       const surface = new THREE.Mesh(surfaceGeo, surfaceMat);
@@ -703,24 +791,24 @@ export class LevelBuilder {
       // Create arrow-shaped boost pad
       const group = new THREE.Group();
 
-      // Base pad
+      // Whimsical boost pad - soft golden glow
       const padGeo = new THREE.BoxGeometry(size.x, 0.2, size.z);
       const padMat = new THREE.MeshStandardMaterial({
-        color: 0xffaa00,
-        emissive: 0xff6600,
-        emissiveIntensity: 0.5,
-        metalness: 0.8,
-        roughness: 0.2
+        color: 0xFFE4B5,        // Soft moccasin
+        emissive: 0xFFD700,     // Golden glow
+        emissiveIntensity: 0.3,
+        metalness: 0.0,
+        roughness: 0.6
       });
       const pad = new THREE.Mesh(padGeo, padMat);
       group.add(pad);
 
-      // Arrow indicator
+      // Arrow indicator - playful purple
       const arrowGeo = new THREE.ConeGeometry(0.5, 1.5, 4);
       const arrowMat = new THREE.MeshStandardMaterial({
-        color: 0xffff00,
-        emissive: 0xffaa00,
-        emissiveIntensity: 0.8
+        color: 0xDDA0DD,        // Soft plum
+        emissive: 0xDA70D6,     // Orchid glow
+        emissiveIntensity: 0.4
       });
       const arrow = new THREE.Mesh(arrowGeo, arrowMat);
       arrow.rotation.x = -Math.PI / 2;
@@ -787,17 +875,17 @@ export class LevelBuilder {
   }
 
   /**
-   * Build the chapter gate
+   * Build the chapter gate - whimsical storybook archway
    */
   private buildGate(gatePos: { x: number; y: number; z: number }): void {
     const group = new THREE.Group();
 
-    // Two pillars
-    const pillarGeo = new THREE.CylinderGeometry(0.5, 0.5, 4, 8);
+    // Soft rose-colored pillars
+    const pillarGeo = new THREE.CylinderGeometry(0.5, 0.6, 4, 12);
     const pillarMat = new THREE.MeshStandardMaterial({
-      color: 0x808080,
-      metalness: 0.5,
-      roughness: 0.5
+      color: 0xE8C4D4,      // Soft rose
+      metalness: 0.0,
+      roughness: 0.8
     });
 
     const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
@@ -810,19 +898,24 @@ export class LevelBuilder {
     rightPillar.castShadow = true;
     group.add(rightPillar);
 
-    // Archway
-    const archGeo = new THREE.TorusGeometry(1.5, 0.3, 8, 16, Math.PI);
-    const arch = new THREE.Mesh(archGeo, pillarMat);
+    // Whimsical archway - lavender
+    const archGeo = new THREE.TorusGeometry(1.5, 0.35, 12, 24, Math.PI);
+    const archMat = new THREE.MeshStandardMaterial({
+      color: 0xD4C4E8,      // Soft lavender
+      metalness: 0.0,
+      roughness: 0.7
+    });
+    const arch = new THREE.Mesh(archGeo, archMat);
     arch.position.y = 4;
     arch.rotation.z = Math.PI;
     group.add(arch);
 
-    // Gate barrier (red = locked)
+    // Gate barrier - soft coral when locked (not harsh red)
     const barrierGeo = new THREE.PlaneGeometry(3, 4);
     const barrierMat = new THREE.MeshBasicMaterial({
-      color: 0xff0000,
+      color: 0xFFB5A7,      // Soft coral (locked)
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.6,
       side: THREE.DoubleSide
     });
     const barrier = new THREE.Mesh(barrierGeo, barrierMat);

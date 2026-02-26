@@ -44,6 +44,11 @@ export class WonderStarManager {
   // Persistent storage key
   private storageKey: string = 'wonderland_collected_stars';
 
+  // Pre-allocated to avoid per-frame GC pressure
+  private reachTargetCache: THREE.Vector3 = new THREE.Vector3();
+  private reachTargetRadius: number = 3;
+  private hasReachTarget: boolean = false;
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
   }
@@ -87,12 +92,24 @@ export class WonderStarManager {
   setActiveStar(starId: string | null): void {
     this.activeStarId = starId;
     this.progress = this.resetProgress();
+    this.hasReachTarget = false;
 
-    // Reset race timer if this is a race challenge
+    // Setup challenge-specific state
     if (starId) {
       const star = this.stars.find(s => s.data.id === starId);
-      if (star && star.data.challenge_type === 'race') {
-        this.raceStartTime = performance.now();
+      if (star) {
+        // Reset race timer if this is a race challenge
+        if (star.data.challenge_type === 'race') {
+          this.raceStartTime = performance.now();
+        }
+
+        // Cache reach target for exploration challenges (avoid per-frame allocation)
+        if (star.data.challenge_type === 'exploration' && star.data.requirements.reach_position) {
+          const pos = star.data.requirements.reach_position;
+          this.reachTargetCache.set(pos.x, pos.y, pos.z);
+          this.reachTargetRadius = star.data.requirements.reach_radius || 3;
+          this.hasReachTarget = true;
+        }
       }
     }
 
@@ -244,18 +261,13 @@ export class WonderStarManager {
    * Track when player reaches a specific position (for exploration challenges)
    */
   trackReachPosition(position: THREE.Vector3): void {
-    if (!this.activeStarId) return;
+    // Use cached reach target to avoid per-frame Vector3 allocation
+    if (!this.hasReachTarget || this.progress.reachedPosition) return;
 
-    const star = this.stars.find(s => s.data.id === this.activeStarId);
-    if (!star || star.data.challenge_type !== 'exploration') return;
-
-    const req = star.data.requirements;
-    if (req.reach_position) {
-      const target = new THREE.Vector3(req.reach_position.x, req.reach_position.y, req.reach_position.z);
-      const radius = req.reach_radius || 3;
-
-      if (position.distanceTo(target) <= radius) {
-        this.progress.reachedPosition = true;
+    if (position.distanceTo(this.reachTargetCache) <= this.reachTargetRadius) {
+      this.progress.reachedPosition = true;
+      const star = this.stars.find(s => s.data.id === this.activeStarId);
+      if (star) {
         console.log(`Reached target position for ${star.data.name}!`);
       }
     }

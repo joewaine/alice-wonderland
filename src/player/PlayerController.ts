@@ -12,6 +12,8 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { InputManager } from '../engine/InputManager';
+import { AnimationStateManager } from '../animation/AnimationStateManager';
+import type { AnimationState } from '../animation/AnimationStateManager';
 
 export interface PlayerControllerCallbacks {
   onJump?: (isDoubleJump: boolean) => void;
@@ -69,12 +71,12 @@ export class PlayerController {
   private waterSurfaceY: number = 0;
   private currentWaterCurrent: THREE.Vector3 = new THREE.Vector3();
 
-  // Tuning constants - movement
-  private readonly GROUND_ACCEL = 0.85;
-  private readonly AIR_ACCEL = 0.35;
-  private readonly GROUND_FRICTION = 0.82;
-  private readonly AIR_FRICTION = 0.98;
-  private readonly MAX_SPEED = 14;
+  // Tuning constants - movement (snappy, responsive feel)
+  private readonly GROUND_ACCEL = 1.8;      // Fast acceleration
+  private readonly AIR_ACCEL = 0.6;         // Good air control
+  private readonly GROUND_FRICTION = 0.75;  // Quick stops
+  private readonly AIR_FRICTION = 0.96;     // Maintain air momentum
+  private readonly MAX_SPEED = 16;          // Slightly faster top speed
   private readonly MIN_SPEED_THRESHOLD = 0.1;
 
   // Tuning constants - jumping
@@ -113,9 +115,31 @@ export class PlayerController {
   private speedBoostZones: SpeedBoostZoneRef[] = [];
   private boostCooldown: number = 0;
 
+  // Animation state manager (optional - set when model has animations)
+  private animationManager: AnimationStateManager | null = null;
+
+  // Animation thresholds
+  private readonly WALK_SPEED_THRESHOLD = 2;
+  private readonly RUN_SPEED_THRESHOLD = 8;
+
+  // Pre-allocated objects to avoid per-frame allocations
+  private playerPosCache: THREE.Vector3 = new THREE.Vector3();
+  private callbackPosCache: THREE.Vector3 = new THREE.Vector3();
+  private velocityCache: RAPIER.Vector3 | null = null;
+  private groundCheckRay: RAPIER.Ray | null = null;
+  private groundCheckDir: RAPIER.Vector3 | null = null;
+
   constructor(world: RAPIER.World, playerBody: RAPIER.RigidBody) {
     this.world = world;
     this.playerBody = playerBody;
+
+    // Initialize RAPIER objects (must be done after RAPIER.init())
+    this.velocityCache = new RAPIER.Vector3(0, 0, 0);
+    this.groundCheckDir = new RAPIER.Vector3(0, -1, 0);
+    this.groundCheckRay = new RAPIER.Ray(
+      new RAPIER.Vector3(0, 0, 0),
+      this.groundCheckDir
+    );
   }
 
   /**
@@ -169,6 +193,28 @@ export class PlayerController {
   }
 
   /**
+   * Set animation state manager for skeletal animation
+   */
+  setAnimationManager(manager: AnimationStateManager): void {
+    this.animationManager = manager;
+
+    // Set up auto-transition callback
+    manager.setOnAnimationComplete((state) => {
+      // After landing animation completes, check current state
+      if (state === 'land') {
+        this.updateAnimationState();
+      }
+    });
+  }
+
+  /**
+   * Set animation playback speed (for size changes)
+   */
+  setAnimationSpeed(scale: number): void {
+    this.animationManager?.setSpeedScale(scale);
+  }
+
+  /**
    * Main update - call each frame
    */
   update(dt: number, input: InputManager): void {
@@ -190,9 +236,10 @@ export class PlayerController {
         this.isGroundPounding = false;
         this.groundPoundLockout = this.GROUND_POUND_LOCKOUT;
 
-        // Callback for breaking platforms
+        // Callback for breaking platforms (use cached vector)
         const pos = this.playerBody.translation();
-        this.callbacks.onGroundPoundLand?.(new THREE.Vector3(pos.x, pos.y, pos.z));
+        this.callbackPosCache.set(pos.x, pos.y, pos.z);
+        this.callbacks.onGroundPoundLand?.(this.callbackPosCache);
       }
     }
 
@@ -211,6 +258,8 @@ export class PlayerController {
     if (this.isGrounded && !this.wasGrounded && !this.inWater) {
       const fallSpeed = Math.abs(vel.y);
       this.callbacks.onLand?.(fallSpeed);
+      // Trigger land animation
+      this.animationManager?.setState('land');
     }
 
     // Get movement input
@@ -237,6 +286,7 @@ export class PlayerController {
     // Handle swimming if in water
     if (this.inWater) {
       this.applySwimmingMovement(worldX, worldZ, input);
+      this.updateAnimationState();
       return;
     }
 
@@ -277,6 +327,9 @@ export class PlayerController {
     } else {
       this.footstepTimer = 0;
     }
+
+    // Update animation state based on current movement
+    this.updateAnimationState();
   }
 
   /**
@@ -310,11 +363,11 @@ export class PlayerController {
       this.momentum.z *= scale;
     }
 
-    // Apply to physics body
-    this.playerBody.setLinvel(
-      new RAPIER.Vector3(this.momentum.x, vel.y, this.momentum.z),
-      true
-    );
+    // Apply to physics body (reuse cached velocity)
+    this.velocityCache!.x = this.momentum.x;
+    this.velocityCache!.y = vel.y;
+    this.velocityCache!.z = this.momentum.z;
+    this.playerBody.setLinvel(this.velocityCache!, true);
   }
 
   /**
@@ -324,19 +377,17 @@ export class PlayerController {
     if (this.airCurrentZones.length === 0) return;
 
     const pos = this.playerBody.translation();
-    const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+    this.playerPosCache.set(pos.x, pos.y, pos.z);
     const vel = this.playerBody.linvel();
 
     for (const zone of this.airCurrentZones) {
-      if (zone.bounds.containsPoint(playerPos)) {
+      if (zone.bounds.containsPoint(this.playerPosCache)) {
         // Apply vertical force from air current
         // Negative force = updraft (slows falling), positive = downdraft
-        const newVelY = vel.y + zone.force;
-
-        this.playerBody.setLinvel(
-          new RAPIER.Vector3(vel.x, newVelY, vel.z),
-          true
-        );
+        this.velocityCache!.x = vel.x;
+        this.velocityCache!.y = vel.y + zone.force;
+        this.velocityCache!.z = vel.z;
+        this.playerBody.setLinvel(this.velocityCache!, true);
         break;  // Only apply one air current at a time
       }
     }
@@ -349,10 +400,10 @@ export class PlayerController {
     if (this.speedBoostZones.length === 0 || this.boostCooldown > 0) return;
 
     const pos = this.playerBody.translation();
-    const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+    this.playerPosCache.set(pos.x, pos.y, pos.z);
 
     for (const zone of this.speedBoostZones) {
-      if (zone.bounds.containsPoint(playerPos)) {
+      if (zone.bounds.containsPoint(this.playerPosCache)) {
         // Apply boost in the zone's direction
         this.momentum.x += zone.direction.x * zone.force;
         this.momentum.z += zone.direction.z * zone.force;
@@ -360,10 +411,10 @@ export class PlayerController {
         // Also add vertical boost if specified
         if (zone.direction.y !== 0) {
           const vel = this.playerBody.linvel();
-          this.playerBody.setLinvel(
-            new RAPIER.Vector3(this.momentum.x, vel.y + zone.direction.y * zone.force * 0.5, this.momentum.z),
-            true
-          );
+          this.velocityCache!.x = this.momentum.x;
+          this.velocityCache!.y = vel.y + zone.direction.y * zone.force * 0.5;
+          this.velocityCache!.z = this.momentum.z;
+          this.playerBody.setLinvel(this.velocityCache!, true);
         }
 
         // Set cooldown to prevent repeated boosts
@@ -383,10 +434,10 @@ export class PlayerController {
     }
 
     const pos = this.playerBody.translation();
-    const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+    this.playerPosCache.set(pos.x, pos.y, pos.z);
 
     for (const zone of this.waterZones) {
-      if (zone.bounds.containsPoint(playerPos)) {
+      if (zone.bounds.containsPoint(this.playerPosCache)) {
         this.inWater = true;
         this.waterSurfaceY = zone.surfaceY;
         this.currentWaterCurrent.copy(zone.current);
@@ -449,11 +500,11 @@ export class PlayerController {
     }
     this.momentum.y = Math.max(-10, Math.min(10, this.momentum.y));
 
-    // Apply to physics body (override gravity effect)
-    this.playerBody.setLinvel(
-      new RAPIER.Vector3(this.momentum.x, this.momentum.y, this.momentum.z),
-      true
-    );
+    // Apply to physics body (override gravity effect, reuse cached velocity)
+    this.velocityCache!.x = this.momentum.x;
+    this.velocityCache!.y = this.momentum.y;
+    this.velocityCache!.z = this.momentum.z;
+    this.playerBody.setLinvel(this.velocityCache!, true);
 
     // Reset jump count when in water (can jump out of water)
     if (pos.y > this.waterSurfaceY - 0.5) {
@@ -509,10 +560,10 @@ export class PlayerController {
    */
   private performJump(force: number, isDoubleJump: boolean): void {
     const vel = this.playerBody.linvel();
-    this.playerBody.setLinvel(
-      new RAPIER.Vector3(vel.x, force, vel.z),
-      true
-    );
+    this.velocityCache!.x = vel.x;
+    this.velocityCache!.y = force;
+    this.velocityCache!.z = vel.z;
+    this.playerBody.setLinvel(this.velocityCache!, true);
     this.callbacks.onJump?.(isDoubleJump);
   }
 
@@ -532,15 +583,11 @@ export class PlayerController {
       this.momentum.z += dirZ * boost;
     }
 
-    // Apply lower vertical jump
-    this.playerBody.setLinvel(
-      new RAPIER.Vector3(
-        this.momentum.x,
-        this.LONG_JUMP_VERTICAL * this.jumpMultiplier,
-        this.momentum.z
-      ),
-      true
-    );
+    // Apply lower vertical jump (reuse cached velocity)
+    this.velocityCache!.x = this.momentum.x;
+    this.velocityCache!.y = this.LONG_JUMP_VERTICAL * this.jumpMultiplier;
+    this.velocityCache!.z = this.momentum.z;
+    this.playerBody.setLinvel(this.velocityCache!, true);
 
     this.isLongJumping = true;
     this.jumpCount++;
@@ -556,26 +603,29 @@ export class PlayerController {
     // Kill horizontal momentum
     this.momentum.set(0, 0, 0);
 
-    // Apply strong downward force
-    this.playerBody.setLinvel(
-      new RAPIER.Vector3(0, this.GROUND_POUND_FORCE, 0),
-      true
-    );
+    // Apply strong downward force (reuse cached velocity)
+    this.velocityCache!.x = 0;
+    this.velocityCache!.y = this.GROUND_POUND_FORCE;
+    this.velocityCache!.z = 0;
+    this.playerBody.setLinvel(this.velocityCache!, true);
+
+    // Trigger ground pound animation (highest priority)
+    this.animationManager?.setState('groundPound');
 
     this.callbacks.onGroundPound?.();
   }
 
   /**
-   * Check if player is grounded using raycast
+   * Check if player is grounded using raycast (reuses pre-allocated ray)
    */
   private checkGrounded(): boolean {
     const pos = this.playerBody.translation();
-    const ray = new RAPIER.Ray(
-      new RAPIER.Vector3(pos.x, pos.y, pos.z),
-      new RAPIER.Vector3(0, -1, 0)
-    );
+    // Update ray origin (direction is always down, set in constructor)
+    this.groundCheckRay!.origin.x = pos.x;
+    this.groundCheckRay!.origin.y = pos.y;
+    this.groundCheckRay!.origin.z = pos.z;
 
-    const hit = this.world.castRay(ray, this.groundCheckDistance, true);
+    const hit = this.world.castRay(this.groundCheckRay!, this.groundCheckDistance, true);
     return hit !== null;
   }
 
@@ -630,5 +680,68 @@ export class PlayerController {
     this.isGroundPounding = false;
     this.isLongJumping = false;
     this.groundPoundLockout = 0;
+    this.animationManager?.setState('idle');
+  }
+
+  /**
+   * Update animation state based on current movement
+   */
+  private updateAnimationState(): void {
+    if (!this.animationManager) return;
+
+    // Ground pound has highest priority
+    if (this.isGroundPounding) {
+      this.animationManager.setState('groundPound');
+      return;
+    }
+
+    // In water - could add swim animation here
+    if (this.inWater) {
+      // For now just use idle/walk in water
+      const speed = this.getSpeed();
+      if (speed > this.WALK_SPEED_THRESHOLD) {
+        this.animationManager.setState('walk');
+      } else {
+        this.animationManager.setState('idle');
+      }
+      return;
+    }
+
+    // Airborne states
+    if (!this.isGrounded) {
+      const vel = this.playerBody.linvel();
+      if (vel.y > 2) {
+        // Rising - jump animation
+        this.animationManager.setState('jump');
+      } else {
+        // Falling
+        this.animationManager.setState('fall');
+      }
+      return;
+    }
+
+    // Grounded states based on speed
+    const speed = this.getSpeed();
+    if (speed > this.RUN_SPEED_THRESHOLD) {
+      this.animationManager.setState('run');
+    } else if (speed > this.WALK_SPEED_THRESHOLD) {
+      this.animationManager.setState('walk');
+    } else {
+      this.animationManager.setState('idle');
+    }
+  }
+
+  /**
+   * Update animation mixer (call each frame after update())
+   */
+  updateAnimation(dt: number): void {
+    this.animationManager?.update(dt);
+  }
+
+  /**
+   * Get current animation state (for debugging/UI)
+   */
+  getAnimationState(): AnimationState | null {
+    return this.animationManager?.getCurrentState() ?? null;
   }
 }

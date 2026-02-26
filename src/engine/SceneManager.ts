@@ -29,6 +29,9 @@ export class SceneManager {
   private skyboxMesh: THREE.Mesh | null = null;
   private currentLevelData: LevelData | null = null;
 
+  // Pre-allocated objects to avoid per-frame GC pressure
+  private boundsCache: THREE.Box3 = new THREE.Box3();
+
   // Callbacks
   public onChapterComplete: ((nextChapter: number) => void) | null = null;
   public onPlayerSpawn: ((position: THREE.Vector3) => void) | null = null;
@@ -302,16 +305,17 @@ export class SceneManager {
 
     for (const platform of this.currentLevel.bouncyPlatforms) {
       const mesh = platform.mesh;
-      const bounds = new THREE.Box3().setFromObject(mesh);
+      // Reuse cached Box3 to avoid per-frame allocations
+      this.boundsCache.setFromObject(mesh);
 
       // Check if player is on this platform (above it and within horizontal bounds)
       const onPlatform =
-        playerPosition.x >= bounds.min.x &&
-        playerPosition.x <= bounds.max.x &&
-        playerPosition.z >= bounds.min.z &&
-        playerPosition.z <= bounds.max.z &&
-        playerPosition.y >= bounds.max.y - 0.5 &&
-        playerPosition.y <= bounds.max.y + 1.5;
+        playerPosition.x >= this.boundsCache.min.x &&
+        playerPosition.x <= this.boundsCache.max.x &&
+        playerPosition.z >= this.boundsCache.min.z &&
+        playerPosition.z <= this.boundsCache.max.z &&
+        playerPosition.y >= this.boundsCache.max.y - 0.5 &&
+        playerPosition.y <= this.boundsCache.max.y + 1.5;
 
       // Compress when player is on platform
       const targetCompression = onPlatform ? 0.3 : 0;

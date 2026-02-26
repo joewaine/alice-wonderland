@@ -24,8 +24,11 @@ export class NPCController {
   private bubbleTexture: THREE.CanvasTexture | null = null;
   private bobTime: number = 0;
 
-  // Idle animation
+  // Idle animation (procedural)
   private idleTime: number = 0;
+
+  // Skeletal animation tracking
+  private animatedNPCs: Set<NPCObject> = new Set();
 
   constructor() {
     this.dialogueUI = new DialogueUI();
@@ -100,11 +103,12 @@ export class NPCController {
   setNPCs(npcs: NPCObject[]): void {
     // Clean up old speech bubbles
     this.clearSpeechBubbles();
+    this.animatedNPCs.clear();
 
     this.npcs = npcs;
     this.currentNPC = null;
 
-    // Create speech bubbles for each NPC
+    // Create speech bubbles for each NPC and detect animated NPCs
     if (this.bubbleTexture) {
       for (const npc of npcs) {
         const material = new THREE.SpriteMaterial({
@@ -121,6 +125,17 @@ export class NPCController {
         // Add as child of NPC mesh
         npc.mesh.add(sprite);
         this.speechBubbles.set(npc, sprite);
+
+        // Track NPCs with skeletal animation
+        if (npc.hasSkeletalAnimation && npc.mixer) {
+          this.animatedNPCs.add(npc);
+
+          // Start idle animation if available
+          const idleAction = npc.animations?.get('idle');
+          if (idleAction) {
+            idleAction.play();
+          }
+        }
       }
     }
   }
@@ -209,7 +224,7 @@ export class NPCController {
     // Update idle animation time
     this.idleTime += dt;
 
-    // Make NPCs face the player and animate idle
+    // Make NPCs face the player and animate
     for (const npc of this.npcs) {
       // Face player
       const direction = new THREE.Vector3()
@@ -218,6 +233,14 @@ export class NPCController {
       const angle = Math.atan2(direction.x, direction.z);
       npc.mesh.rotation.y = angle;
 
+      // Update skeletal animation if present
+      if (this.animatedNPCs.has(npc) && npc.mixer) {
+        npc.mixer.update(dt);
+        // Skip procedural animation for skeletal NPCs
+        continue;
+      }
+
+      // Procedural idle animation for non-skeletal NPCs
       // Subtle idle bob
       const bobOffset = Math.sin(this.idleTime * 2 + npc.position.x) * 0.05;
       npc.mesh.position.y = npc.position.y + bobOffset;
@@ -235,8 +258,45 @@ export class NPCController {
     this.currentNPC = npc;
     npc.dialogueIndex = 0;
 
+    // Trigger talk animation if available
+    this.playNPCAnimation(npc, 'talk');
+
     const line = npc.dialogue[0] || 'Hello there!';
     this.dialogueUI.show(npc.name, line, npc.modelId);
+  }
+
+  /**
+   * Play an animation on an NPC (with crossfade)
+   */
+  private playNPCAnimation(npc: NPCObject, animName: string): void {
+    if (!npc.mixer || !npc.animations) return;
+
+    const action = npc.animations.get(animName);
+    if (!action) return;
+
+    // Crossfade from current animation
+    const currentAction = npc.animations.get('idle');
+    if (currentAction && currentAction.isRunning()) {
+      action.reset();
+      action.crossFadeFrom(currentAction, 0.3, true);
+    }
+    action.play();
+  }
+
+  /**
+   * Stop talk animation and return to idle
+   */
+  private stopNPCTalkAnimation(npc: NPCObject): void {
+    if (!npc.mixer || !npc.animations) return;
+
+    const talkAction = npc.animations.get('talk');
+    const idleAction = npc.animations.get('idle');
+
+    if (talkAction && idleAction) {
+      idleAction.reset();
+      idleAction.crossFadeFrom(talkAction, 0.3, true);
+      idleAction.play();
+    }
   }
 
   /**
@@ -248,7 +308,8 @@ export class NPCController {
     this.currentNPC.dialogueIndex++;
 
     if (this.currentNPC.dialogueIndex >= this.currentNPC.dialogue.length) {
-      // End of dialogue
+      // End of dialogue - return to idle animation
+      this.stopNPCTalkAnimation(this.currentNPC);
       this.dialogueUI.hide();
       this.currentNPC = null;
     } else {
