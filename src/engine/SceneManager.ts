@@ -31,6 +31,10 @@ export class SceneManager {
   // Pre-allocated objects to avoid per-frame GC pressure
   private boundsCache: THREE.Box3 = new THREE.Box3();
 
+  // Wind animation state
+  private windTime: number = 0;
+  private foliageMeshes: THREE.Object3D[] = [];
+
   // Callbacks
   public onPlayerSpawn: ((position: THREE.Vector3) => void) | null = null;
   public onCollectiblePickup: ((type: string, position: THREE.Vector3) => void) | null = null;
@@ -113,6 +117,9 @@ export class SceneManager {
     // Load skybox
     await this.loadSkybox();
 
+    // Collect foliage meshes for wind animation
+    this.collectFoliageMeshes();
+
     // Show welcome title
     this.hud.showChapterTitle(
       "The Queen's Garden",
@@ -192,29 +199,150 @@ export class SceneManager {
   }
 
   /**
-   * Create fallback gradient skybox - Queen's Garden golden hour
+   * Create fallback gradient skybox - Queen's Garden golden hour with clouds
    */
   private createGradientSkybox(): void {
-    // Queen's Garden palette - warm golden hour
-    const palette = { top: '#87CEEB', mid: '#FAD7A0', bottom: '#FFE4B5' };
-
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
+    canvas.width = 1024;
+    canvas.height = 1024;
     const ctx = canvas.getContext('2d')!;
 
+    // Golden hour gradient
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, palette.top);
-    gradient.addColorStop(0.5, palette.mid);
-    gradient.addColorStop(1, palette.bottom);
+    gradient.addColorStop(0, '#5B9BD5');    // Sky blue at top
+    gradient.addColorStop(0.3, '#87CEEB');   // Light blue
+    gradient.addColorStop(0.5, '#FAD7A0');   // Golden
+    gradient.addColorStop(0.7, '#FFCC80');   // Warm orange
+    gradient.addColorStop(1, '#FFE4B5');     // Light peach at horizon
 
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Draw sun glow
+    const sunX = canvas.width * 0.7;
+    const sunY = canvas.height * 0.55;
+    const sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 150);
+    sunGlow.addColorStop(0, 'rgba(255, 248, 220, 0.9)');
+    sunGlow.addColorStop(0.2, 'rgba(255, 223, 150, 0.6)');
+    sunGlow.addColorStop(0.5, 'rgba(255, 200, 100, 0.2)');
+    sunGlow.addColorStop(1, 'rgba(255, 200, 100, 0)');
+    ctx.fillStyle = sunGlow;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw sun disk
+    ctx.fillStyle = 'rgba(255, 250, 230, 0.95)';
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 40, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw stylized clouds (BotW-inspired puffy shapes)
+    ctx.globalAlpha = 0.7;
+    this.drawCloud(ctx, canvas.width * 0.15, canvas.height * 0.25, 80);
+    this.drawCloud(ctx, canvas.width * 0.4, canvas.height * 0.18, 60);
+    this.drawCloud(ctx, canvas.width * 0.85, canvas.height * 0.32, 70);
+    this.drawCloud(ctx, canvas.width * 0.55, canvas.height * 0.38, 50);
+    this.drawCloud(ctx, canvas.width * 0.25, canvas.height * 0.42, 45);
+    ctx.globalAlpha = 1;
+
+    // Create inverted sphere for sky dome
     const texture = new THREE.CanvasTexture(canvas);
-    this.scene.background = texture;
+    texture.colorSpace = THREE.SRGBColorSpace;
+
+    const geometry = new THREE.SphereGeometry(500, 64, 32);
+    geometry.scale(-1, 1, 1);
+
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      side: THREE.FrontSide,
+      depthWrite: false
+    });
+
+    this.skyboxMesh = new THREE.Mesh(geometry, material);
+    this.skyboxMesh.renderOrder = -1;
+    this.scene.add(this.skyboxMesh);
+    this.scene.background = null;
+
     this.currentSkyboxTexture = texture;
-    console.log(`Using golden hour gradient skybox`);
+    console.log(`Using procedural golden hour skybox with clouds`);
+  }
+
+  /**
+   * Draw a stylized puffy cloud
+   */
+  private drawCloud(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+    const cloudColor = 'rgba(255, 255, 255, 0.9)';
+    const shadowColor = 'rgba(200, 200, 220, 0.4)';
+
+    // Cloud made of overlapping circles
+    ctx.fillStyle = shadowColor;
+    ctx.beginPath();
+    ctx.arc(x + size * 0.05, y + size * 0.1, size * 0.4, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.45, y + size * 0.12, size * 0.35, 0, Math.PI * 2);
+    ctx.arc(x - size * 0.35, y + size * 0.08, size * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = cloudColor;
+    ctx.beginPath();
+    ctx.arc(x, y, size * 0.4, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.4, y + size * 0.05, size * 0.35, 0, Math.PI * 2);
+    ctx.arc(x - size * 0.4, y, size * 0.3, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.15, y - size * 0.2, size * 0.3, 0, Math.PI * 2);
+    ctx.arc(x - size * 0.15, y - size * 0.15, size * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /**
+   * Collect foliage meshes for wind animation
+   */
+  private collectFoliageMeshes(): void {
+    this.foliageMeshes = [];
+    if (!this.currentLevel) return;
+
+    // Traverse all level objects to find foliage (hedges, roses, topiaries)
+    this.scene.traverse((object) => {
+      // Look for objects that are likely foliage based on their material colors
+      if (object instanceof THREE.Mesh) {
+        const material = object.material as THREE.ShaderMaterial;
+        if (material.uniforms?.color) {
+          const color = material.uniforms.color.value as THREE.Color;
+          // Green colors (hedges, topiaries) - check if predominantly green
+          if (color.g > 0.3 && color.g > color.r && color.g > color.b * 0.8) {
+            this.foliageMeshes.push(object);
+          }
+        }
+      }
+      // Also include Groups that contain foliage (rose bushes, topiaries)
+      if (object.name && (
+        object.name.includes('hedge') ||
+        object.name.includes('rose') ||
+        object.name.includes('topiary')
+      )) {
+        this.foliageMeshes.push(object);
+      }
+    });
+
+    console.log(`Found ${this.foliageMeshes.length} foliage objects for wind animation`);
+  }
+
+  /**
+   * Update wind animation on foliage
+   */
+  private updateWindAnimation(dt: number): void {
+    this.windTime += dt;
+
+    for (let i = 0; i < this.foliageMeshes.length; i++) {
+      const mesh = this.foliageMeshes[i];
+
+      // Create gentle swaying motion using sin waves
+      // Use mesh position as seed for variation
+      const seed = mesh.position.x * 0.1 + mesh.position.z * 0.15;
+      const swayX = Math.sin(this.windTime * 1.2 + seed) * 0.015;
+      const swayZ = Math.sin(this.windTime * 0.9 + seed + 1.5) * 0.012;
+
+      // Apply rotation-based sway (more natural than position shift)
+      mesh.rotation.x = swayX;
+      mesh.rotation.z = swayZ;
+    }
   }
 
   /**
@@ -273,6 +401,9 @@ export class SceneManager {
 
     // Update bouncy platforms
     this.updateBouncyPlatforms(dt, playerPosition);
+
+    // Animate foliage wind
+    this.updateWindAnimation(dt);
   }
 
   /**

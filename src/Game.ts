@@ -132,16 +132,16 @@ export class Game {
     document.body.style.overflow = 'hidden';
     document.body.appendChild(this.renderer.domElement);
 
-    // Create scene with BotW-inspired cel-shaded atmosphere
+    // Create scene with Queen's Garden golden hour atmosphere
     this.scene = new THREE.Scene();
 
-    // Soft blue sky (BotW style - clean, not pink)
-    const skyColor = new THREE.Color(0x87ceeb);  // Sky blue
-    const horizonColor = new THREE.Color(0xb8d4e8);  // Pale blue-white
-    this.scene.background = skyColor;
+    // Golden hour sky (warm and inviting)
+    const skyColor = new THREE.Color(0xFAD7A0);   // Golden
+    const fogColor = new THREE.Color(0xFFE8C8);   // Warm peach fog
+    this.scene.background = skyColor;  // Overridden by skybox when loaded
 
-    // Atmospheric fog for depth - lighter for cel-shaded look
-    this.scene.fog = new THREE.Fog(horizonColor, 30, 150);
+    // Atmospheric fog for depth - warm golden haze
+    this.scene.fog = new THREE.Fog(fogColor, 40, 180);
 
     // Create camera
     this.camera = new THREE.PerspectiveCamera(
@@ -533,35 +533,39 @@ export class Game {
   }
 
   /**
-   * Setup lighting - BotW-style cel-shaded illumination
-   * Lower ambient for more contrast, dramatic sun angle
+   * Setup lighting - Queen's Garden golden hour illumination
+   * Warm, dramatic late-afternoon lighting with BotW cel-shaded style
    */
   private setupLighting(): void {
-    // Reduced ambient - cel-shading needs shadow/light contrast
-    const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+    // Warm ambient - golden hour glow
+    const ambient = new THREE.AmbientLight(0xFFF8E0, 0.35);
     this.scene.add(ambient);
 
-    // Strong directional sun at dramatic angle (late afternoon BotW feel)
-    const sun = new THREE.DirectionalLight(0xfffaf0, 1.2);
-    sun.position.set(20, 30, 15);
+    // Golden sun at low angle for dramatic shadows
+    const sun = new THREE.DirectionalLight(0xFFE4B5, 1.3);
+    sun.position.set(25, 20, 20);  // Lower angle for longer shadows
     sun.castShadow = true;
     sun.shadow.mapSize.width = 2048;
     sun.shadow.mapSize.height = 2048;
     sun.shadow.camera.near = 0.5;
     sun.shadow.camera.far = 200;
-    sun.shadow.camera.left = -50;
-    sun.shadow.camera.right = 50;
-    sun.shadow.camera.top = 50;
-    sun.shadow.camera.bottom = -50;
-    // No shadow radius blur - BasicShadowMap gives hard edges
+    sun.shadow.camera.left = -60;
+    sun.shadow.camera.right = 60;
+    sun.shadow.camera.top = 60;
+    sun.shadow.camera.bottom = -60;
     this.scene.add(sun);
 
     // Store sun reference for cel-shader light direction sync
     this.sunLight = sun;
 
-    // Sky/ground hemisphere - blue sky, green ground bounce
-    const hemi = new THREE.HemisphereLight(0x87ceeb, 0x98d982, 0.3);
+    // Sky/ground hemisphere - warm sky, green garden bounce
+    const hemi = new THREE.HemisphereLight(0xFAD7A0, 0x7CB342, 0.4);
     this.scene.add(hemi);
+
+    // Subtle fill light from opposite side (bounced light effect)
+    const fill = new THREE.DirectionalLight(0xB3E5FC, 0.15);
+    fill.position.set(-15, 10, -10);
+    this.scene.add(fill);
   }
 
   /**
