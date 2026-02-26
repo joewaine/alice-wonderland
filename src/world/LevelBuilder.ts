@@ -856,15 +856,15 @@ export class LevelBuilder {
       this.scene.add(mesh);
       this.createdMeshes.push(mesh);
 
-      // Create surface plane - sparkly water surface
+      // Create surface plane - cel-shaded water surface for consistent stylized look
       const surfaceGeo = new THREE.PlaneGeometry(size.x, size.z);
-      const surfaceMat = new THREE.MeshStandardMaterial({
-        color: 0xAAEEEE,        // Light aqua
+      const surfaceMat = createCelShaderMaterial({
+        color: 0x88CCDD,           // Light cyan base
+        shadowColor: 0x5599AA,     // Deeper cyan shadow
+        highlightColor: 0xCCEEFF,  // Bright highlight
+        rimColor: 0xAADDEE,        // Soft rim
         transparent: true,
         opacity: 0.7,
-        side: THREE.DoubleSide,
-        metalness: 0.1,
-        roughness: 0.1
       });
       const surface = new THREE.Mesh(surfaceGeo, surfaceMat);
       surface.rotation.x = -Math.PI / 2;

@@ -328,6 +328,74 @@ export class ParticleManager {
   }
 
   /**
+   * Double jump sparkle burst
+   * Cyan/white spiral burst around player
+   */
+  createDoubleJumpSparkle(position: THREE.Vector3): void {
+    const count = 22;
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Sparkle color palette (cyan to white)
+    const sparkleColors = [
+      new THREE.Color(0x88CCFF),  // Light cyan
+      new THREE.Color(0xAADDFF),  // Pale cyan
+      new THREE.Color(0xFFFFFF),  // White
+    ];
+
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y;
+      positions[i * 3 + 2] = position.z;
+
+      // Assign random sparkle color
+      const color = sparkleColors[Math.floor(Math.random() * sparkleColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Spiral/burst pattern - outward with upward bias
+      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
+      const outwardSpeed = Math.random() * 2 + 1.5;
+      const upwardSpeed = Math.random() * 3 + 2;
+
+      velocities[i * 3] = Math.cos(angle) * outwardSpeed;
+      velocities[i * 3 + 1] = upwardSpeed;
+      velocities[i * 3 + 2] = Math.sin(angle) * outwardSpeed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.2,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.5,  // Short lifetime (0.4-0.6s range)
+      isLooping: false,
+      elapsed: 0
+    });
+  }
+
+  /**
    * Gate unlock effect
    */
   createGateUnlockEffect(position: THREE.Vector3): void {

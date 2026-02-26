@@ -18,6 +18,8 @@ export interface CelShaderOptions {
   rimColor?: THREE.Color | number;
   rimPower?: number;
   steps?: number;
+  transparent?: boolean;
+  opacity?: number;
 }
 
 const defaultOptions: Required<CelShaderOptions> = {
@@ -28,6 +30,8 @@ const defaultOptions: Required<CelShaderOptions> = {
   rimColor: new THREE.Color(0xadd8e6),       // Soft blue rim
   rimPower: 2.0,
   steps: 3,
+  transparent: false,
+  opacity: 1.0,
 };
 
 // Vertex shader - passes normals and view direction to fragment
@@ -59,6 +63,7 @@ const fragmentShader = /* glsl */ `
   uniform bool uHasMap;
   uniform vec3 uLightDirection;
   uniform float uAmbientIntensity;
+  uniform float uOpacity;
 
   varying vec3 vNormal;
   varying vec3 vViewPosition;
@@ -103,7 +108,7 @@ const fragmentShader = /* glsl */ `
     rimFactor *= smoothstep(0.0, 0.3, NdotL + 0.3);
     vec3 finalColor = mix(shadedColor, uRimColor, rimFactor * 0.5);
 
-    gl_FragColor = vec4(finalColor, 1.0);
+    gl_FragColor = vec4(finalColor, uOpacity);
   }
 `;
 
@@ -132,7 +137,10 @@ export function createCelShaderMaterial(options: CelShaderOptions = {}): THREE.S
       uHasMap: { value: opts.map !== null },
       uLightDirection: { value: new THREE.Vector3(0.5, 1, 0.3).normalize() },
       uAmbientIntensity: { value: 0.3 },
+      uOpacity: { value: opts.opacity },
     },
+    transparent: opts.transparent,
+    side: opts.transparent ? THREE.DoubleSide : THREE.FrontSide,
   });
 
   return material;

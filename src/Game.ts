@@ -118,6 +118,9 @@ export class Game {
   private frameTimeHistory: number[] = [];
   private lastStatsUpdate: number = 0;
 
+  // Hitstop effect (freeze frames on ground pound impact)
+  private hitstopRemaining: number = 0;
+
   constructor() {
     // Create renderer - BasicShadowMap for hard cel-shaded shadows
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -697,6 +700,12 @@ export class Game {
         // Different squash for double jump
         if (isDoubleJump) {
           this.targetSquash.set(0.7, 1.4, 0.7);
+          // Sparkle burst for double jump
+          if (this.playerBody) {
+            const pos = this.playerBody.translation();
+            this.tempPosCache.set(pos.x, pos.y, pos.z);
+            this.particleManager.createDoubleJumpSparkle(this.tempPosCache);
+          }
         } else {
           this.targetSquash.set(0.8, 1.3, 0.8);
         }
@@ -724,6 +733,9 @@ export class Game {
         // Screen shake for impact
         this.cameraController?.shake(0.4);
 
+        // Hitstop freeze effect (50ms / 3 frames at 60fps)
+        this.hitstopRemaining = 0.05;
+
         // Check for breakable platforms
         if (this.sceneManager && this.sizeManager) {
           const currentSize = this.sizeManager.getCurrentSize();
@@ -746,6 +758,10 @@ export class Game {
       },
       onFootstep: () => {
         audioManager.playFootstep();
+      },
+      onSpeedBoost: () => {
+        // FOV kick for speed effect - kick to 68 degrees, return over 0.4s
+        this.cameraController?.kickFOV(68, 0.4);
       },
     });
 
@@ -911,6 +927,16 @@ export class Game {
     const now = performance.now();
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
+
+    // Hitstop freeze effect - skip physics/movement updates
+    if (this.hitstopRemaining > 0) {
+      this.hitstopRemaining -= dt;
+      // Still render during hitstop (frozen frame)
+      this.renderer.render(this.scene, this.camera);
+      this.updateStats(dt);
+      this.input.resetMouseDelta();
+      return;
+    }
 
     // Update systems
     this.updatePlayer(dt);

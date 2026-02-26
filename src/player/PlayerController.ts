@@ -22,6 +22,7 @@ export interface PlayerControllerCallbacks {
   onGroundPoundLand?: (position: THREE.Vector3) => void;
   onLongJump?: () => void;
   onFootstep?: () => void;
+  onSpeedBoost?: () => void;
 }
 
 export interface AirCurrentZoneRef {
@@ -419,6 +420,9 @@ export class PlayerController {
 
         // Set cooldown to prevent repeated boosts
         this.boostCooldown = 0.5;
+
+        // Notify callback for visual effects
+        this.callbacks.onSpeedBoost?.();
         break;
       }
     }
