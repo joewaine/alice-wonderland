@@ -30,6 +30,7 @@ export interface PlayerControllerCallbacks {
   onSwimmingSplash?: (position: THREE.Vector3, surfaceY: number) => void;
   onWallSlide?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
   onWallJump?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
+  onLedgeGrab?: (position: THREE.Vector3) => void;
 }
 
 export interface AirCurrentZoneRef {
@@ -103,6 +104,15 @@ export class PlayerController {
   // Wall jump tuning
   private readonly WALL_JUMP_VERTICAL: number = 12;
   private readonly WALL_JUMP_HORIZONTAL: number = 8;
+
+  // Ledge grab state
+  private isLedgeGrabbing: boolean = false;
+  private wasLedgeGrabbing: boolean = false;
+  private ledgeGrabPosition: THREE.Vector3 = new THREE.Vector3();
+  private readonly LEDGE_CHECK_HEIGHT: number = 1.0; // Height above player to check for ledge
+  private readonly LEDGE_CHECK_DEPTH: number = 0.8; // Distance forward to check for ledge
+  private ledgeCheckRay: RAPIER.Ray | null = null;
+  private ledgeCheckDir: RAPIER.Vector3 | null = null;
 
   // Tuning constants - movement (snappy, responsive feel)
   private readonly GROUND_ACCEL = 1.8;      // Fast acceleration
@@ -188,6 +198,11 @@ export class PlayerController {
     this.wallCheckRay = new RAPIER.Ray(
       new RAPIER.Vector3(0, 0, 0),
       this.wallCheckDir
+    );
+    this.ledgeCheckDir = new RAPIER.Vector3(0, -1, 0);
+    this.ledgeCheckRay = new RAPIER.Ray(
+      new RAPIER.Vector3(0, 0, 0),
+      this.ledgeCheckDir
     );
   }
 
@@ -393,6 +408,9 @@ export class PlayerController {
     // Check for wall slide (only when falling and not grounded)
     this.checkWallSlide(dt);
 
+    // Check for ledge grab (when wall sliding near a ledge)
+    this.checkLedgeGrab();
+
     // Check for speed boosts
     this.checkSpeedBoosts();
 
@@ -575,6 +593,79 @@ export class PlayerController {
 
       this.callbacks.onWallSlide?.(this.callbackPosCache, this.wallSlideNormal);
     }
+  }
+
+  /**
+   * Check for ledge grab opportunity
+   * Ledge grab occurs when: not grounded, touching wall, and there's a ledge above
+   */
+  private checkLedgeGrab(): void {
+    // Store previous state for grab detection
+    this.wasLedgeGrabbing = this.isLedgeGrabbing;
+
+    // Only check when wall sliding (already touching a wall and falling)
+    if (!this.isWallSliding || this.isGrounded || this.isGroundPounding || this.inWater) {
+      this.isLedgeGrabbing = false;
+      return;
+    }
+
+    const pos = this.playerBody.translation();
+
+    // Check if there's empty space at head level (where we'd grab)
+    // Then check if there's solid ground just above that (the ledge surface)
+    const checkHeight = pos.y + this.LEDGE_CHECK_HEIGHT;
+
+    // Raycast forward at ledge height to see if there's open space
+    const forwardX = -this.wallSlideNormal.x;
+    const forwardZ = -this.wallSlideNormal.z;
+
+    this.ledgeCheckRay!.origin.x = pos.x + forwardX * 0.3;
+    this.ledgeCheckRay!.origin.y = checkHeight;
+    this.ledgeCheckRay!.origin.z = pos.z + forwardZ * 0.3;
+    this.ledgeCheckDir!.x = forwardX;
+    this.ledgeCheckDir!.y = 0;
+    this.ledgeCheckDir!.z = forwardZ;
+    this.ledgeCheckRay!.dir = this.ledgeCheckDir!;
+
+    const forwardHit = this.world.castRay(this.ledgeCheckRay!, this.LEDGE_CHECK_DEPTH, true);
+
+    // If there's no obstruction at head level, check for ground above
+    if (forwardHit === null) {
+      // Raycast down from above the ledge to find the surface
+      this.ledgeCheckRay!.origin.x = pos.x + forwardX * this.LEDGE_CHECK_DEPTH;
+      this.ledgeCheckRay!.origin.y = checkHeight + 0.5;
+      this.ledgeCheckRay!.origin.z = pos.z + forwardZ * this.LEDGE_CHECK_DEPTH;
+      this.ledgeCheckDir!.x = 0;
+      this.ledgeCheckDir!.y = -1;
+      this.ledgeCheckDir!.z = 0;
+      this.ledgeCheckRay!.dir = this.ledgeCheckDir!;
+
+      const downHit = this.world.castRay(this.ledgeCheckRay!, 1.0, true);
+
+      if (downHit !== null) {
+        // Found a ledge! Trigger grab
+        if (!this.wasLedgeGrabbing) {
+          // Just started grabbing - emit shimmer particles
+          const grabY = checkHeight + 0.5 - downHit.timeOfImpact;
+          this.ledgeGrabPosition.set(
+            pos.x + forwardX * (this.LEDGE_CHECK_DEPTH * 0.5),
+            grabY,
+            pos.z + forwardZ * (this.LEDGE_CHECK_DEPTH * 0.5)
+          );
+          this.callbacks.onLedgeGrab?.(this.ledgeGrabPosition);
+        }
+        this.isLedgeGrabbing = true;
+
+        // Hold position while grabbing (freeze velocity)
+        this.velocityCache!.x = 0;
+        this.velocityCache!.y = 0;
+        this.velocityCache!.z = 0;
+        this.playerBody.setLinvel(this.velocityCache!, true);
+        return;
+      }
+    }
+
+    this.isLedgeGrabbing = false;
   }
 
   /**
@@ -967,6 +1058,13 @@ export class PlayerController {
   }
 
   /**
+   * Check if ledge grabbing
+   */
+  getIsLedgeGrabbing(): boolean {
+    return this.isLedgeGrabbing;
+  }
+
+  /**
    * Reset state (for respawning)
    */
   reset(): void {
@@ -975,6 +1073,7 @@ export class PlayerController {
     this.isGroundPounding = false;
     this.isLongJumping = false;
     this.isWallSliding = false;
+    this.isLedgeGrabbing = false;
     this.groundPoundLockout = 0;
     this.landingLockout = 0;
     this.wallSlideTimer = 0;

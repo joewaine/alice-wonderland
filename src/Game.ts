@@ -108,6 +108,10 @@ export class Game {
   private breathingPhase: number = 0;
   private readonly BREATHING_FREQUENCY: number = 0.5; // Hz (cycles per second)
 
+  // Landing squash animation
+  private landingSquashTimer: number = 0;
+  private readonly LANDING_SQUASH_DURATION: number = 0.15; // seconds
+
   // Sun light reference for cel-shader sync
   private sunLight: THREE.DirectionalLight | null = null;
 
@@ -822,7 +826,8 @@ export class Game {
             this.particleManager.createLandingDust(this.tempPosCache, intensity);
           }
         }
-        this.targetSquash.set(1.3, 0.7, 1.3);
+        // Start landing squash animation timer
+        this.landingSquashTimer = this.LANDING_SQUASH_DURATION;
 
         // Camera dip based on fall speed
         if (fallSpeed >= 15) {
@@ -905,6 +910,10 @@ export class Game {
         // Spark burst when wall jumping
         this.particleManager.createWallJumpSpark(position, wallNormal);
         audioManager.playJump();
+      },
+      onLedgeGrab: (position) => {
+        // Shimmer particles when grabbing a ledge
+        this.particleManager.createLedgeGrabShimmer(position);
       },
     });
 
@@ -1268,8 +1277,20 @@ export class Game {
       }
     }
 
-    // Animate squash/stretch
-    this.currentSquash.lerp(this.targetSquash, 0.2);
+    // Animate landing squash with easeOut curve
+    if (this.landingSquashTimer > 0) {
+      this.landingSquashTimer -= dt;
+      // EaseOut: starts squashed, returns to normal
+      const t = Math.max(0, this.landingSquashTimer / this.LANDING_SQUASH_DURATION);
+      const easeOut = t * t; // Quadratic easeOut (inverted: 1->0 becomes squash->normal)
+      // Squash: Y down to 0.85, XZ up to 1.1 at peak (t=1), return to 1.0 at t=0
+      const squashY = 1.0 - 0.15 * easeOut;    // 0.85 -> 1.0
+      const squashXZ = 1.0 + 0.1 * easeOut;    // 1.1 -> 1.0
+      this.currentSquash.set(squashXZ, squashY, squashXZ);
+    } else {
+      // Normal squash/stretch animation (lerp to target)
+      this.currentSquash.lerp(this.targetSquash, 0.2);
+    }
 
     // Position
     const pos = this.playerBody.translation();
@@ -1300,6 +1321,13 @@ export class Game {
       // Enable underwater wobble when player is below water surface
       const isUnderwater = this.playerController?.isUnderwater() ?? false;
       this.cameraController.setUnderwaterWobble(isUnderwater);
+
+      // Spawn bubble particles when swimming underwater
+      if (isUnderwater && this.playerController?.getIsInWater()) {
+        const swimPos = this.playerBody.translation();
+        this.tempPosCache.set(swimPos.x, swimPos.y, swimPos.z);
+        this.particleManager.createSwimmingBubbles(this.tempPosCache);
+      }
     }
 
     // Pickup collisions (reuse cached position)
