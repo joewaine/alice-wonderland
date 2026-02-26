@@ -25,6 +25,13 @@ export interface AirCurrent {
   force: number;  // Negative = slows fall, positive = speeds up
 }
 
+export interface WaterZone {
+  position: Vector3;
+  size: Vector3;
+  surface_y: number;  // Y position of water surface
+  current?: Vector3;  // Optional water current direction/strength
+}
+
 export interface Collectible {
   type: 'key' | 'star' | 'card';
   position: Vector3;
@@ -74,6 +81,7 @@ export interface LevelData {
 
   // Optional chapter-specific features
   air_currents?: AirCurrent[];
+  water_zones?: WaterZone[];
 }
 
 /**
