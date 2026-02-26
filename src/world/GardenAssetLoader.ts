@@ -744,12 +744,14 @@ function createLanternFallback(): THREE.Group {
   base.castShadow = true;
   group.add(base);
 
-  // Glass body (emissive)
+  // Glass body (transparent cel-shader)
   const glassGeo = new THREE.CylinderGeometry(0.12, 0.15, 0.3, 6);
-  const glassMat = new THREE.MeshStandardMaterial({
-    color: 0xFFE4B5,
-    emissive: 0xFFD700,
-    emissiveIntensity: 0.5,
+  const glassMat = createCelShaderMaterial({
+    color: new THREE.Color(0xFFE4B5),
+    shadowColor: 0xDDC090,
+    highlightColor: 0xFFF8DC,
+    rimColor: 0xFFD700,
+    rimPower: 2.0,
     transparent: true,
     opacity: 0.8,
   });

@@ -479,12 +479,12 @@ export class LevelBuilder {
    * Create golden key mesh
    */
   private createKeyMesh(group: THREE.Group): void {
-    const material = new THREE.MeshStandardMaterial({
-      color: 0xffd700,
-      metalness: 0.8,
-      roughness: 0.2,
-      emissive: 0xffd700,
-      emissiveIntensity: 0.3
+    const material = createCelShaderMaterial({
+      color: 0xFFD700,
+      shadowColor: 0xB8860B,
+      highlightColor: 0xFFEC8B,
+      rimColor: 0xFFE135,
+      rimPower: 2.5
     });
 
     // Key handle (torus)
@@ -903,24 +903,26 @@ export class LevelBuilder {
       // Create arrow-shaped boost pad
       const group = new THREE.Group();
 
-      // Whimsical boost pad - soft golden glow
+      // Cel-shaded boost pad - energetic gold
       const padGeo = new THREE.BoxGeometry(size.x, 0.2, size.z);
-      const padMat = new THREE.MeshStandardMaterial({
-        color: 0xFFE4B5,        // Soft moccasin
-        emissive: 0xFFD700,     // Golden glow
-        emissiveIntensity: 0.3,
-        metalness: 0.0,
-        roughness: 0.6
+      const padMat = createCelShaderMaterial({
+        color: 0xFFD700,           // Gold/yellow
+        shadowColor: 0xCC9900,     // Darker gold
+        highlightColor: 0xFFFF99,  // Bright yellow
+        rimColor: 0xFFE066,        // Warm rim
+        rimPower: 2.0
       });
       const pad = new THREE.Mesh(padGeo, padMat);
       group.add(pad);
 
-      // Arrow indicator - playful purple
+      // Cel-shaded arrow indicator - playful purple
       const arrowGeo = new THREE.ConeGeometry(0.5, 1.5, 4);
-      const arrowMat = new THREE.MeshStandardMaterial({
-        color: 0xDDA0DD,        // Soft plum
-        emissive: 0xDA70D6,     // Orchid glow
-        emissiveIntensity: 0.4
+      const arrowMat = createCelShaderMaterial({
+        color: 0xDDA0DD,           // Soft plum
+        shadowColor: 0x9B6B9B,     // Darker plum shadow
+        highlightColor: 0xFFE0FF,  // Light pink highlight
+        rimColor: 0xE6B0E6,        // Warm orchid rim
+        rimPower: 2.0
       });
       const arrow = new THREE.Mesh(arrowGeo, arrowMat);
       arrow.rotation.x = -Math.PI / 2;
@@ -955,12 +957,15 @@ export class LevelBuilder {
     for (const cp of checkpointData) {
       const pos = new THREE.Vector3(cp.position.x, cp.position.y, cp.position.z);
 
-      // Create ring mesh
+      // Create ring mesh with cel-shaded material
       const ringGeo = new THREE.TorusGeometry(cp.radius, 0.3, 8, 24);
-      const ringMat = new THREE.MeshStandardMaterial({
-        color: cp.order === 0 ? 0x00ff00 : 0xffff00,  // Green for start, yellow for others
-        emissive: cp.order === 0 ? 0x00aa00 : 0xaaaa00,
-        emissiveIntensity: 0.5,
+      const isStart = cp.order === 0;
+      const ringMat = createCelShaderMaterial({
+        color: isStart ? 0x44FF66 : 0x4488FF,           // Green for start, blue for others
+        shadowColor: isStart ? 0x228833 : 0x2255AA,
+        highlightColor: isStart ? 0xAAFFBB : 0x99CCFF,
+        rimColor: isStart ? 0x66FF88 : 0x66AAFF,
+        rimPower: 2.5,
         transparent: true,
         opacity: 0.8
       });
