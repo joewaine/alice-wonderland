@@ -86,6 +86,13 @@ export class CameraController {
   private idealPosCache: THREE.Vector3 = new THREE.Vector3();
   private lookAtCache: THREE.Vector3 = new THREE.Vector3();
 
+  // Speed-based look-ahead state
+  private lookAheadOffset: THREE.Vector3 = new THREE.Vector3();
+  private readonly LOOK_AHEAD_MAX_DISTANCE = 2.5;    // Max units ahead of player to look
+  private readonly LOOK_AHEAD_SPEED_THRESHOLD = 0.8; // Start look-ahead at 80% max speed
+  private readonly LOOK_AHEAD_LERP_SPEED = 4;        // How fast look-ahead catches up
+  private readonly MAX_PLAYER_SPEED = 16;            // Expected max player speed (for ratio calc)
+
   // Screen shake state
   private shakeIntensity: number = 0;
   private shakeOffset: THREE.Vector3 = new THREE.Vector3();
@@ -309,8 +316,12 @@ export class CameraController {
 
   /**
    * Main update - call each frame
+   * @param dt - Delta time in seconds
+   * @param playerPos - Player world position
+   * @param input - Input manager for camera controls
+   * @param playerVelocity - Optional player velocity for look-ahead effect
    */
-  update(dt: number, playerPos: THREE.Vector3, input: InputManager): void {
+  update(dt: number, playerPos: THREE.Vector3, input: InputManager, playerVelocity?: THREE.Vector3): void {
     // Update from keyboard input
     this.updateFromInput(dt, input);
 
@@ -352,6 +363,40 @@ export class CameraController {
       this.targetHeightOffset,
       Math.min(1, this.config.followLerp * dt)
     );
+
+    // Calculate speed-based look-ahead offset
+    if (playerVelocity) {
+      const horizontalSpeed = Math.sqrt(playerVelocity.x ** 2 + playerVelocity.z ** 2);
+      const speedRatio = horizontalSpeed / this.MAX_PLAYER_SPEED;
+
+      // Only apply look-ahead above the threshold
+      if (speedRatio > this.LOOK_AHEAD_SPEED_THRESHOLD) {
+        // Calculate look-ahead amount (scales from 0 at threshold to max at full speed)
+        const lookAheadStrength = (speedRatio - this.LOOK_AHEAD_SPEED_THRESHOLD)
+          / (1 - this.LOOK_AHEAD_SPEED_THRESHOLD);
+        const lookAheadDist = lookAheadStrength * this.LOOK_AHEAD_MAX_DISTANCE;
+
+        // Get normalized velocity direction (horizontal only)
+        const targetX = (playerVelocity.x / horizontalSpeed) * lookAheadDist;
+        const targetZ = (playerVelocity.z / horizontalSpeed) * lookAheadDist;
+
+        // Smoothly lerp toward target look-ahead
+        this.lookAheadOffset.x = THREE.MathUtils.lerp(
+          this.lookAheadOffset.x, targetX, Math.min(1, this.LOOK_AHEAD_LERP_SPEED * dt)
+        );
+        this.lookAheadOffset.z = THREE.MathUtils.lerp(
+          this.lookAheadOffset.z, targetZ, Math.min(1, this.LOOK_AHEAD_LERP_SPEED * dt)
+        );
+      } else {
+        // Below threshold - smoothly return to zero
+        this.lookAheadOffset.x = THREE.MathUtils.lerp(
+          this.lookAheadOffset.x, 0, Math.min(1, this.LOOK_AHEAD_LERP_SPEED * dt)
+        );
+        this.lookAheadOffset.z = THREE.MathUtils.lerp(
+          this.lookAheadOffset.z, 0, Math.min(1, this.LOOK_AHEAD_LERP_SPEED * dt)
+        );
+      }
+    }
 
     // Calculate dialogue-adjusted pitch (slightly lower angle to frame conversation)
     const dialoguePitch = this.dialogueFocusLerp > 0.001
@@ -416,11 +461,11 @@ export class CameraController {
       }
     }
 
-    // Look at player (slightly above center) - uses pre-allocated vector
+    // Look at player (slightly above center) with look-ahead offset - uses pre-allocated vector
     this.lookAtCache.set(
-      playerPos.x,
+      playerPos.x + this.lookAheadOffset.x,
       playerPos.y + this.heightOffset * 0.5,
-      playerPos.z
+      playerPos.z + this.lookAheadOffset.z
     );
     this.camera.lookAt(this.lookAtCache);
 

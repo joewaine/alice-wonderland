@@ -1301,13 +1301,83 @@ export class ParticleManager {
   }
 
   /**
-   * Respawn effect - expanding ring with upward sparkle burst
-   * White/cyan particles for magical reappearance feel
+   * Death effect - dark particles dispersing from death location
+   * Grey particles that fade and spread outward
+   */
+  createDeathEffect(position: THREE.Vector3): void {
+    const count = 18;  // 15-20 particles
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Dark/grey color palette
+    const deathColors = [
+      new THREE.Color(0x333333),  // Dark grey
+      new THREE.Color(0x666666),  // Medium grey
+      new THREE.Color(0x444444),  // Mid-dark grey
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start at death position
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
+
+      // Assign random grey color
+      const color = deathColors[Math.floor(Math.random() * deathColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Disperse outward in all directions
+      const angle = Math.random() * Math.PI * 2;
+      const elevation = (Math.random() - 0.3) * Math.PI;  // Bias slightly downward
+      const speed = Math.random() * 3 + 2;
+
+      velocities[i * 3] = Math.cos(angle) * Math.cos(elevation) * speed;
+      velocities[i * 3 + 1] = Math.sin(elevation) * speed;
+      velocities[i * 3 + 2] = Math.sin(angle) * Math.cos(elevation) * speed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.2,
+      transparent: true,
+      opacity: 0.8,
+      vertexColors: true,
+      blending: THREE.NormalBlending,  // Normal blending for dark particles
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.5,  // Quick fade
+      isLooping: false,
+      elapsed: 0
+      // Gravity applied by default for falling debris feel
+    });
+  }
+
+  /**
+   * Respawn effect - golden/white particles spiraling inward to spawn point
+   * Magical coalescing effect for player reappearance
    */
   createRespawnEffect(position: THREE.Vector3): void {
-    const ringCount = 20;  // Expanding ring particles
-    const sparkleCount = 15;  // Upward sparkle burst
-    const totalCount = ringCount + sparkleCount;
+    const spiralCount = 20;  // Spiral inward particles
+    const sparkleCount = 15;  // Central sparkle burst
+    const totalCount = spiralCount + sparkleCount;
 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(totalCount * 3);
@@ -1315,19 +1385,22 @@ export class ParticleManager {
     const velocities = new Float32Array(totalCount * 3);
     const lifetimes = new Float32Array(totalCount);
 
-    // Respawn color palette (white to cyan)
+    // Golden/white color palette
     const respawnColors = [
+      new THREE.Color(0xFFD700),  // Gold
       new THREE.Color(0xFFFFFF),  // White
-      new THREE.Color(0xAAEEFF),  // Light cyan
-      new THREE.Color(0x88DDFF),  // Cyan
+      new THREE.Color(0xFFEE88),  // Light gold
     ];
 
-    // Create expanding ring particles
-    for (let i = 0; i < ringCount; i++) {
-      // Start at respawn point (at feet level)
-      positions[i * 3] = position.x;
-      positions[i * 3 + 1] = position.y - 0.5;
-      positions[i * 3 + 2] = position.z;
+    // Create spiral inward particles
+    for (let i = 0; i < spiralCount; i++) {
+      // Start in a ring around respawn point
+      const angle = (i / spiralCount) * Math.PI * 2;
+      const startRadius = 2.5 + Math.random() * 0.5;  // Start 2.5-3 units out
+
+      positions[i * 3] = position.x + Math.cos(angle) * startRadius;
+      positions[i * 3 + 1] = position.y + (Math.random() - 0.3) * 1.5;  // Varied heights
+      positions[i * 3 + 2] = position.z + Math.sin(angle) * startRadius;
 
       // Assign random color
       const color = respawnColors[Math.floor(Math.random() * respawnColors.length)];
@@ -1335,34 +1408,35 @@ export class ParticleManager {
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
 
-      // Expand outward in a ring
-      const angle = (i / ringCount) * Math.PI * 2;
-      const speed = 4 + Math.random() * 2;
+      // Spiral inward - move toward center with perpendicular spin
+      const inwardSpeed = 4 + Math.random() * 2;
+      const spinSpeed = 2;  // Perpendicular velocity for spiral motion
 
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = Math.random() * 0.5;  // Slight upward
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+      // Inward velocity + perpendicular spin component
+      velocities[i * 3] = -Math.cos(angle) * inwardSpeed + Math.sin(angle) * spinSpeed;
+      velocities[i * 3 + 1] = Math.random() * 0.5;  // Slight upward drift
+      velocities[i * 3 + 2] = -Math.sin(angle) * inwardSpeed - Math.cos(angle) * spinSpeed;
 
       lifetimes[i] = 1.0;
     }
 
-    // Create upward sparkle burst
-    for (let i = ringCount; i < totalCount; i++) {
+    // Create central sparkle burst (appears as particles coalesce)
+    for (let i = spiralCount; i < totalCount; i++) {
       // Start at center of respawn point
       positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
-      positions[i * 3 + 1] = position.y;
+      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.3;
       positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
 
-      // Assign random color (more whites for sparkles)
+      // More whites for central sparkles
       const color = respawnColors[Math.floor(Math.random() * respawnColors.length)];
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
 
-      // Burst upward with slight spread
+      // Gentle upward burst with slight spread
       const angle = Math.random() * Math.PI * 2;
       const spreadSpeed = Math.random() * 1.5;
-      const upwardSpeed = Math.random() * 4 + 3;
+      const upwardSpeed = Math.random() * 3 + 2;
 
       velocities[i * 3] = Math.cos(angle) * spreadSpeed;
       velocities[i * 3 + 1] = upwardSpeed;
@@ -1393,7 +1467,7 @@ export class ParticleManager {
       maxLife: 0.6,  // 0.5-0.7s lifetime
       isLooping: false,
       elapsed: 0,
-      noGravity: true  // Sparkles float, ring expands without gravity
+      noGravity: true  // Sparkles float, spiral moves without gravity
     });
   }
 
