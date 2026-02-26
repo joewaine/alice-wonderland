@@ -117,7 +117,7 @@ export class LevelBuilder {
    * Build a complete level from LevelData
    */
   async build(levelData: LevelData): Promise<BuiltLevel> {
-    console.log(`Building level: ${levelData.chapter_title}`);
+    console.log(`Building level: ${levelData.title}`);
 
     // Apply atmosphere first
     this.applyAtmosphere(levelData.atmosphere);

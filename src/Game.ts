@@ -94,15 +94,9 @@ export class Game {
   // Respawn state
   private isRespawning: boolean = false;
 
-  // Chapter switch debounce
-  private lastChapterKey: string = '';
-
   // Squash/stretch animation
   private targetSquash: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
   private currentSquash: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
-
-  // Chapter loading state
-  private isLoadingChapter: boolean = false;
 
   // Sun light reference for cel-shader sync
   private sunLight: THREE.DirectionalLight | null = null;
@@ -228,11 +222,6 @@ export class Game {
       this.spawnPlayerAt(position);
     };
 
-    // Handle chapter transitions
-    this.sceneManager.onChapterComplete = async (nextChapter) => {
-      await this.loadChapter(nextChapter);
-    };
-
     // Handle collectible particle effects
     this.sceneManager.onCollectiblePickup = (type, position) => {
       const color = type === 'key' ? 0xffd700 : type === 'star' ? 0xffff00 : 0xff6b6b;
@@ -254,7 +243,7 @@ export class Game {
     // Setup menu callbacks
     this.mainMenu.onStart = async () => {
       audioManager.init(); // Initialize audio on first user interaction
-      await this.loadChapter(1);
+      await this.loadLevel();
       musicManager.play(); // Start background music
       this.start();
     };
@@ -266,7 +255,7 @@ export class Game {
     };
 
     this.mainMenu.onRestart = async () => {
-      await this.loadChapter(this.sceneManager?.getCurrentChapter() || 1);
+      await this.loadLevel();
       this.isRunning = true;
       this.lastTime = performance.now();
       this.gameLoop();
@@ -284,18 +273,16 @@ export class Game {
   /**
    * Load a chapter level
    */
-  private async loadChapter(chapterNumber: number): Promise<void> {
-    if (!this.sceneManager || !this.world || this.isLoadingChapter) return;
-
-    this.isLoadingChapter = true;
+  private async loadLevel(): Promise<void> {
+    if (!this.sceneManager || !this.world) return;
 
     try {
       // Clear old size pickups and camera zones
       this.clearSizePickups();
       this.cameraController?.clearZones();
 
-      // Load the level
-      await this.sceneManager.loadLevel(chapterNumber);
+      // Load The Queen's Garden
+      await this.sceneManager.loadLevel();
 
       // Setup camera zones from level areas
       this.setupCameraZones();
@@ -308,7 +295,7 @@ export class Game {
       const npcs = this.sceneManager.getNPCs();
       this.npcController.setNPCs(npcs);
 
-      // Initialize quest system if level has quests
+      // Initialize quest system
       await this.initializeQuestSystem();
 
       // Wire up air currents for player physics
@@ -326,23 +313,18 @@ export class Game {
       // Setup ambient particles for atmosphere
       this.particleManager.createAmbientParticles(0xffeedd, 150);
 
-      // Setup rose petals for Queen's Garden (chapter 5)
-      if (chapterNumber === 5) {
-        const gardenBounds = new THREE.Box3(
-          new THREE.Vector3(-60, 0, -55),
-          new THREE.Vector3(65, 20, 20)
-        );
-        this.particleManager.createRosePetals(gardenBounds, 100);
+      // Setup rose petals for Queen's Garden
+      const gardenBounds = new THREE.Box3(
+        new THREE.Vector3(-60, 0, -55),
+        new THREE.Vector3(65, 20, 20)
+      );
+      this.particleManager.createRosePetals(gardenBounds, 100);
 
-        // Setup foliage wind animation for garden assets
-        this.setupGardenFoliage();
-      } else {
-        this.particleManager.stopRosePetals();
-        this.foliageAnimator.clear();
-      }
+      // Setup foliage wind animation
+      this.setupGardenFoliage();
 
-      // Update music mood for chapter
-      musicManager.setChapterMood(chapterNumber);
+      // Set garden music mood
+      musicManager.setGardenMood();
 
       // Add size pickups for the level
       this.setupSizePickups();
@@ -356,15 +338,7 @@ export class Game {
       // Sync cel-shader lighting after level loads
       this.syncCelShaderLighting();
     } catch (error) {
-      console.error(`Failed to load chapter ${chapterNumber}:`, error);
-      // Fall back to chapter 1 if not already on it
-      if (chapterNumber !== 1) {
-        console.log('Falling back to chapter 1');
-        this.isLoadingChapter = false;
-        await this.loadChapter(1);
-      }
-    } finally {
-      this.isLoadingChapter = false;
+      console.error(`Failed to load The Queen's Garden:`, error);
     }
   }
 
@@ -387,9 +361,8 @@ export class Game {
       return;
     }
 
-    // Create QuestManager
-    const chapterNumber = this.sceneManager.getCurrentChapterNumber();
-    this.questManager = new QuestManager(chapterNumber);
+    // Create QuestManager for The Queen's Garden
+    this.questManager = new QuestManager();
     this.questManager.initialize(quests, npcData);
 
     // Connect to NPCController
@@ -1002,19 +975,6 @@ export class Game {
     }
     this.wasMutePressed = isMutePressed;
 
-    // Debug: Jump to chapter (1-5 keys)
-    let chapterKeyPressed = '';
-    for (let i = 1; i <= 5; i++) {
-      if (this.input.isKeyDown(i.toString())) {
-        chapterKeyPressed = i.toString();
-        break;
-      }
-    }
-    if (chapterKeyPressed && chapterKeyPressed !== this.lastChapterKey) {
-      this.loadChapter(parseInt(chapterKeyPressed));
-    }
-    this.lastChapterKey = chapterKeyPressed;
-
     // Size controls (Q to shrink, R to grow - E is reserved for interact)
     if (this.input.isKeyDown('q')) {
       this.sizeManager.shrink();
@@ -1157,11 +1117,10 @@ export class Game {
       <p style="margin:0"><b>WASD</b> - Move</p>
       <p style="margin:5px 0"><b>Arrow Keys</b> - Camera</p>
       <p style="margin:5px 0"><b>Space</b> - Jump</p>
+      <p style="margin:5px 0"><b>Shift</b> - Ground Pound</p>
       <p style="margin:5px 0"><b>Q/R</b> - Shrink/Grow</p>
       <p style="margin:5px 0"><b>E</b> - Talk to NPCs</p>
       <p style="margin:5px 0"><b>M</b> - Mute</p>
-      <p style="margin:5px 0"><b>1-5</b> - Jump to Chapter</p>
-      <p style="margin:5px 0"><b>\`</b> - Performance Stats</p>
     `;
     document.body.appendChild(this.instructionsDiv);
   }
