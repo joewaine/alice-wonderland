@@ -91,6 +91,13 @@ export class CameraController {
   private shakeOffset: THREE.Vector3 = new THREE.Vector3();
   private readonly SHAKE_DECAY = 0.88;  // How quickly shake fades
 
+  // FOV kick state
+  private baseFOV: number = 60;
+  private currentFOV: number = 60;
+  private targetFOV: number = 60;
+  private fovKickDuration: number = 0;
+  private fovKickTimer: number = 0;
+
   // Bound event handlers (stored for removal in dispose)
   private handleMouseDown = (e: MouseEvent): void => {
     if (e.button === 2) {
@@ -145,6 +152,11 @@ export class CameraController {
 
     // Default collision groups - interact with everything
     this.collisionGroups = 0xffffffff;
+
+    // Store the camera's initial FOV as base
+    this.baseFOV = camera.fov;
+    this.currentFOV = camera.fov;
+    this.targetFOV = camera.fov;
 
     // Setup mouse events for right-click drag
     this.setupMouseEvents();
@@ -312,6 +324,29 @@ export class CameraController {
       this.shakeIntensity *= this.SHAKE_DECAY;
     }
 
+    // Update FOV kick effect
+    if (this.currentFOV !== this.baseFOV || this.targetFOV !== this.baseFOV) {
+      // First, lerp quickly toward target FOV (the kick)
+      if (Math.abs(this.currentFOV - this.targetFOV) > 0.1) {
+        this.currentFOV = THREE.MathUtils.lerp(this.currentFOV, this.targetFOV, 0.3);
+      } else {
+        this.currentFOV = this.targetFOV;
+      }
+
+      // Then, after kick timer, return to base
+      this.fovKickTimer += dt;
+      if (this.fovKickTimer >= this.fovKickDuration * 0.3) {
+        // Start returning to base FOV
+        this.targetFOV = this.baseFOV;
+      }
+
+      // Apply FOV to camera
+      if (Math.abs(this.camera.fov - this.currentFOV) > 0.01) {
+        this.camera.fov = this.currentFOV;
+        this.camera.updateProjectionMatrix();
+      }
+    }
+
     // Look at player (slightly above center) - uses pre-allocated vector
     this.lookAtCache.set(
       playerPos.x,
@@ -379,6 +414,17 @@ export class CameraController {
   shake(intensity: number): void {
     // Add to existing shake if already shaking, capped at max
     this.shakeIntensity = Math.min(1.0, this.shakeIntensity + intensity);
+  }
+
+  /**
+   * Kick the FOV for speed/impact effects
+   * @param targetFOV - FOV to kick to (e.g., 68 for speed boost)
+   * @param duration - Time to return to base FOV (seconds)
+   */
+  kickFOV(targetFOV: number, duration: number): void {
+    this.targetFOV = targetFOV;
+    this.fovKickDuration = duration;
+    this.fovKickTimer = 0;
   }
 
   /**
