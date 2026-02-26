@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import type { NPCObject } from '../world/LevelBuilder';
 import { DialogueUI } from './DialogueUI';
 import type { QuestManager } from '../quests/QuestManager';
+import type { ParticleManager } from '../effects/ParticleManager';
 
 export class NPCController {
   private npcs: NPCObject[] = [];
@@ -49,6 +50,11 @@ export class NPCController {
 
   // Performance: Mesh cache for avoiding traversal
   private meshCache: Map<NPCObject, THREE.Mesh[]> = new Map();
+
+  // Proximity particle effect
+  private particleManager: ParticleManager | null = null;
+  private lastProximityParticleTime: Map<NPCObject, number> = new Map();
+  private readonly PROXIMITY_PARTICLE_INTERVAL = 0.5;  // Seconds between particle spawns per NPC
 
   constructor(questManager?: QuestManager) {
     this.questManager = questManager || null;
@@ -227,6 +233,21 @@ export class NPCController {
 
       // Bob up and down when visible (local coordinates)
       sprite.position.y = 2.5 + (shouldShow ? Math.sin(this.bobTime) * 0.15 : 0);
+    }
+
+    // Spawn proximity glow particles for NPCs within talk range
+    if (this.particleManager && !this.dialogueUI.getIsVisible()) {
+      const now = performance.now() / 1000;
+      for (const npc of this.npcs) {
+        const distance = playerPosition.distanceTo(npc.position);
+        if (distance < this.interactDistance) {
+          const lastTime = this.lastProximityParticleTime.get(npc) || 0;
+          if (now - lastTime >= this.PROXIMITY_PARTICLE_INTERVAL) {
+            this.particleManager.createNPCProximityGlow(npc.position);
+            this.lastProximityParticleTime.set(npc, now);
+          }
+        }
+      }
     }
 
     // Show/hide interaction prompt
@@ -448,6 +469,13 @@ export class NPCController {
    */
   setQuestManager(questManager: QuestManager): void {
     this.questManager = questManager;
+  }
+
+  /**
+   * Set ParticleManager for proximity glow effects
+   */
+  setParticleManager(particleManager: ParticleManager): void {
+    this.particleManager = particleManager;
   }
 
   /**

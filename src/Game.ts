@@ -163,6 +163,9 @@ export class Game {
     // Particle effects
     this.particleManager = new ParticleManager(this.scene);
 
+    // Connect particle manager to NPC controller for proximity effects
+    this.npcController.setParticleManager(this.particleManager);
+
     // Foliage animation (wind sway)
     this.foliageAnimator = new FoliageAnimator();
 
@@ -772,6 +775,10 @@ export class Game {
       onSpeedBoost: () => {
         // FOV kick for speed effect - kick to 68 degrees, return over 0.4s
         this.cameraController?.kickFOV(68, 0.4);
+      },
+      onSpeedBoostActive: (position, direction) => {
+        // Trail particles while in speed boost zone
+        this.particleManager.createSpeedBoostTrail(position, direction);
       },
       onWaterEnter: (position) => {
         // High intensity splash when entering water
