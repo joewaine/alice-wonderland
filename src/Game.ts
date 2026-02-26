@@ -274,6 +274,16 @@ export class Game {
       audioManager.playGateUnlock();
     };
 
+    // Handle gate enter celebration (level complete)
+    this.sceneManager.onGateEnter = (position) => {
+      // Large spiral burst of golden particles
+      this.particleManager.createGateEnterCelebration(position);
+      // Strong screen shake for victory impact
+      this.cameraController?.shake(0.4);
+      // Big FOV kick (60 -> 75 degrees over 0.5s)
+      this.cameraController?.kickFOV(75, 0.5);
+    };
+
     // Handle collectible magnet drift particle effects
     this.sceneManager.onCollectibleMagnetDrift = (position, direction) => {
       this.particleManager.createMagnetTrail(position, direction);
@@ -376,6 +386,9 @@ export class Game {
 
       // Sync cel-shader lighting after level loads
       this.syncCelShaderLighting();
+
+      // Start ambient garden sounds
+      audioManager.startAmbience();
     } catch (error) {
       console.error(`Failed to load The Queen's Garden:`, error);
     }
@@ -553,10 +566,16 @@ export class Game {
       await this.sceneManager.fadeToBlack();
 
       // Respawn player
-      this.spawnPlayerAt(new THREE.Vector3(0, 5, 0));
+      const respawnPos = new THREE.Vector3(0, 5, 0);
+      this.spawnPlayerAt(respawnPos);
 
       // Play respawn sound
       audioManager.playRespawn();
+
+      // Visual effects for respawn
+      this.particleManager.createRespawnEffect(respawnPos);
+      this.cameraController?.shake(0.15);
+      this.cameraController?.kickFOV(58, 0.3);  // Brief FOV pull-in for "arrival" feel
 
       // Fade back in
       await this.sceneManager.fadeIn();
@@ -874,13 +893,16 @@ export class Game {
   }
 
   /**
-   * Clear size pickups
+   * Clear size pickups and stop ambient sounds
    */
   private clearSizePickups(): void {
     for (const pickup of this.sizePickups) {
       pickup.dispose(this.scene);
     }
     this.sizePickups = [];
+
+    // Stop ambient sounds when unloading level
+    audioManager.stopAmbience();
   }
 
   /**
@@ -1078,6 +1100,12 @@ export class Game {
       audioManager.setMuted(this.isMuted);
       musicManager.setMuted(this.isMuted);
       this.sceneManager?.setMuted(this.isMuted);
+      // Stop/start ambience based on mute state
+      if (this.isMuted) {
+        audioManager.stopAmbience();
+      } else {
+        audioManager.startAmbience();
+      }
     }
     this.wasMutePressed = isMutePressed;
 

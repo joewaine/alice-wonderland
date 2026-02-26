@@ -39,6 +39,7 @@ export class SceneManager {
   public onPlayerSpawn: ((position: THREE.Vector3) => void) | null = null;
   public onCollectiblePickup: ((type: string, position: THREE.Vector3) => void) | null = null;
   public onGateUnlock: ((position: THREE.Vector3) => void) | null = null;
+  public onGateEnter: ((position: THREE.Vector3) => void) | null = null;
   public onWonderStarCollected: ((star: WonderStar, collected: number, total: number) => void) | null = null;
   public onCollectibleMagnetDrift: ((position: THREE.Vector3, direction: THREE.Vector3) => void) | null = null;
 
@@ -376,6 +377,11 @@ export class SceneManager {
     if (!this.gate?.getIsUnlocked()) return;
 
     const stats = this.collectibleManager.getState();
+
+    // Trigger celebration effects (particles, screen shake, FOV kick)
+    if (this.onGateEnter) {
+      this.onGateEnter(this.currentLevel?.gatePosition || new THREE.Vector3());
+    }
 
     // Play celebration jingle
     audioManager.playChapterComplete();
