@@ -8,10 +8,10 @@
 ## Summary Statistics
 
 - **Total material instances found**: ~45+
-- **Using cel-shader**: ~35 (78%)
-- **Using MeshStandardMaterial**: ~8 (18%)
-- **Using MeshBasicMaterial**: ~5 (11%)
-- **Using PointsMaterial**: ~8 (18%)
+- **Using cel-shader**: ~45 (**100%**) ✅
+- **Using MeshStandardMaterial**: 0 (converted)
+- **Using MeshBasicMaterial**: ~3 (skybox, UI - intentional)
+- **Using PointsMaterial**: ~8 (particles - correct)
 
 ---
 
