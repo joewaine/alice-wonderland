@@ -847,7 +847,7 @@ export class Game {
         }
       },
       onJump: (isDoubleJump) => {
-        audioManager.playJump();
+        audioManager.playJump(isDoubleJump);
         // Different squash for double jump
         if (isDoubleJump) {
           this.targetSquash.set(0.7, 1.4, 0.7);
@@ -952,6 +952,14 @@ export class Game {
         // Camera effects: slight FOV dip and subtle shake
         this.cameraController?.kickFOV(56, 0.25);
         this.cameraController?.shake(0.15);
+      },
+      onWaterExit: (position) => {
+        // Lower intensity splash when exiting water
+        this.particleManager.createWaterSplash(position, 0.8);
+
+        // Camera effects: subtle FOV pop and small shake
+        this.cameraController?.kickFOV(62, 0.2);
+        this.cameraController?.shake(0.1);
       },
       onSwimmingSplash: (position) => {
         // Low intensity splash while swimming

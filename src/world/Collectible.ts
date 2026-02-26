@@ -30,6 +30,11 @@ export class CollectibleManager {
   private glowDistance: number = 4; // Distance at which glow starts
   private pulseTime: number = 0;
 
+  // Pulsing glow settings (constant attention-drawing pulse)
+  private pulseFrequency: number = 1.5; // Hz - pulses per second
+  private pulseIntensityMin: number = 0.3;
+  private pulseIntensityMax: number = 0.8;
+
   // Magnet attraction settings
   private magnetDistance: number = 3.5; // Distance at which magnet effect starts
   private magnetSpeedMin: number = 2; // Base drift speed
@@ -87,8 +92,8 @@ export class CollectibleManager {
    * Update collectible animations and check for pickups
    */
   update(dt: number, playerPosition: THREE.Vector3, playerRadius: number): void {
-    // Update pulse time for glow animation
-    this.pulseTime += dt * 4;
+    // Update pulse time for glow animation (2 * PI * frequency for proper Hz)
+    this.pulseTime += dt * Math.PI * 2 * this.pulseFrequency;
 
     for (const collectible of this.collectibles) {
       if (collectible.collected) continue;
@@ -133,36 +138,45 @@ export class CollectibleManager {
       // Re-check distance after potential drift for glow and collection
       const currentDistance = collectible.mesh.position.distanceTo(playerPosition);
 
-      // Hover glow effect based on distance
+      // Pulsing glow effect - always active to draw attention
       const cachedMeshes = this.meshCache.get(collectible) || [];
 
+      // Base pulsing intensity (sine wave between min and max)
+      const pulse = 0.5 + 0.5 * Math.sin(this.pulseTime);
+      const baseIntensity = this.pulseIntensityMin + pulse * (this.pulseIntensityMax - this.pulseIntensityMin);
+
+      // Enhance glow when player is close
+      let finalIntensity = baseIntensity;
+      let scale = 1;
+
       if (currentDistance < this.glowDistance) {
-        // Calculate glow intensity (stronger when closer)
+        // Calculate proximity boost (stronger when closer)
         const proximity = 1 - (currentDistance / this.glowDistance);
-        const pulse = 0.5 + 0.5 * Math.sin(this.pulseTime);
-        const intensity = proximity * (0.6 + pulse * 0.4);
-
-        // Apply to cached meshes (no traverse needed)
-        for (const mesh of cachedMeshes) {
-          const mat = mesh.material as THREE.MeshStandardMaterial;
-          if (mat.emissiveIntensity !== undefined) {
-            mat.emissiveIntensity = 0.3 + intensity;
-          }
-        }
-
+        // Add up to 0.4 extra intensity when very close
+        finalIntensity = baseIntensity + proximity * 0.4;
         // Scale up slightly when close
-        const scale = 1 + proximity * 0.15;
-        collectible.mesh.scale.setScalar(scale);
-      } else {
-        // Reset to default when far
-        for (const mesh of cachedMeshes) {
-          const mat = mesh.material as THREE.MeshStandardMaterial;
-          if (mat.emissiveIntensity !== undefined) {
-            mat.emissiveIntensity = 0.3;
-          }
-        }
-        collectible.mesh.scale.setScalar(1);
+        scale = 1 + proximity * 0.15;
       }
+
+      // Apply glow to cached meshes
+      for (const mesh of cachedMeshes) {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (mat.emissiveIntensity !== undefined) {
+          // Set emissive color based on collectible type if not already set
+          if (mat.emissive && mat.emissive.getHex() === 0x000000) {
+            // Cards default to red emissive
+            if (collectible.type === 'card') {
+              mat.emissive.setHex(0xff4444);
+            } else {
+              // Stars and keys get gold emissive
+              mat.emissive.setHex(0xffd700);
+            }
+          }
+          mat.emissiveIntensity = finalIntensity;
+        }
+      }
+
+      collectible.mesh.scale.setScalar(scale);
 
       if (currentDistance < pickupRadius) {
         this.collect(collectible);
