@@ -113,6 +113,11 @@ export class CameraController {
   private readonly DIALOGUE_PITCH_REDUCTION = 0.06; // Lower camera angle slightly (radians)
   private readonly DIALOGUE_FOCUS_SPEED = 3;        // Lerp speed for smooth transition
 
+  // Landing dip state - brief vertical dip on landing impact
+  private dipOffset: number = 0;           // Current dip amount (units)
+  private dipVelocity: number = 0;         // Recovery velocity
+  private readonly DIP_RECOVERY_SPEED = 40; // Spring-like recovery (units/s²)
+
   // Bound event handlers (stored for removal in dispose)
   private handleMouseDown = (e: MouseEvent): void => {
     if (e.button === 2) {
@@ -359,6 +364,21 @@ export class CameraController {
     // Apply position with smoothing
     this.camera.position.lerp(camPos, Math.min(1, this.config.followLerp * dt));
 
+    // Apply landing dip offset
+    if (Math.abs(this.dipOffset) > 0.001 || Math.abs(this.dipVelocity) > 0.001) {
+      // Spring-back recovery
+      this.dipVelocity += this.DIP_RECOVERY_SPEED * dt;
+      this.dipOffset += this.dipVelocity * dt;
+
+      // Clamp when recovered
+      if (this.dipOffset > 0) {
+        this.dipOffset = 0;
+        this.dipVelocity = 0;
+      }
+
+      this.camera.position.y += this.dipOffset;
+    }
+
     // Apply screen shake if active
     if (this.shakeIntensity > 0.001) {
       // Random offset based on intensity
@@ -521,6 +541,18 @@ export class CameraController {
    */
   setDialogueFocus(enabled: boolean): void {
     this.dialogueFocusEnabled = enabled;
+  }
+
+  /**
+   * Trigger a landing dip effect
+   * Briefly lowers the camera to emphasize landing impact
+   * @param intensity - Dip strength (0.3 = light, 0.6 = hard landing)
+   */
+  dip(intensity: number): void {
+    // Dip down by intensity * 0.3 units
+    const dipAmount = -intensity * 0.3;
+    this.dipOffset = dipAmount;
+    this.dipVelocity = 0;  // Start from rest, spring back naturally
   }
 
   /**

@@ -104,6 +104,10 @@ export class Game {
   private targetSquash: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
   private currentSquash: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
 
+  // Breathing animation (idle state)
+  private breathingPhase: number = 0;
+  private readonly BREATHING_FREQUENCY: number = 0.5; // Hz (cycles per second)
+
   // Sun light reference for cel-shader sync
   private sunLight: THREE.DirectionalLight | null = null;
 
@@ -129,6 +133,10 @@ export class Game {
 
   // Hitstop effect (freeze frames on ground pound impact)
   private hitstopRemaining: number = 0;
+
+  // Bounce pad detection
+  private prevVerticalVelocity: number = 0;
+  private bouncePadCooldown: number = 0;
 
   constructor() {
     // Create renderer - BasicShadowMap for hard cel-shaded shadows
@@ -815,6 +823,16 @@ export class Game {
           }
         }
         this.targetSquash.set(1.3, 0.7, 1.3);
+
+        // Camera dip based on fall speed
+        if (fallSpeed >= 15) {
+          // Hard landing
+          this.cameraController?.dip(0.6);
+        } else if (fallSpeed >= 8) {
+          // Medium landing
+          this.cameraController?.dip(0.3);
+        }
+        // Light landing (fallSpeed < 8): no dip
       },
       onGroundPound: () => {
         // Strong squash and screen shake
@@ -1151,14 +1169,69 @@ export class Game {
       // Update skeletal animation
       this.playerController.updateAnimation(dt);
 
+      // Bounce pad detection: detect velocity reversal while near a bouncy platform
+      const vel = this.playerBody.linvel();
+      if (this.bouncePadCooldown > 0) {
+        this.bouncePadCooldown -= dt;
+      } else if (this.prevVerticalVelocity < -2 && vel.y > 2 && this.sceneManager) {
+        // Velocity went from falling to rising - check if near a bouncy platform
+        const playerPos = this.playerBody.translation();
+        this.tempPosCache.set(playerPos.x, playerPos.y, playerPos.z);
+
+        for (const platform of this.sceneManager.getBouncyPlatforms()) {
+          const mesh = platform.mesh;
+          const bounds = new THREE.Box3().setFromObject(mesh);
+          // Expand bounds slightly for detection
+          bounds.expandByScalar(0.5);
+
+          if (this.tempPosCache.x >= bounds.min.x && this.tempPosCache.x <= bounds.max.x &&
+              this.tempPosCache.z >= bounds.min.z && this.tempPosCache.z <= bounds.max.z &&
+              this.tempPosCache.y >= bounds.max.y - 1 && this.tempPosCache.y <= bounds.max.y + 2) {
+            // Player bounced off this platform - create particle effect
+            this.particleManager.createBouncePadEffect(this.tempPosCache);
+            this.bouncePadCooldown = 0.3;  // Cooldown to prevent multiple effects
+            // Squash effect for bounce
+            this.targetSquash.set(1.3, 0.8, 1.3);
+            break;
+          }
+        }
+      }
+      this.prevVerticalVelocity = vel.y;
+
       // Return to normal squash when grounded and not jumping
+      // Apply subtle breathing animation when idle
       if (this.playerController.getIsGrounded() && !this.input.jump) {
-        this.targetSquash.set(1, 1, 1);
+        // Reuse velocity from bounce detection above
+        const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+        const hasInput = this.input.forward || this.input.backward ||
+                         this.input.left || this.input.right;
+
+        // Idle state: grounded, no input, low velocity
+        if (!hasInput && horizontalSpeed < 0.5) {
+          // Update breathing phase
+          this.breathingPhase += dt * this.BREATHING_FREQUENCY * Math.PI * 2;
+          if (this.breathingPhase > Math.PI * 2) {
+            this.breathingPhase -= Math.PI * 2;
+          }
+
+          // Subtle breathing oscillation
+          // Scale Y: 1.0 to 1.02 (very subtle)
+          // Scale XZ: inverse (1.0 to 0.99)
+          const breathAmount = Math.sin(this.breathingPhase);
+          const scaleY = 1.0 + breathAmount * 0.02;
+          const scaleXZ = 1.0 - breathAmount * 0.01;
+
+          this.targetSquash.set(scaleXZ, scaleY, scaleXZ);
+        } else {
+          // Moving - reset breathing and return to normal
+          this.breathingPhase = 0;
+          this.targetSquash.set(1, 1, 1);
+        }
       }
 
       // Footstep dust particles when walking on ground
       if (this.playerController.getIsGrounded()) {
-        const vel = this.playerBody.linvel();
+        // Reuse velocity from bounce detection above
         const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
         if (horizontalSpeed > 2) {  // Only when moving at decent speed
           const pos = this.playerBody.translation();
