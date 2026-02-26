@@ -142,26 +142,78 @@ export class DialogueUI {
     }, autoDismissMs);
   }
 
+  // Character color palette for placeholder portraits
+  private readonly CHARACTER_COLORS: Record<string, [string, string]> = {
+    // Royalty - rich reds and golds
+    'queen': ['#DC143C', '#8B0000'],      // Crimson
+    'king': ['#FFD700', '#B8860B'],        // Gold
+    'knave': ['#C71585', '#8B008B'],       // MediumVioletRed
+    // Card Painters - playing card theme
+    'card': ['#2F4F4F', '#1C1C1C'],        // DarkSlateGray
+    // Mad Tea Party - whimsical purples/teals
+    'hatter': ['#9932CC', '#4B0082'],      // DarkOrchid
+    'march': ['#20B2AA', '#008080'],       // LightSeaGreen
+    'dormouse': ['#DEB887', '#8B7355'],    // BurlyWood
+    // Wonderland creatures
+    'cheshire': ['#FF69B4', '#C71585'],    // HotPink
+    'white rabbit': ['#F5F5DC', '#B0A090'],// Beige
+    'rabbit': ['#F5F5DC', '#B0A090'],      // Beige
+    'flamingo': ['#FF6B6B', '#FF1493'],    // Coral/DeepPink
+    'hedgehog': ['#8B4513', '#5D3A1A'],    // SaddleBrown
+    // Caterpillar
+    'caterpillar': ['#32CD32', '#228B22'], // LimeGreen
+    // Tweedles
+    'tweedle': ['#4169E1', '#1E3A8A'],     // RoyalBlue
+  };
+
+  /**
+   * Get character colors based on name
+   */
+  private getCharacterColors(name: string): [string, string] {
+    const nameLower = name.toLowerCase();
+
+    for (const [key, colors] of Object.entries(this.CHARACTER_COLORS)) {
+      if (nameLower.includes(key)) {
+        return colors;
+      }
+    }
+
+    // Default purple for unknown characters
+    return ['#9370db', '#6b4e9e'];
+  }
+
   /**
    * Set a placeholder portrait with the character's initial
    */
   private setPlaceholderPortrait(name: string): void {
     const initial = name.charAt(0).toUpperCase();
+    const [colorLight, colorDark] = this.getCharacterColors(name);
+
     const canvas = document.createElement('canvas');
     canvas.width = 100;
     canvas.height = 100;
     const ctx = canvas.getContext('2d')!;
 
-    // Background gradient
+    // Background gradient with character-specific colors
     const gradient = ctx.createRadialGradient(50, 50, 0, 50, 50, 50);
-    gradient.addColorStop(0, '#9370db');
-    gradient.addColorStop(1, '#6b4e9e');
+    gradient.addColorStop(0, colorLight);
+    gradient.addColorStop(1, colorDark);
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(50, 50, 50, 0, Math.PI * 2);
     ctx.fill();
 
-    // Initial letter
+    // Add subtle border ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(50, 50, 46, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Initial letter with shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2;
     ctx.fillStyle = 'white';
     ctx.font = 'bold 48px Georgia';
     ctx.textAlign = 'center';

@@ -253,6 +253,28 @@
       "quest_ids": ["quest_paint_roses"]
     },
     {
+      "name": "King of Hearts",
+      "model_id": "king_of_hearts",
+      "position": { "x": 3, "y": 1, "z": -5 },
+      "dialogue": [
+        "Ah, yes. My dear wife does love her garden.",
+        "Between you and me, I prefer the roses white.",
+        "But shhh! Don't tell her I said that!",
+        "The croquet match should be quite exciting today."
+      ]
+    },
+    {
+      "name": "Knave of Hearts",
+      "model_id": "knave_of_hearts",
+      "position": { "x": -5, "y": 1, "z": -3 },
+      "dialogue": [
+        "I did NOT steal those tarts!",
+        "Well... maybe just one. Or two.",
+        "The Queen's tarts are simply irresistible!",
+        "If you find any tarts, perhaps... keep it between us?"
+      ]
+    },
+    {
       "name": "Card Painter Two",
       "model_id": "card_painter",
       "position": { "x": 6, "y": 1, "z": 6 },
@@ -272,6 +294,17 @@
         "Two always worries too much.",
         "I heard the Mad Hatter has extra paint at his tea party.",
         "But the path to the terrace is blocked by hedges..."
+      ]
+    },
+    {
+      "name": "Card Painter Seven",
+      "model_id": "card_painter",
+      "position": { "x": 0, "y": 1, "z": 8 },
+      "dialogue": [
+        "Don't look at me, this was Two's idea!",
+        "We should have used red roses from the start!",
+        "Five is no help at all, just standing there...",
+        "Quick, keep painting before the Queen sees!"
       ]
     },
     {

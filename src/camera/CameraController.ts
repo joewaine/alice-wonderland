@@ -86,6 +86,11 @@ export class CameraController {
   private idealPosCache: THREE.Vector3 = new THREE.Vector3();
   private lookAtCache: THREE.Vector3 = new THREE.Vector3();
 
+  // Screen shake state
+  private shakeIntensity: number = 0;
+  private shakeOffset: THREE.Vector3 = new THREE.Vector3();
+  private readonly SHAKE_DECAY = 0.88;  // How quickly shake fades
+
   // Bound event handlers (stored for removal in dispose)
   private handleMouseDown = (e: MouseEvent): void => {
     if (e.button === 2) {
@@ -293,6 +298,20 @@ export class CameraController {
     // Apply position with smoothing
     this.camera.position.lerp(camPos, Math.min(1, this.config.followLerp * dt));
 
+    // Apply screen shake if active
+    if (this.shakeIntensity > 0.001) {
+      // Random offset based on intensity
+      this.shakeOffset.set(
+        (Math.random() - 0.5) * this.shakeIntensity * 0.8,
+        (Math.random() - 0.5) * this.shakeIntensity * 0.5,
+        (Math.random() - 0.5) * this.shakeIntensity * 0.8
+      );
+      this.camera.position.add(this.shakeOffset);
+
+      // Decay shake intensity
+      this.shakeIntensity *= this.SHAKE_DECAY;
+    }
+
     // Look at player (slightly above center) - uses pre-allocated vector
     this.lookAtCache.set(
       playerPos.x,
@@ -351,6 +370,15 @@ export class CameraController {
    */
   setZones(zones: CameraZone[]): void {
     this.zones = zones;
+  }
+
+  /**
+   * Trigger screen shake effect
+   * @param intensity - Shake strength (0.1 = subtle, 0.5 = strong, 1.0 = intense)
+   */
+  shake(intensity: number): void {
+    // Add to existing shake if already shaking, capped at max
+    this.shakeIntensity = Math.min(1.0, this.shakeIntensity + intensity);
   }
 
   /**
