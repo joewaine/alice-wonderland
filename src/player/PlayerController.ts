@@ -23,6 +23,9 @@ export interface PlayerControllerCallbacks {
   onLongJump?: () => void;
   onFootstep?: () => void;
   onSpeedBoost?: () => void;
+  onWaterEnter?: (position: THREE.Vector3, surfaceY: number) => void;
+  onSwimmingSplash?: (position: THREE.Vector3, surfaceY: number) => void;
+  onWallSlide?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
 }
 
 export interface AirCurrentZoneRef {
@@ -72,8 +75,19 @@ export class PlayerController {
 
   // Water/swimming state
   private inWater: boolean = false;
+  private wasInWater: boolean = false;
   private waterSurfaceY: number = 0;
   private currentWaterCurrent: THREE.Vector3 = new THREE.Vector3();
+  private swimmingSplashTimer: number = 0;
+  private readonly SWIMMING_SPLASH_INTERVAL: number = 0.4; // Seconds between swim splashes
+
+  // Wall slide state
+  private isWallSliding: boolean = false;
+  private wallSlideNormal: THREE.Vector3 = new THREE.Vector3();
+  private wallSlideTimer: number = 0;
+  private readonly WALL_SLIDE_PARTICLE_INTERVAL: number = 0.1; // Seconds between wall slide particles
+  private readonly WALL_CHECK_DISTANCE: number = 0.6; // Raycast distance for wall detection
+  private readonly WALL_SLIDE_GRAVITY_SCALE: number = 0.4; // Reduced gravity when wall sliding
 
   // Tuning constants - movement (snappy, responsive feel)
   private readonly GROUND_ACCEL = 1.8;      // Fast acceleration
@@ -133,9 +147,12 @@ export class PlayerController {
   // Pre-allocated objects to avoid per-frame allocations
   private playerPosCache: THREE.Vector3 = new THREE.Vector3();
   private callbackPosCache: THREE.Vector3 = new THREE.Vector3();
+  private wallNormalCache: THREE.Vector3 = new THREE.Vector3();
   private velocityCache: RAPIER.Vector3 | null = null;
   private groundCheckRay: RAPIER.Ray | null = null;
   private groundCheckDir: RAPIER.Vector3 | null = null;
+  private wallCheckRay: RAPIER.Ray | null = null;
+  private wallCheckDir: RAPIER.Vector3 | null = null;
 
   constructor(world: RAPIER.World, playerBody: RAPIER.RigidBody) {
     this.world = world;
@@ -147,6 +164,11 @@ export class PlayerController {
     this.groundCheckRay = new RAPIER.Ray(
       new RAPIER.Vector3(0, 0, 0),
       this.groundCheckDir
+    );
+    this.wallCheckDir = new RAPIER.Vector3(1, 0, 0);
+    this.wallCheckRay = new RAPIER.Ray(
+      new RAPIER.Vector3(0, 0, 0),
+      this.wallCheckDir
     );
   }
 
@@ -301,7 +323,7 @@ export class PlayerController {
 
     // Handle swimming if in water
     if (this.inWater) {
-      this.applySwimmingMovement(worldX, worldZ, input);
+      this.applySwimmingMovement(worldX, worldZ, input, dt);
       this.updateAnimationState();
       return;
     }
@@ -326,6 +348,9 @@ export class PlayerController {
     if (!this.isGrounded) {
       this.applyAirCurrents();
     }
+
+    // Check for wall slide (only when falling and not grounded)
+    this.checkWallSlide(dt);
 
     // Check for speed boosts
     this.checkSpeedBoosts();
@@ -444,9 +469,72 @@ export class PlayerController {
   }
 
   /**
+   * Check for wall slide and emit particles
+   * Wall slide occurs when: not grounded, falling (negative y velocity), and touching a wall
+   */
+  private checkWallSlide(dt: number): void {
+    // Only check when airborne and falling
+    if (this.isGrounded || this.isGroundPounding || this.inWater) {
+      this.isWallSliding = false;
+      this.wallSlideTimer = 0;
+      return;
+    }
+
+    const vel = this.playerBody.linvel();
+
+    // Must be falling (not rising from a jump)
+    if (vel.y > 0) {
+      this.isWallSliding = false;
+      this.wallSlideTimer = 0;
+      return;
+    }
+
+    // Check for wall contact
+    const wallNormal = this.checkWallContact();
+    if (wallNormal === null) {
+      this.isWallSliding = false;
+      this.wallSlideTimer = 0;
+      return;
+    }
+
+    // We're wall sliding!
+    this.isWallSliding = true;
+    this.wallSlideNormal.copy(wallNormal);
+
+    // Apply reduced gravity (slow the descent)
+    const reducedGravityVel = vel.y * this.WALL_SLIDE_GRAVITY_SCALE;
+    if (vel.y < reducedGravityVel) {
+      // Cap the fall speed when wall sliding
+      this.velocityCache!.x = vel.x;
+      this.velocityCache!.y = Math.max(vel.y, -5);  // Max fall speed when wall sliding
+      this.velocityCache!.z = vel.z;
+      this.playerBody.setLinvel(this.velocityCache!, true);
+    }
+
+    // Emit wall slide particles on a throttled interval
+    this.wallSlideTimer += dt;
+    if (this.wallSlideTimer >= this.WALL_SLIDE_PARTICLE_INTERVAL) {
+      this.wallSlideTimer = 0;
+
+      // Get position for particle spawn (at wall contact point)
+      const pos = this.playerBody.translation();
+      this.callbackPosCache.set(
+        pos.x - wallNormal.x * 0.5,  // Offset toward wall
+        pos.y,
+        pos.z - wallNormal.z * 0.5
+      );
+
+      this.callbacks.onWallSlide?.(this.callbackPosCache, this.wallSlideNormal);
+    }
+  }
+
+  /**
    * Check if player is in a water zone
    */
   private checkWaterZones(): void {
+    // Store previous state for entry detection
+    this.wasInWater = this.inWater;
+
     if (this.waterZones.length === 0) {
       this.inWater = false;
       return;
@@ -460,6 +548,15 @@ export class PlayerController {
         this.inWater = true;
         this.waterSurfaceY = zone.surfaceY;
         this.currentWaterCurrent.copy(zone.current);
+
+        // Detect water entry (just entered water)
+        if (!this.wasInWater) {
+          // Create splash position at water surface level
+          this.callbackPosCache.set(pos.x, this.waterSurfaceY, pos.z);
+          this.callbacks.onWaterEnter?.(this.callbackPosCache, this.waterSurfaceY);
+          // Reset swimming splash timer so we don't immediately spawn swim splash
+          this.swimmingSplashTimer = 0;
+        }
         return;
       }
     }
@@ -473,7 +570,8 @@ export class PlayerController {
   private applySwimmingMovement(
     inputX: number,
     inputZ: number,
-    input: InputManager
+    input: InputManager,
+    dt: number
   ): void {
     const pos = this.playerBody.translation();
 
@@ -528,6 +626,19 @@ export class PlayerController {
     // Reset jump count when in water (can jump out of water)
     if (pos.y > this.waterSurfaceY - 0.5) {
       this.jumpCount = 0;
+    }
+
+    // Swimming splash particles when moving near surface
+    const isNearSurface = pos.y > this.waterSurfaceY - 1.5;
+    const isMoving = horizSpeed > 2 || Math.abs(this.momentum.y) > 1;
+
+    if (isNearSurface && isMoving) {
+      this.swimmingSplashTimer += dt;
+      if (this.swimmingSplashTimer >= this.SWIMMING_SPLASH_INTERVAL) {
+        this.callbackPosCache.set(pos.x, this.waterSurfaceY, pos.z);
+        this.callbacks.onSwimmingSplash?.(this.callbackPosCache, this.waterSurfaceY);
+        this.swimmingSplashTimer = 0;
+      }
     }
   }
 
@@ -654,6 +765,41 @@ export class PlayerController {
   }
 
   /**
+   * Check for wall contact using horizontal raycasts
+   * Returns wall normal if touching a wall, null otherwise
+   */
+  private checkWallContact(): THREE.Vector3 | null {
+    const pos = this.playerBody.translation();
+
+    // Check 4 cardinal directions for wall contact
+    const directions = [
+      { x: 1, z: 0 },   // Right
+      { x: -1, z: 0 },  // Left
+      { x: 0, z: 1 },   // Forward
+      { x: 0, z: -1 },  // Back
+    ];
+
+    for (const dir of directions) {
+      this.wallCheckRay!.origin.x = pos.x;
+      this.wallCheckRay!.origin.y = pos.y;
+      this.wallCheckRay!.origin.z = pos.z;
+      this.wallCheckDir!.x = dir.x;
+      this.wallCheckDir!.z = dir.z;
+      this.wallCheckRay!.dir = this.wallCheckDir!;
+
+      const hit = this.world.castRay(this.wallCheckRay!, this.WALL_CHECK_DISTANCE, true);
+      if (hit !== null) {
+        // Return the opposite of the raycast direction as the wall normal
+        // (the normal points away from the wall)
+        this.wallNormalCache.set(-dir.x, 0, -dir.z);
+        return this.wallNormalCache;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Get current horizontal speed
    */
   getSpeed(): number {
@@ -696,6 +842,13 @@ export class PlayerController {
   }
 
   /**
+   * Check if wall sliding
+   */
+  getIsWallSliding(): boolean {
+    return this.isWallSliding;
+  }
+
+  /**
    * Reset state (for respawning)
    */
   reset(): void {
@@ -703,8 +856,10 @@ export class PlayerController {
     this.jumpCount = 0;
     this.isGroundPounding = false;
     this.isLongJumping = false;
+    this.isWallSliding = false;
     this.groundPoundLockout = 0;
     this.landingLockout = 0;
+    this.wallSlideTimer = 0;
     this.animationManager?.setState('idle');
   }
 
