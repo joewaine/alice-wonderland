@@ -10,6 +10,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { InputManager } from './engine/InputManager';
 import { SceneManager } from './engine/SceneManager';
 import { SizeManager } from './player/SizeManager';
+import { PlayerController } from './player/PlayerController';
 import { SizePickup } from './world/SizePickup';
 import { NPCController } from './npcs/NPCController';
 import { ParticleManager } from './effects/ParticleManager';
@@ -43,6 +44,7 @@ export class Game {
   private playerBody: RAPIER.RigidBody | null = null;
   private playerMesh: THREE.Object3D | null = null;
   private sizeManager: SizeManager | null = null;
+  private playerController: PlayerController | null = null;
 
   // Size pickups (spawned per level)
   private sizePickups: SizePickup[] = [];
@@ -57,9 +59,9 @@ export class Game {
   private mainMenu: MainMenu;
   private loadingScreen: LoadingScreen;
 
-  // Current player config
-  private moveSpeed: number = 8;
-  private jumpForce: number = 12;
+  // Current player config (used by SizeManager callback)
+  private baseSpeed: number = 14;
+  private baseJump: number = 14;
 
   // Third-person camera settings
   private cameraYaw: number = 0;
@@ -73,14 +75,9 @@ export class Game {
   // Audio state
   private isMuted: boolean = false;
   private wasMutePressed: boolean = false;
-  private footstepTimer: number = 0;
-  private footstepInterval: number = 0.35; // Seconds between footsteps
 
   // Respawn state
   private isRespawning: boolean = false;
-
-  // Landing detection
-  private wasAirborne: boolean = false;
 
   // Chapter switch debounce
   private lastChapterKey: string = '';
@@ -246,6 +243,10 @@ export class Game {
       const npcs = this.sceneManager.getNPCs();
       this.npcController.setNPCs(npcs);
 
+      // Wire up air currents for player physics
+      const airCurrentZones = this.sceneManager.getAirCurrentZones();
+      this.playerController?.setAirCurrentZones(airCurrentZones);
+
       // Setup ambient particles for atmosphere
       this.particleManager.createAmbientParticles(0xffeedd, 150);
 
@@ -390,10 +391,14 @@ export class Game {
     this.sizeManager.setPlayerMesh(this.playerMesh);
 
     this.sizeManager.onSizeChange = (size, config) => {
-      this.moveSpeed = config.moveSpeed;
-      this.jumpForce = config.jumpForce;
       this.cameraDistance = 8 * config.scale;
       this.cameraHeightOffset = 2 * config.scale;
+
+      // Update player controller multipliers and ground check
+      const speedMult = config.moveSpeed / this.baseSpeed;
+      const jumpMult = config.jumpForce / this.baseJump;
+      this.playerController?.setMultipliers(speedMult, jumpMult);
+      this.playerController?.setGroundCheckDistance(config.capsuleHeight + 0.6);
 
       // Particle effect and audio on size change
       if (this.playerBody) {
@@ -411,6 +416,47 @@ export class Game {
       // Update HUD size indicator
       this.sceneManager?.updateSize(size);
     };
+
+    // Player controller with momentum physics
+    this.playerController = new PlayerController(this.world, this.playerBody);
+    this.playerController.setCallbacks({
+      onJump: (isDoubleJump) => {
+        audioManager.playJump();
+        // Different squash for double jump
+        if (isDoubleJump) {
+          this.targetSquash.set(0.7, 1.4, 0.7);
+        } else {
+          this.targetSquash.set(0.8, 1.3, 0.8);
+        }
+      },
+      onLand: (fallSpeed) => {
+        audioManager.playLand();
+        if (this.playerBody) {
+          const pos = this.playerBody.translation();
+          const landPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+          const intensity = Math.min(fallSpeed / 15, 1.5);
+          if (intensity > 0.2) {
+            this.particleManager.createLandingDust(landPos, intensity);
+          }
+        }
+        this.targetSquash.set(1.3, 0.7, 1.3);
+      },
+      onGroundPound: () => {
+        // Strong squash and screen shake
+        this.targetSquash.set(1.5, 0.5, 1.5);
+        audioManager.playLand(); // Use land sound for now
+      },
+      onLongJump: () => {
+        audioManager.playJump();
+        this.targetSquash.set(0.6, 1.2, 1.4); // Stretch forward
+      },
+      onFootstep: () => {
+        audioManager.playFootstep();
+      },
+    });
+
+    // Initialize ground check distance for normal size
+    this.playerController.setGroundCheckDistance(0.5 + 0.6);
 
     this.camera.position.set(0, 5, 10);
   }
@@ -552,78 +598,15 @@ export class Game {
     if (this.input.lookDown) this.cameraPitch += cameraSpeed * 0.5;
     this.cameraPitch = Math.max(0.1, Math.min(1.2, this.cameraPitch));
 
-    // Movement
-    const vel = this.playerBody.linvel();
-    let moveX = 0;
-    let moveZ = 0;
+    // Update player controller (momentum-based movement, jumps, etc.)
+    if (this.playerController) {
+      this.playerController.setCameraYaw(this.cameraYaw);
+      this.playerController.update(dt, this.input);
 
-    if (this.input.forward) moveZ -= 1;
-    if (this.input.backward) moveZ += 1;
-    if (this.input.left) moveX -= 1;
-    if (this.input.right) moveX += 1;
-
-    const length = Math.sqrt(moveX * moveX + moveZ * moveZ);
-    if (length > 0) {
-      moveX /= length;
-      moveZ /= length;
-    }
-
-    const cos = Math.cos(-this.cameraYaw);
-    const sin = Math.sin(-this.cameraYaw);
-    const worldX = moveX * cos - moveZ * sin;
-    const worldZ = moveX * sin + moveZ * cos;
-
-    this.playerBody.setLinvel(
-      new RAPIER.Vector3(worldX * this.moveSpeed, vel.y, worldZ * this.moveSpeed),
-      true
-    );
-
-    // Footstep sounds when moving and grounded
-    const isMoving = length > 0;
-    if (isMoving && this.isGrounded()) {
-      this.footstepTimer += dt;
-      if (this.footstepTimer >= this.footstepInterval) {
-        audioManager.playFootstep();
-        this.footstepTimer = 0;
+      // Return to normal squash when grounded and not jumping
+      if (this.playerController.getIsGrounded() && !this.input.jump) {
+        this.targetSquash.set(1, 1, 1);
       }
-    } else {
-      this.footstepTimer = 0;
-    }
-
-    // Jumping
-    const grounded = this.isGrounded();
-    if (this.input.jump && grounded) {
-      this.playerBody.setLinvel(
-        new RAPIER.Vector3(vel.x, this.jumpForce, vel.z),
-        true
-      );
-      audioManager.playJump();
-      // Stretch on jump
-      this.targetSquash.set(0.8, 1.3, 0.8);
-    }
-
-    // Landing detection
-    if (grounded && this.wasAirborne) {
-      // Just landed - play sound and create dust
-      audioManager.playLand();
-      const pos = this.playerBody.translation();
-      const landPos = new THREE.Vector3(pos.x, pos.y, pos.z);
-
-      // Intensity based on fall velocity (clamped)
-      const fallSpeed = Math.abs(vel.y);
-      const intensity = Math.min(fallSpeed / 15, 1.5);
-      if (intensity > 0.2) {
-        this.particleManager.createLandingDust(landPos, intensity);
-      }
-
-      // Squash on landing
-      this.targetSquash.set(1.3, 0.7, 1.3);
-    }
-    this.wasAirborne = !grounded;
-
-    // Return to normal when grounded
-    if (grounded && !this.input.jump) {
-      this.targetSquash.set(1, 1, 1);
     }
 
     // Animate squash/stretch
@@ -692,26 +675,6 @@ export class Game {
     const pos = this.playerBody.translation();
     const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
     this.particleManager.update(dt, playerPos);
-  }
-
-  /**
-   * Ground check
-   */
-  private isGrounded(): boolean {
-    if (!this.playerBody || !this.world) return false;
-
-    const pos = this.playerBody.translation();
-    const ray = new RAPIER.Ray(
-      new RAPIER.Vector3(pos.x, pos.y, pos.z),
-      new RAPIER.Vector3(0, -1, 0)
-    );
-
-    const checkDistance = this.sizeManager
-      ? this.sizeManager.config.capsuleHeight + 0.6
-      : 1.1;
-
-    const hit = this.world.castRay(ray, checkDistance, true);
-    return hit !== null;
   }
 
   /**
