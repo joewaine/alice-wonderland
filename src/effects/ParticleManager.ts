@@ -107,43 +107,66 @@ export class ParticleManager {
 
   /**
    * Burst effect for size changes
+   * @param position - Player position
+   * @param growing - true for grow (pink/red, expand outward), false for shrink (blue/purple, collapse inward)
    */
   createSizeChangeBurst(
     position: THREE.Vector3,
-    type: 'shrink' | 'grow'
+    growing: boolean
   ): void {
-    const color = type === 'shrink' ? 0xff69b4 : 0x9370db; // Pink for shrink, purple for grow
-    const count = 30;
+    const count = 24;
 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
     const velocities = new Float32Array(count * 3);
     const lifetimes = new Float32Array(count);
 
+    // Color palettes based on growing/shrinking
+    const burstColors = growing
+      ? [new THREE.Color(0xFF69B4), new THREE.Color(0xFF1493)]  // Pink/red for growing
+      : [new THREE.Color(0x4169E1), new THREE.Color(0x9370DB)]; // Blue/purple for shrinking
+
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = position.x;
+      // Ring pattern - particles start around the player
+      const angle = (i / count) * Math.PI * 2;
+      const ringRadius = growing ? 0.3 : 1.5;  // Start close if growing, far if shrinking
+
+      positions[i * 3] = position.x + Math.cos(angle) * ringRadius;
       positions[i * 3 + 1] = position.y;
-      positions[i * 3 + 2] = position.z;
+      positions[i * 3 + 2] = position.z + Math.sin(angle) * ringRadius;
 
-      // Burst direction
-      const angle = Math.random() * Math.PI * 2;
-      const speed = Math.random() * 3 + 2;
-      const upward = type === 'grow' ? Math.random() * 2 : -Math.random() * 2;
+      // Assign alternating colors
+      const color = burstColors[i % 2];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
 
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = upward + Math.random();
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+      // Velocity direction based on grow/shrink
+      const speed = 2.5 + Math.random() * 1.5;
+      if (growing) {
+        // Expand outward from center
+        velocities[i * 3] = Math.cos(angle) * speed;
+        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;  // Slight vertical variance
+        velocities[i * 3 + 2] = Math.sin(angle) * speed;
+      } else {
+        // Collapse inward toward center
+        velocities[i * 3] = -Math.cos(angle) * speed;
+        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;  // Slight vertical variance
+        velocities[i * 3 + 2] = -Math.sin(angle) * speed;
+      }
 
       lifetimes[i] = 1.0;
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-      color,
       size: 0.3,
       transparent: true,
       opacity: 1,
+      vertexColors: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
@@ -155,9 +178,10 @@ export class ParticleManager {
       points,
       velocities,
       lifetimes,
-      maxLife: 1.0,
+      maxLife: 0.6,  // 0.6 second duration
       isLooping: false,
-      elapsed: 0
+      elapsed: 0,
+      noGravity: true  // Float in place, no gravity
     });
   }
 
@@ -1275,11 +1299,11 @@ export class ParticleManager {
   }
 
   /**
-   * Gate enter celebration - large spiral burst of golden particles
+   * Gate enter celebration - triumphant spiral burst of golden particles with confetti
    * Victory moment when player enters the unlocked gate to complete the level
    */
   createGateEnterCelebration(position: THREE.Vector3): void {
-    const count = 80;
+    const count = 30;
 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
@@ -1287,13 +1311,14 @@ export class ParticleManager {
     const velocities = new Float32Array(count * 3);
     const lifetimes = new Float32Array(count);
 
-    // Golden celebration color palette
+    // Golden celebration color palette with subtle confetti accents
     const celebrationColors = [
-      new THREE.Color(0xFFD700),  // Gold
-      new THREE.Color(0xFFC125),  // Goldenrod
-      new THREE.Color(0xFFAA00),  // Orange gold
-      new THREE.Color(0xFFFFAA),  // Light gold/white
-      new THREE.Color(0xFFEE88),  // Pale gold
+      new THREE.Color(0xFFD700),  // Gold (primary)
+      new THREE.Color(0xFFA500),  // Orange gold (primary)
+      new THREE.Color(0xFFEE88),  // Light gold
+      new THREE.Color(0xFF69B4),  // Hot pink (confetti)
+      new THREE.Color(0x00CED1),  // Dark cyan (confetti)
+      new THREE.Color(0x98FB98),  // Pale green (confetti)
     ];
 
     for (let i = 0; i < count; i++) {
@@ -1342,7 +1367,7 @@ export class ParticleManager {
       points,
       velocities,
       lifetimes,
-      maxLife: 1.5,  // Long lifetime for dramatic effect
+      maxLife: 1.2,  // Triumphant but not too long
       isLooping: false,
       elapsed: 0
       // Note: gravity applied by default for natural arcing motion
