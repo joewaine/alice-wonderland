@@ -35,6 +35,9 @@ export class SceneManager {
   private windTime: number = 0;
   private foliageMeshes: THREE.Object3D[] = [];
 
+  // Breakable platform stress tracking (maps platform index to stress time)
+  private breakablePlatformStress: Map<number, number> = new Map();
+
   // Callbacks
   public onPlayerSpawn: ((position: THREE.Vector3) => void) | null = null;
   public onCollectiblePickup: ((type: string, position: THREE.Vector3) => void) | null = null;
@@ -43,6 +46,7 @@ export class SceneManager {
   public onWonderStarCollected: ((star: WonderStar, collected: number, total: number) => void) | null = null;
   public onCollectibleMagnetDrift: ((position: THREE.Vector3, direction: THREE.Vector3) => void) | null = null;
   public onCheckpointActivated: ((checkpoint: { position: THREE.Vector3; order: number }) => void) | null = null;
+  public onBreakablePlatformStress: ((position: THREE.Vector3, intensity: number) => void) | null = null;
 
   constructor(scene: THREE.Scene, world: RAPIER.World, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
@@ -422,6 +426,9 @@ export class SceneManager {
 
     // Animate foliage wind
     this.updateWindAnimation(dt);
+
+    // Update breakable platforms (crumble warning effect)
+    this.updateBreakablePlatforms(dt, playerPosition);
   }
 
   /**
@@ -497,6 +504,60 @@ export class SceneManager {
 
       // Adjust position to keep top surface stable
       mesh.position.y = platform.baseY - platform.compressionAmount * 0.2;
+    }
+  }
+
+  /**
+   * Update breakable platforms - track stress and emit crumble particles
+   * When player stands on a breakable platform, it accumulates stress
+   * and sheds particles as a warning before breaking
+   */
+  private updateBreakablePlatforms(dt: number, playerPosition: THREE.Vector3): void {
+    if (!this.currentLevel) return;
+
+    const breakTime = 2.0;  // Seconds before platform breaks when stood on
+
+    for (let i = 0; i < this.currentLevel.breakablePlatforms.length; i++) {
+      const platform = this.currentLevel.breakablePlatforms[i];
+      if (platform.broken) continue;
+
+      // Check if player is on top of this breakable platform
+      const expandedBounds = platform.bounds.clone();
+      expandedBounds.max.y += 1.5;  // Check above platform surface
+      expandedBounds.min.y = platform.bounds.max.y - 0.2;  // Only top surface
+
+      const isOnPlatform = expandedBounds.containsPoint(playerPosition);
+
+      if (isOnPlatform) {
+        // Accumulate stress time
+        const currentStress = this.breakablePlatformStress.get(i) || 0;
+        const newStress = currentStress + dt;
+        this.breakablePlatformStress.set(i, newStress);
+
+        // Calculate intensity (0-1) based on how close to breaking
+        const intensity = Math.min(newStress / breakTime, 1);
+
+        // Emit crumble particles - position at platform center top
+        const platformCenter = new THREE.Vector3();
+        platform.bounds.getCenter(platformCenter);
+        platformCenter.y = platform.bounds.max.y;
+
+        if (this.onBreakablePlatformStress) {
+          this.onBreakablePlatformStress(platformCenter, intensity);
+        }
+
+        // Visual feedback: shake the platform mesh slightly
+        const shakeAmount = intensity * 0.03;
+        platform.mesh.position.x += (Math.random() - 0.5) * shakeAmount;
+        platform.mesh.position.z += (Math.random() - 0.5) * shakeAmount;
+      } else {
+        // Player left the platform - slowly reduce stress
+        const currentStress = this.breakablePlatformStress.get(i) || 0;
+        if (currentStress > 0) {
+          const newStress = Math.max(0, currentStress - dt * 0.5);  // Recover at half rate
+          this.breakablePlatformStress.set(i, newStress);
+        }
+      }
     }
   }
 

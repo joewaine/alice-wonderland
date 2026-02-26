@@ -342,6 +342,11 @@ export class Game {
       audioManager.playCheckpoint();
     };
 
+    // Handle breakable platform stress - crumble particle warning
+    this.sceneManager.onBreakablePlatformStress = (position, intensity) => {
+      this.particleManager.createCrumbleParticles(position, intensity);
+    };
+
     // Setup menu callbacks
     this.mainMenu.onStart = async () => {
       audioManager.init(); // Initialize audio on first user interaction
