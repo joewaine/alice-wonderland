@@ -118,6 +118,7 @@ export class Game {
   // Pre-allocated vectors to avoid per-frame GC pressure
   private playerPosCache: THREE.Vector3 = new THREE.Vector3();
   private tempPosCache: THREE.Vector3 = new THREE.Vector3();
+  private playerVelocityCache: THREE.Vector3 = new THREE.Vector3();
 
   // Quest system
   private questManager: QuestManager | null = null;
@@ -597,13 +598,20 @@ export class Game {
    * Handle player death - fade to black, respawn, fade back in
    */
   private async handleDeath(): Promise<void> {
-    if (!this.sceneManager || this.isRespawning) return;
+    if (!this.sceneManager || this.isRespawning || !this.playerBody) return;
 
     this.isRespawning = true;
 
     try {
+      // Capture death position for visual effect
+      const deathPos = this.playerBody.translation();
+      const deathPosition = new THREE.Vector3(deathPos.x, deathPos.y, deathPos.z);
+
       // Play falling sound
       audioManager.playFall();
+
+      // Death effect - dark particles dispersing at death location
+      this.particleManager.createDeathEffect(deathPosition);
 
       // Fade to black
       await this.sceneManager.fadeToBlack();
@@ -1342,7 +1350,14 @@ export class Game {
     // Update camera (handles wall collision, contextual zoom, smooth transitions)
     if (this.cameraController) {
       this.playerPosCache.set(pos.x, pos.y, pos.z);
-      this.cameraController.update(dt, this.playerPosCache, this.input);
+
+      // Get player velocity for camera look-ahead (copy to cache to avoid allocation)
+      if (this.playerController) {
+        const momentum = this.playerController.getMomentum();
+        this.playerVelocityCache.copy(momentum);
+      }
+
+      this.cameraController.update(dt, this.playerPosCache, this.input, this.playerVelocityCache);
 
       // Enable underwater wobble when player is below water surface
       const isUnderwater = this.playerController?.isUnderwater() ?? false;
