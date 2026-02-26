@@ -32,6 +32,7 @@ export interface PlayerControllerCallbacks {
   onWallSlide?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
   onWallJump?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
   onLedgeGrab?: (position: THREE.Vector3) => void;
+  onCrouch?: (isCrouching: boolean) => void;
 }
 
 export interface AirCurrentZoneRef {
@@ -113,6 +114,10 @@ export class PlayerController {
   private wasLedgeGrabbing: boolean = false;
   private ledgeGrabPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly LEDGE_CHECK_HEIGHT: number = 1.0; // Height above player to check for ledge
+
+  // Crouch state (for visual squash callback)
+  private isCrouching: boolean = false;
+  private wasCrouching: boolean = false;
   private readonly LEDGE_CHECK_DEPTH: number = 0.8; // Distance forward to check for ledge
   private ledgeCheckRay: RAPIER.Ray | null = null;
   private ledgeCheckDir: RAPIER.Vector3 | null = null;
@@ -144,9 +149,11 @@ export class PlayerController {
   private readonly COYOTE_TIME = 150; // ms - grace period after leaving ground
   private readonly JUMP_BUFFER_TIME = 100; // ms - store jump input
 
-  // Footstep timing
+  // Footstep timing - scales with movement speed
+  // Walking (~0.4s), running (~0.25s at RUN_SPEED_THRESHOLD), max speed (~0.18s)
   private footstepTimer: number = 0;
-  private readonly FOOTSTEP_INTERVAL = 0.3;
+  private readonly FOOTSTEP_INTERVAL_WALK = 0.4;    // Slow walking
+  private readonly FOOTSTEP_INTERVAL_MAX = 0.18;    // Max speed
 
   // Current surface type for footstep sounds
   private currentSurface: SurfaceType = 'grass';
@@ -388,9 +395,16 @@ export class PlayerController {
     }
 
     // Handle ground pound (crouch in air, not in water)
-    const isCrouching = input.isKeyDown('shift') || input.isKeyDown('control');
-    if (isCrouching && !this.isGrounded && !this.isGroundPounding && this.groundPoundLockout <= 0) {
+    const isCrouchingInput = input.isKeyDown('shift') || input.isKeyDown('control');
+    if (isCrouchingInput && !this.isGrounded && !this.isGroundPounding && this.groundPoundLockout <= 0) {
       this.startGroundPound();
+    }
+
+    // Track crouch state for visual squash (only when grounded)
+    this.wasCrouching = this.isCrouching;
+    this.isCrouching = isCrouchingInput && this.isGrounded;
+    if (this.isCrouching !== this.wasCrouching) {
+      this.callbacks.onCrouch?.(this.isCrouching);
     }
 
     // Skip normal movement during ground pound
@@ -433,12 +447,13 @@ export class PlayerController {
     this.checkSpeedBoosts();
 
     // Handle jumping
-    this.handleJump(input, isCrouching, now);
+    this.handleJump(input, isCrouchingInput, now);
 
-    // Handle footsteps
+    // Handle footsteps - interval scales with movement speed
     if (this.isGrounded && inputLength > 0) {
       this.footstepTimer += dt;
-      if (this.footstepTimer >= this.FOOTSTEP_INTERVAL) {
+      const footstepInterval = this.getFootstepInterval();
+      if (this.footstepTimer >= footstepInterval) {
         this.callbacks.onFootstep?.(this.currentSurface);
         this.footstepTimer = 0;
       }
@@ -1042,6 +1057,30 @@ export class PlayerController {
   }
 
   /**
+   * Get footstep interval based on current speed
+   * Faster movement = shorter interval between footsteps
+   */
+  private getFootstepInterval(): number {
+    const speed = this.getSpeed();
+
+    // Below walk threshold, use walk interval
+    if (speed <= this.WALK_SPEED_THRESHOLD) {
+      return this.FOOTSTEP_INTERVAL_WALK;
+    }
+
+    // At or above max speed, use max interval
+    if (speed >= this.MAX_SPEED) {
+      return this.FOOTSTEP_INTERVAL_MAX;
+    }
+
+    // Interpolate between walk and max based on speed
+    // Map speed from [WALK_SPEED_THRESHOLD, MAX_SPEED] to [0, 1]
+    const t = (speed - this.WALK_SPEED_THRESHOLD) / (this.MAX_SPEED - this.WALK_SPEED_THRESHOLD);
+    // Lerp from walk interval to max interval
+    return this.FOOTSTEP_INTERVAL_WALK + t * (this.FOOTSTEP_INTERVAL_MAX - this.FOOTSTEP_INTERVAL_WALK);
+  }
+
+  /**
    * Get current momentum for external use
    */
   getMomentum(): THREE.Vector3 {
@@ -1102,6 +1141,13 @@ export class PlayerController {
   }
 
   /**
+   * Check if crouching
+   */
+  getIsCrouching(): boolean {
+    return this.isCrouching;
+  }
+
+  /**
    * Reset state (for respawning)
    */
   reset(): void {
@@ -1111,6 +1157,8 @@ export class PlayerController {
     this.isLongJumping = false;
     this.isWallSliding = false;
     this.isLedgeGrabbing = false;
+    this.isCrouching = false;
+    this.wasCrouching = false;
     this.groundPoundLockout = 0;
     this.landingLockout = 0;
     this.wallSlideTimer = 0;

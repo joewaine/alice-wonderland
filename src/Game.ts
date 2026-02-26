@@ -979,6 +979,16 @@ export class Game {
         // Shimmer particles when grabbing a ledge
         this.particleManager.createLedgeGrabShimmer(position);
       },
+      onCrouch: (isCrouching) => {
+        // Visual squash when crouching on ground
+        if (isCrouching) {
+          // Squash: Y compressed (0.7), XZ wider (1.15)
+          this.targetSquash.set(1.15, 0.7, 1.15);
+        } else {
+          // Return to normal
+          this.targetSquash.set(1, 1, 1);
+        }
+      },
     });
 
     // Initialize ground check distance for normal size

@@ -14,10 +14,22 @@ export class DialogueUI {
   private textElement: HTMLDivElement;
   private isVisible: boolean = false;
   private dismissTimeout: number | null = null;
+  private styleElement: HTMLStyleElement | null = null;
 
   public onDismiss: (() => void) | null = null;
 
   constructor() {
+    // Inject pop-in animation keyframes
+    this.styleElement = document.createElement('style');
+    this.styleElement.textContent = `
+      @keyframes dialoguePopIn {
+        0% { transform: scale(0.8); opacity: 0; }
+        70% { transform: scale(1.05); opacity: 1; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(this.styleElement);
+
     // Create container
     this.container = document.createElement('div');
     this.container.style.cssText = `
@@ -68,6 +80,7 @@ export class DialogueUI {
     this.textWrapper.style.cssText = `
       flex: 1;
       min-width: 0;
+      transform-origin: left center;
     `;
     this.contentWrapper.appendChild(this.textWrapper);
 
@@ -130,6 +143,12 @@ export class DialogueUI {
 
     this.container.style.opacity = '1';
     this.isVisible = true;
+
+    // Trigger pop-in animation on text wrapper
+    this.textWrapper.style.animation = 'none';
+    // Force reflow to restart animation
+    void this.textWrapper.offsetHeight;
+    this.textWrapper.style.animation = 'dialoguePopIn 0.15s ease-out forwards';
 
     // Clear previous timeout
     if (this.dismissTimeout) {
@@ -257,5 +276,8 @@ export class DialogueUI {
       clearTimeout(this.dismissTimeout);
     }
     document.body.removeChild(this.container);
+    if (this.styleElement) {
+      document.head.removeChild(this.styleElement);
+    }
   }
 }
