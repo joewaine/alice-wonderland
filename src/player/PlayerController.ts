@@ -67,6 +67,9 @@ export class PlayerController {
   // Long jump state
   private isLongJumping: boolean = false;
 
+  // Landing lockout state (prevents instant re-jump after hard landings)
+  private landingLockout: number = 0;
+
   // Water/swimming state
   private inWater: boolean = false;
   private waterSurfaceY: number = 0;
@@ -90,6 +93,10 @@ export class PlayerController {
   // Tuning constants - ground pound
   private readonly GROUND_POUND_FORCE = -30;
   private readonly GROUND_POUND_LOCKOUT = 0.2; // seconds after landing
+
+  // Tuning constants - landing lockout
+  private readonly HARD_LANDING_THRESHOLD = 10; // fall speed that triggers lockout
+  private readonly LANDING_LOCKOUT_DURATION = 0.05; // 50ms lockout after hard landing
 
   // Tuning constants - timing
   private readonly COYOTE_TIME = 150; // ms - grace period after leaving ground
@@ -248,6 +255,9 @@ export class PlayerController {
     if (this.groundPoundLockout > 0) {
       this.groundPoundLockout -= dt;
     }
+    if (this.landingLockout > 0) {
+      this.landingLockout -= dt;
+    }
     if (this.boostCooldown > 0) {
       this.boostCooldown -= dt;
     }
@@ -261,6 +271,11 @@ export class PlayerController {
       this.callbacks.onLand?.(fallSpeed);
       // Trigger land animation
       this.animationManager?.setState('land');
+
+      // Apply landing lockout for hard landings to prevent instant re-jump
+      if (fallSpeed > this.HARD_LANDING_THRESHOLD) {
+        this.landingLockout = this.LANDING_LOCKOUT_DURATION;
+      }
     }
 
     // Get movement input
@@ -534,6 +549,11 @@ export class PlayerController {
     const hasBufferedJump = (now - this.jumpBufferTime) < this.JUMP_BUFFER_TIME;
     const wantsToJump = justPressed || hasBufferedJump;
 
+    // Ignore jump input during landing lockout (prevents instant re-jump after hard landings)
+    if (this.landingLockout > 0) {
+      return;
+    }
+
     // Long jump: crouch + jump while running fast
     const currentSpeed = Math.sqrt(this.momentum.x ** 2 + this.momentum.z ** 2);
     if (wantsToJump && isCrouching && (this.isGrounded || canCoyoteJump) &&
@@ -684,6 +704,7 @@ export class PlayerController {
     this.isGroundPounding = false;
     this.isLongJumping = false;
     this.groundPoundLockout = 0;
+    this.landingLockout = 0;
     this.animationManager?.setState('idle');
   }
 

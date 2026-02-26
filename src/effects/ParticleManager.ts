@@ -16,6 +16,7 @@ interface ParticleSystem {
   maxLife: number;
   isLooping: boolean;
   elapsed: number;
+  noGravity?: boolean;
 }
 
 export class ParticleManager {
@@ -396,6 +397,73 @@ export class ParticleManager {
   }
 
   /**
+   * Ground pound shockwave - expanding ring of particles
+   */
+  createGroundPoundShockwave(position: THREE.Vector3): void {
+    const count = 36;  // Ring of particles
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Gold/orange color palette
+    const shockwaveColors = [
+      new THREE.Color(0xFFAA33),  // Gold
+      new THREE.Color(0xFFCC66),  // Light gold
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start at impact point (at ground level)
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y - 0.5;  // Ground level
+      positions[i * 3 + 2] = position.z;
+
+      // Assign alternating gold colors
+      const color = shockwaveColors[i % 2];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Expand outward in a ring (no Y velocity)
+      const angle = (i / count) * Math.PI * 2;
+      const speed = 8 + Math.random() * 2;  // Fast outward expansion
+
+      velocities[i * 3] = Math.cos(angle) * speed;
+      velocities[i * 3 + 1] = 0;  // No vertical movement
+      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.35,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.35,  // Short lifetime (0.3-0.4s)
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Shockwave stays at ground level
+    });
+  }
+
+  /**
    * Gate unlock effect
    */
   createGateUnlockEffect(position: THREE.Vector3): void {
@@ -479,8 +547,10 @@ export class ParticleManager {
         arr[j * 3 + 1] += system.velocities[j * 3 + 1] * dt;
         arr[j * 3 + 2] += system.velocities[j * 3 + 2] * dt;
 
-        // Apply gravity
-        system.velocities[j * 3 + 1] -= dt * 5;
+        // Apply gravity (unless disabled for this system)
+        if (!system.noGravity) {
+          system.velocities[j * 3 + 1] -= dt * 5;
+        }
 
         // Update lifetime for fading
         system.lifetimes[j] -= dt / system.maxLife;
