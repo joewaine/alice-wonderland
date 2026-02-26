@@ -981,6 +981,103 @@ export class ParticleManager {
   }
 
   /**
+   * Respawn effect - expanding ring with upward sparkle burst
+   * White/cyan particles for magical reappearance feel
+   */
+  createRespawnEffect(position: THREE.Vector3): void {
+    const ringCount = 20;  // Expanding ring particles
+    const sparkleCount = 15;  // Upward sparkle burst
+    const totalCount = ringCount + sparkleCount;
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(totalCount * 3);
+    const colors = new Float32Array(totalCount * 3);
+    const velocities = new Float32Array(totalCount * 3);
+    const lifetimes = new Float32Array(totalCount);
+
+    // Respawn color palette (white to cyan)
+    const respawnColors = [
+      new THREE.Color(0xFFFFFF),  // White
+      new THREE.Color(0xAAEEFF),  // Light cyan
+      new THREE.Color(0x88DDFF),  // Cyan
+    ];
+
+    // Create expanding ring particles
+    for (let i = 0; i < ringCount; i++) {
+      // Start at respawn point (at feet level)
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y - 0.5;
+      positions[i * 3 + 2] = position.z;
+
+      // Assign random color
+      const color = respawnColors[Math.floor(Math.random() * respawnColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Expand outward in a ring
+      const angle = (i / ringCount) * Math.PI * 2;
+      const speed = 4 + Math.random() * 2;
+
+      velocities[i * 3] = Math.cos(angle) * speed;
+      velocities[i * 3 + 1] = Math.random() * 0.5;  // Slight upward
+      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    // Create upward sparkle burst
+    for (let i = ringCount; i < totalCount; i++) {
+      // Start at center of respawn point
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 1] = position.y;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
+
+      // Assign random color (more whites for sparkles)
+      const color = respawnColors[Math.floor(Math.random() * respawnColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Burst upward with slight spread
+      const angle = Math.random() * Math.PI * 2;
+      const spreadSpeed = Math.random() * 1.5;
+      const upwardSpeed = Math.random() * 4 + 3;
+
+      velocities[i * 3] = Math.cos(angle) * spreadSpeed;
+      velocities[i * 3 + 1] = upwardSpeed;
+      velocities[i * 3 + 2] = Math.sin(angle) * spreadSpeed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.25,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.6,  // 0.5-0.7s lifetime
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Sparkles float, ring expands without gravity
+    });
+  }
+
+  /**
    * Gate unlock effect
    */
   createGateUnlockEffect(position: THREE.Vector3): void {
@@ -1029,6 +1126,81 @@ export class ParticleManager {
       maxLife: 1.5,
       isLooping: false,
       elapsed: 0
+    });
+  }
+
+  /**
+   * Gate enter celebration - large spiral burst of golden particles
+   * Victory moment when player enters the unlocked gate to complete the level
+   */
+  createGateEnterCelebration(position: THREE.Vector3): void {
+    const count = 80;
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Golden celebration color palette
+    const celebrationColors = [
+      new THREE.Color(0xFFD700),  // Gold
+      new THREE.Color(0xFFC125),  // Goldenrod
+      new THREE.Color(0xFFAA00),  // Orange gold
+      new THREE.Color(0xFFFFAA),  // Light gold/white
+      new THREE.Color(0xFFEE88),  // Pale gold
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start at player position (gate center)
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.5;
+      positions[i * 3 + 1] = position.y + Math.random() * 0.5;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.5;
+
+      // Assign random celebration color
+      const color = celebrationColors[Math.floor(Math.random() * celebrationColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Spiral burst pattern - outward with strong upward motion
+      const angle = (i / count) * Math.PI * 4 + Math.random() * 0.5;  // Two full spirals
+      const heightPhase = i / count;  // Different heights in spiral
+      const outwardSpeed = Math.random() * 3 + 2;
+      const upwardSpeed = Math.random() * 5 + 4 + heightPhase * 3;  // Higher particles go faster up
+
+      // Add spiral rotation to velocity
+      const spiralOffset = Math.PI * 0.5;  // Perpendicular to outward direction
+      velocities[i * 3] = Math.cos(angle) * outwardSpeed + Math.cos(angle + spiralOffset) * 1.5;
+      velocities[i * 3 + 1] = upwardSpeed;
+      velocities[i * 3 + 2] = Math.sin(angle) * outwardSpeed + Math.sin(angle + spiralOffset) * 1.5;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.35,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 1.5,  // Long lifetime for dramatic effect
+      isLooping: false,
+      elapsed: 0
+      // Note: gravity applied by default for natural arcing motion
     });
   }
 
