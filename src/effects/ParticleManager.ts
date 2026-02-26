@@ -1201,6 +1201,10 @@ export class ParticleManager {
   private lastSwimmingBubblesTime: number = 0;
   private swimmingBubblesInterval: number = 0.2;  // 200ms between bubble spawns
 
+  // Ambient dust throttling
+  private lastAmbientDustTime: number = 0;
+  private ambientDustInterval: number = 0.7;  // 700ms between dust spawns
+
   /**
    * Subtle sparkle trail for collectible magnet effect
    * Small particles that drift behind the collectible as it moves toward player
@@ -1270,6 +1274,84 @@ export class ParticleManager {
       isLooping: false,
       elapsed: 0,
       noGravity: true  // Trail particles float, don't fall
+    });
+  }
+
+  /**
+   * Ambient floating dust mote particles - atmospheric depth effect
+   * Very small, slow-moving particles in light colors
+   * @param position - Center position to spawn dust around (usually player position)
+   */
+  createAmbientDust(position: THREE.Vector3): void {
+    const now = performance.now() / 1000;
+    if (now - this.lastAmbientDustTime < this.ambientDustInterval) return;
+    this.lastAmbientDustTime = now;
+
+    const count = 2 + Math.floor(Math.random() * 2);  // 2-3 particles per spawn
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Light dust mote color palette (white, cream, pale yellow)
+    const dustColors = [
+      new THREE.Color(0xFFFFFF),  // White
+      new THREE.Color(0xFFFDD0),  // Cream
+      new THREE.Color(0xFFFACD),  // Lemon chiffon (pale yellow)
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Spawn in a sphere around the position (5-10 units radius)
+      const radius = 5 + Math.random() * 5;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI;
+
+      positions[i * 3] = position.x + Math.sin(phi) * Math.cos(theta) * radius;
+      positions[i * 3 + 1] = position.y + Math.cos(phi) * radius * 0.5 + Math.random() * 3;  // Bias toward player height
+      positions[i * 3 + 2] = position.z + Math.sin(phi) * Math.sin(theta) * radius;
+
+      // Assign random dust color
+      const color = dustColors[Math.floor(Math.random() * dustColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Very slow, gentle drift with slight upward float
+      const driftSpeed = Math.random() * 0.3 + 0.1;
+      const driftAngle = Math.random() * Math.PI * 2;
+
+      velocities[i * 3] = Math.cos(driftAngle) * driftSpeed;
+      velocities[i * 3 + 1] = Math.random() * 0.2 + 0.1;  // Gentle upward float
+      velocities[i * 3 + 2] = Math.sin(driftAngle) * driftSpeed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.04,  // Very small particles
+      transparent: true,
+      opacity: 0.3,  // Low opacity (0.2-0.4 range)
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 4.0,  // Long lifetime (3-5 seconds range)
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Dust motes float, don't fall
     });
   }
 

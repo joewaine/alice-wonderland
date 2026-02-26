@@ -5,6 +5,8 @@
  * Also handles pause menu with ESC key.
  */
 
+import { audioManager } from '../audio/AudioManager';
+
 export class MainMenu {
   private container: HTMLDivElement;
   private pauseOverlay: HTMLDivElement;
@@ -75,6 +77,9 @@ export class MainMenu {
       transition: all 0.3s ease;
       box-shadow: 0 6px 20px rgba(0,0,0,0.4);
     `;
+    startBtn.onmouseenter = () => {
+      audioManager.playUIHover();
+    };
     startBtn.onmouseover = () => {
       startBtn.style.transform = 'scale(1.1)';
       startBtn.style.boxShadow = '0 8px 30px rgba(255,215,0,0.4)';
@@ -220,6 +225,9 @@ export class MainMenu {
       cursor: pointer;
       transition: all 0.2s ease;
     `;
+    btn.onmouseenter = () => {
+      audioManager.playUIHover();
+    };
     btn.onmouseover = () => {
       btn.style.transform = 'scale(1.05)';
     };
