@@ -19,6 +19,12 @@ export interface Platform {
   requires_size?: 'small' | 'normal' | 'large';
 }
 
+export interface AirCurrent {
+  position: Vector3;
+  size: Vector3;
+  force: number;  // Negative = slows fall, positive = speeds up
+}
+
 export interface Collectible {
   type: 'key' | 'star' | 'card';
   position: Vector3;
@@ -65,6 +71,9 @@ export interface LevelData {
   gate_position: Vector3;
 
   size_puzzles: SizePuzzle[];
+
+  // Optional chapter-specific features
+  air_currents?: AirCurrent[];
 }
 
 /**

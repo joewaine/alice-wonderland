@@ -328,6 +328,13 @@ export class SceneManager {
   }
 
   /**
+   * Get current level's air current zones
+   */
+  getAirCurrentZones() {
+    return this.currentLevel?.airCurrentZones || [];
+  }
+
+  /**
    * Get NPCs for dialogue system
    */
   getNPCs() {

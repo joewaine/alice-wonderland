@@ -1,0 +1,454 @@
+/**
+ * PlayerController - Momentum-based movement with N64-style moveset
+ *
+ * Handles player physics including:
+ * - Momentum/acceleration (no instant velocity changes)
+ * - Double jump
+ * - Ground pound
+ * - Long jump
+ * - Coyote time and jump buffering
+ */
+
+import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
+import { InputManager } from '../engine/InputManager';
+
+export interface PlayerControllerCallbacks {
+  onJump?: (isDoubleJump: boolean) => void;
+  onLand?: (fallSpeed: number) => void;
+  onGroundPound?: () => void;
+  onLongJump?: () => void;
+  onFootstep?: () => void;
+}
+
+export interface AirCurrentZoneRef {
+  bounds: THREE.Box3;
+  force: number;
+}
+
+export class PlayerController {
+  // Physics body reference
+  private playerBody: RAPIER.RigidBody;
+  private world: RAPIER.World;
+
+  // Momentum state
+  private momentum: THREE.Vector3 = new THREE.Vector3();
+
+  // Ground state
+  private isGrounded: boolean = false;
+  private wasGrounded: boolean = false;
+  private lastGroundedTime: number = 0;
+
+  // Jump state
+  private jumpCount: number = 0;
+  private jumpBufferTime: number = 0;
+  private wasJumpPressed: boolean = false;
+
+  // Ground pound state
+  private isGroundPounding: boolean = false;
+  private groundPoundLockout: number = 0;
+
+  // Long jump state
+  private isLongJumping: boolean = false;
+
+  // Tuning constants - movement
+  private readonly GROUND_ACCEL = 0.85;
+  private readonly AIR_ACCEL = 0.35;
+  private readonly GROUND_FRICTION = 0.82;
+  private readonly AIR_FRICTION = 0.98;
+  private readonly MAX_SPEED = 14;
+  private readonly MIN_SPEED_THRESHOLD = 0.1;
+
+  // Tuning constants - jumping
+  private readonly JUMP_FORCE = 14;
+  private readonly DOUBLE_JUMP_FORCE = 12;
+  private readonly LONG_JUMP_VERTICAL = 10;
+  private readonly LONG_JUMP_HORIZONTAL_BOOST = 8;
+  private readonly LONG_JUMP_SPEED_THRESHOLD = 5;
+
+  // Tuning constants - ground pound
+  private readonly GROUND_POUND_FORCE = -30;
+  private readonly GROUND_POUND_LOCKOUT = 0.2; // seconds after landing
+
+  // Tuning constants - timing
+  private readonly COYOTE_TIME = 150; // ms - grace period after leaving ground
+  private readonly JUMP_BUFFER_TIME = 100; // ms - store jump input
+
+  // Footstep timing
+  private footstepTimer: number = 0;
+  private readonly FOOTSTEP_INTERVAL = 0.3;
+
+  // Camera yaw for world-relative movement
+  private cameraYaw: number = 0;
+
+  // Callbacks
+  private callbacks: PlayerControllerCallbacks = {};
+
+  // Size manager integration
+  private speedMultiplier: number = 1;
+  private jumpMultiplier: number = 1;
+  private groundCheckDistance: number = 1.1;
+
+  // Level-specific zones
+  private airCurrentZones: AirCurrentZoneRef[] = [];
+
+  constructor(world: RAPIER.World, playerBody: RAPIER.RigidBody) {
+    this.world = world;
+    this.playerBody = playerBody;
+  }
+
+  /**
+   * Set callback handlers for audio/visual feedback
+   */
+  setCallbacks(callbacks: PlayerControllerCallbacks): void {
+    this.callbacks = callbacks;
+  }
+
+  /**
+   * Set camera yaw for world-relative movement
+   */
+  setCameraYaw(yaw: number): void {
+    this.cameraYaw = yaw;
+  }
+
+  /**
+   * Set speed/jump multipliers (from SizeManager)
+   */
+  setMultipliers(speed: number, jump: number): void {
+    this.speedMultiplier = speed;
+    this.jumpMultiplier = jump;
+  }
+
+  /**
+   * Set ground check distance (based on capsule height)
+   */
+  setGroundCheckDistance(distance: number): void {
+    this.groundCheckDistance = distance;
+  }
+
+  /**
+   * Set air current zones for the current level
+   */
+  setAirCurrentZones(zones: AirCurrentZoneRef[]): void {
+    this.airCurrentZones = zones;
+  }
+
+  /**
+   * Main update - call each frame
+   */
+  update(dt: number, input: InputManager): void {
+    const vel = this.playerBody.linvel();
+    const now = performance.now();
+
+    // Update ground state
+    this.wasGrounded = this.isGrounded;
+    this.isGrounded = this.checkGrounded();
+
+    // Track grounded time for coyote time
+    if (this.isGrounded) {
+      this.lastGroundedTime = now;
+      this.jumpCount = 0;
+      this.isLongJumping = false;
+
+      // End ground pound on landing
+      if (this.isGroundPounding) {
+        this.isGroundPounding = false;
+        this.groundPoundLockout = this.GROUND_POUND_LOCKOUT;
+      }
+    }
+
+    // Decrement lockout timers
+    if (this.groundPoundLockout > 0) {
+      this.groundPoundLockout -= dt;
+    }
+
+    // Landing detection
+    if (this.isGrounded && !this.wasGrounded) {
+      const fallSpeed = Math.abs(vel.y);
+      this.callbacks.onLand?.(fallSpeed);
+    }
+
+    // Get movement input
+    let moveX = 0;
+    let moveZ = 0;
+    if (input.forward) moveZ -= 1;
+    if (input.backward) moveZ += 1;
+    if (input.left) moveX -= 1;
+    if (input.right) moveX += 1;
+
+    // Normalize diagonal movement
+    const inputLength = Math.sqrt(moveX * moveX + moveZ * moveZ);
+    if (inputLength > 0) {
+      moveX /= inputLength;
+      moveZ /= inputLength;
+    }
+
+    // Transform to world space based on camera
+    const cos = Math.cos(-this.cameraYaw);
+    const sin = Math.sin(-this.cameraYaw);
+    const worldX = moveX * cos - moveZ * sin;
+    const worldZ = moveX * sin + moveZ * cos;
+
+    // Handle ground pound (crouch in air)
+    const isCrouching = input.isKeyDown('shift') || input.isKeyDown('control');
+    if (isCrouching && !this.isGrounded && !this.isGroundPounding && this.groundPoundLockout <= 0) {
+      this.startGroundPound();
+    }
+
+    // Skip normal movement during ground pound
+    if (this.isGroundPounding) {
+      // But still apply air currents even during ground pound (slows the slam)
+      this.applyAirCurrents();
+      return;
+    }
+
+    // Apply momentum-based movement
+    this.applyMovement(worldX, worldZ);
+
+    // Apply air current forces when falling
+    if (!this.isGrounded) {
+      this.applyAirCurrents();
+    }
+
+    // Handle jumping
+    this.handleJump(input, isCrouching, now);
+
+    // Handle footsteps
+    if (this.isGrounded && inputLength > 0) {
+      this.footstepTimer += dt;
+      if (this.footstepTimer >= this.FOOTSTEP_INTERVAL) {
+        this.callbacks.onFootstep?.();
+        this.footstepTimer = 0;
+      }
+    } else {
+      this.footstepTimer = 0;
+    }
+  }
+
+  /**
+   * Apply momentum-based movement
+   */
+  private applyMovement(inputX: number, inputZ: number): void {
+    const vel = this.playerBody.linvel();
+
+    // Choose acceleration and friction based on ground state
+    const accel = this.isGrounded ? this.GROUND_ACCEL : this.AIR_ACCEL;
+    const friction = this.isGrounded ? this.GROUND_FRICTION : this.AIR_FRICTION;
+
+    // Apply input as acceleration
+    this.momentum.x += inputX * accel * this.speedMultiplier;
+    this.momentum.z += inputZ * accel * this.speedMultiplier;
+
+    // Apply friction
+    this.momentum.x *= friction;
+    this.momentum.z *= friction;
+
+    // Kill tiny velocities
+    if (Math.abs(this.momentum.x) < this.MIN_SPEED_THRESHOLD) this.momentum.x = 0;
+    if (Math.abs(this.momentum.z) < this.MIN_SPEED_THRESHOLD) this.momentum.z = 0;
+
+    // Clamp to max speed
+    const speed = Math.sqrt(this.momentum.x ** 2 + this.momentum.z ** 2);
+    const maxSpeed = this.MAX_SPEED * this.speedMultiplier;
+    if (speed > maxSpeed) {
+      const scale = maxSpeed / speed;
+      this.momentum.x *= scale;
+      this.momentum.z *= scale;
+    }
+
+    // Apply to physics body
+    this.playerBody.setLinvel(
+      new RAPIER.Vector3(this.momentum.x, vel.y, this.momentum.z),
+      true
+    );
+  }
+
+  /**
+   * Apply air current forces when inside zones
+   */
+  private applyAirCurrents(): void {
+    if (this.airCurrentZones.length === 0) return;
+
+    const pos = this.playerBody.translation();
+    const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+    const vel = this.playerBody.linvel();
+
+    for (const zone of this.airCurrentZones) {
+      if (zone.bounds.containsPoint(playerPos)) {
+        // Apply vertical force from air current
+        // Negative force = updraft (slows falling), positive = downdraft
+        const newVelY = vel.y + zone.force;
+
+        this.playerBody.setLinvel(
+          new RAPIER.Vector3(vel.x, newVelY, vel.z),
+          true
+        );
+        break;  // Only apply one air current at a time
+      }
+    }
+  }
+
+  /**
+   * Handle jump input with coyote time and buffering
+   */
+  private handleJump(input: InputManager, isCrouching: boolean, now: number): void {
+    const jumpPressed = input.jump;
+    const justPressed = jumpPressed && !this.wasJumpPressed;
+    this.wasJumpPressed = jumpPressed;
+
+    // Buffer jump input
+    if (justPressed) {
+      this.jumpBufferTime = now;
+    }
+
+    // Check if we can jump (within coyote time or grounded)
+    const canCoyoteJump = (now - this.lastGroundedTime) < this.COYOTE_TIME;
+    const hasBufferedJump = (now - this.jumpBufferTime) < this.JUMP_BUFFER_TIME;
+    const wantsToJump = justPressed || hasBufferedJump;
+
+    // Long jump: crouch + jump while running fast
+    const currentSpeed = Math.sqrt(this.momentum.x ** 2 + this.momentum.z ** 2);
+    if (wantsToJump && isCrouching && (this.isGrounded || canCoyoteJump) &&
+        currentSpeed > this.LONG_JUMP_SPEED_THRESHOLD && this.jumpCount === 0) {
+      this.performLongJump();
+      this.jumpBufferTime = 0;
+      return;
+    }
+
+    // Normal jump or double jump
+    if (wantsToJump && this.jumpCount < 2) {
+      // First jump requires being grounded or coyote time
+      if (this.jumpCount === 0 && !this.isGrounded && !canCoyoteJump) {
+        return;
+      }
+
+      const isDoubleJump = this.jumpCount === 1;
+      const force = isDoubleJump ? this.DOUBLE_JUMP_FORCE : this.JUMP_FORCE;
+
+      this.performJump(force * this.jumpMultiplier, isDoubleJump);
+      this.jumpCount++;
+      this.jumpBufferTime = 0;
+    }
+  }
+
+  /**
+   * Perform a jump
+   */
+  private performJump(force: number, isDoubleJump: boolean): void {
+    const vel = this.playerBody.linvel();
+    this.playerBody.setLinvel(
+      new RAPIER.Vector3(vel.x, force, vel.z),
+      true
+    );
+    this.callbacks.onJump?.(isDoubleJump);
+  }
+
+  /**
+   * Perform a long jump (horizontal boost + lower vertical)
+   */
+  private performLongJump(): void {
+    // Get movement direction from current momentum
+    const speed = Math.sqrt(this.momentum.x ** 2 + this.momentum.z ** 2);
+    if (speed > 0) {
+      const dirX = this.momentum.x / speed;
+      const dirZ = this.momentum.z / speed;
+
+      // Boost horizontal momentum
+      const boost = this.LONG_JUMP_HORIZONTAL_BOOST * this.speedMultiplier;
+      this.momentum.x += dirX * boost;
+      this.momentum.z += dirZ * boost;
+    }
+
+    // Apply lower vertical jump
+    this.playerBody.setLinvel(
+      new RAPIER.Vector3(
+        this.momentum.x,
+        this.LONG_JUMP_VERTICAL * this.jumpMultiplier,
+        this.momentum.z
+      ),
+      true
+    );
+
+    this.isLongJumping = true;
+    this.jumpCount++;
+    this.callbacks.onLongJump?.();
+  }
+
+  /**
+   * Start ground pound
+   */
+  private startGroundPound(): void {
+    this.isGroundPounding = true;
+
+    // Kill horizontal momentum
+    this.momentum.set(0, 0, 0);
+
+    // Apply strong downward force
+    this.playerBody.setLinvel(
+      new RAPIER.Vector3(0, this.GROUND_POUND_FORCE, 0),
+      true
+    );
+
+    this.callbacks.onGroundPound?.();
+  }
+
+  /**
+   * Check if player is grounded using raycast
+   */
+  private checkGrounded(): boolean {
+    const pos = this.playerBody.translation();
+    const ray = new RAPIER.Ray(
+      new RAPIER.Vector3(pos.x, pos.y, pos.z),
+      new RAPIER.Vector3(0, -1, 0)
+    );
+
+    const hit = this.world.castRay(ray, this.groundCheckDistance, true);
+    return hit !== null;
+  }
+
+  /**
+   * Get current horizontal speed
+   */
+  getSpeed(): number {
+    return Math.sqrt(this.momentum.x ** 2 + this.momentum.z ** 2);
+  }
+
+  /**
+   * Get current momentum for external use
+   */
+  getMomentum(): THREE.Vector3 {
+    return this.momentum.clone();
+  }
+
+  /**
+   * Check if currently ground pounding
+   */
+  getIsGroundPounding(): boolean {
+    return this.isGroundPounding;
+  }
+
+  /**
+   * Check if currently long jumping
+   */
+  getIsLongJumping(): boolean {
+    return this.isLongJumping;
+  }
+
+  /**
+   * Check if grounded
+   */
+  getIsGrounded(): boolean {
+    return this.isGrounded;
+  }
+
+  /**
+   * Reset state (for respawning)
+   */
+  reset(): void {
+    this.momentum.set(0, 0, 0);
+    this.jumpCount = 0;
+    this.isGroundPounding = false;
+    this.isLongJumping = false;
+    this.groundPoundLockout = 0;
+  }
+}

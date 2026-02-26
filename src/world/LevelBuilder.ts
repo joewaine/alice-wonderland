@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle } from '../data/LevelData';
+import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle, AirCurrent } from '../data/LevelData';
 import { assetLoader } from '../engine/AssetLoader';
 
 export interface BuiltLevel {
@@ -19,6 +19,7 @@ export interface BuiltLevel {
   collectibles: CollectibleObject[];
   npcs: NPCObject[];
   sizePuzzleZones: SizePuzzleZone[];
+  airCurrentZones: AirCurrentZone[];
   spawnPoint: THREE.Vector3;
   gatePosition: THREE.Vector3;
   cleanup: () => void;
@@ -54,6 +55,12 @@ export interface SizePuzzleZone {
   hint: string;
 }
 
+export interface AirCurrentZone {
+  bounds: THREE.Box3;
+  force: number;  // Vertical force (negative = slows fall / updraft)
+  mesh: THREE.Mesh;
+}
+
 export class LevelBuilder {
   private scene: THREE.Scene;
   private world: RAPIER.World;
@@ -86,6 +93,9 @@ export class LevelBuilder {
     // Create size puzzle zones
     const sizePuzzleZones = this.buildSizePuzzleZones(levelData.size_puzzles);
 
+    // Create air current zones
+    const airCurrentZones = this.buildAirCurrents(levelData.air_currents || []);
+
     // Create gate
     this.buildGate(levelData.gate_position);
 
@@ -108,6 +118,7 @@ export class LevelBuilder {
       collectibles,
       npcs,
       sizePuzzleZones,
+      airCurrentZones,
       spawnPoint,
       gatePosition,
       cleanup: () => this.cleanup()
@@ -491,6 +502,50 @@ export class LevelBuilder {
     }
 
     console.log(`Built ${zones.length} size puzzle zones`);
+    return zones;
+  }
+
+  /**
+   * Build air current zones (affect falling speed)
+   */
+  private buildAirCurrents(currents: AirCurrent[]): AirCurrentZone[] {
+    const zones: AirCurrentZone[] = [];
+
+    for (const current of currents) {
+      const pos = new THREE.Vector3(current.position.x, current.position.y, current.position.z);
+      const size = new THREE.Vector3(current.size.x, current.size.y, current.size.z);
+
+      // Create bounds
+      const halfSize = size.clone().multiplyScalar(0.5);
+      const min = pos.clone().sub(halfSize);
+      const max = pos.clone().add(halfSize);
+
+      // Visual indicator (translucent cylinder with particles effect)
+      const geo = new THREE.CylinderGeometry(
+        Math.max(size.x, size.z) / 2,
+        Math.max(size.x, size.z) / 2,
+        size.y,
+        8
+      );
+      const mat = new THREE.MeshBasicMaterial({
+        color: current.force < 0 ? 0x88ccff : 0xff8844,  // Blue = updraft, Orange = downdraft
+        transparent: true,
+        opacity: 0.15,
+        side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      this.scene.add(mesh);
+      this.createdMeshes.push(mesh);
+
+      zones.push({
+        bounds: new THREE.Box3(min, max),
+        force: current.force,
+        mesh
+      });
+    }
+
+    console.log(`Built ${zones.length} air current zones`);
     return zones;
   }
 
