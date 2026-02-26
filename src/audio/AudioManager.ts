@@ -11,6 +11,8 @@ export class AudioManager {
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private muted: boolean = false;
+  private ambienceActive: boolean = false;
+  private ambienceTimeouts: number[] = [];
 
   constructor() {
     // Audio context is created on first user interaction
@@ -524,6 +526,165 @@ export class AudioManager {
     if (this.masterGain) {
       this.masterGain.gain.value = Math.max(0, Math.min(1, volume));
     }
+  }
+
+  /**
+   * Play ambient bird chirp sound
+   * Creates a short, pleasant chirp using frequency modulation
+   */
+  playAmbientBirds(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    // Random pitch variation for natural feel
+    const basePitch = 1800 + Math.random() * 800;
+    const chirpCount = Math.random() > 0.6 ? 2 : 1; // Sometimes double chirp
+
+    for (let c = 0; c < chirpCount; c++) {
+      const chirpDelay = c * 0.12;
+
+      const osc = this.audioContext.createOscillator();
+      const modulator = this.audioContext.createOscillator();
+      const modGain = this.audioContext.createGain();
+      const gain = this.audioContext.createGain();
+      const filter = this.audioContext.createBiquadFilter();
+
+      // Main chirp oscillator
+      osc.type = 'sine';
+      const startTime = this.audioContext.currentTime + chirpDelay;
+      osc.frequency.setValueAtTime(basePitch, startTime);
+      osc.frequency.exponentialRampToValueAtTime(basePitch * 1.3, startTime + 0.05);
+      osc.frequency.exponentialRampToValueAtTime(basePitch * 0.8, startTime + 0.12);
+
+      // Frequency modulator for warble
+      modulator.type = 'sine';
+      modulator.frequency.value = 30 + Math.random() * 20;
+      modGain.gain.value = 50;
+
+      // Envelope - quick attack, quick decay
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.04, startTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.15);
+
+      // High-pass filter to make it airy
+      filter.type = 'highpass';
+      filter.frequency.value = 1200;
+
+      // Connect modulator to oscillator frequency
+      modulator.connect(modGain);
+      modGain.connect(osc.frequency);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      modulator.start(startTime);
+      osc.start(startTime);
+      modulator.stop(startTime + 0.18);
+      osc.stop(startTime + 0.18);
+    }
+  }
+
+  /**
+   * Play ambient wind whoosh sound
+   * Creates subtle noise-based wind using filtered oscillators
+   */
+  playAmbientWind(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    // Use multiple detuned oscillators to create noise-like wind
+    const oscCount = 4;
+    const duration = 1.5 + Math.random() * 1.5;
+    const startTime = this.audioContext.currentTime;
+
+    for (let i = 0; i < oscCount; i++) {
+      const osc = this.audioContext.createOscillator();
+      const gain = this.audioContext.createGain();
+      const filter = this.audioContext.createBiquadFilter();
+
+      // Slightly detuned triangle waves create rustling texture
+      osc.type = 'triangle';
+      const baseFreq = 80 + Math.random() * 60;
+      osc.frequency.setValueAtTime(baseFreq, startTime);
+      osc.frequency.linearRampToValueAtTime(baseFreq * (0.8 + Math.random() * 0.4), startTime + duration);
+
+      // Slow swell and fade
+      const peakTime = startTime + duration * (0.3 + Math.random() * 0.3);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.015, peakTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+      // Band-pass filter for wind character
+      filter.type = 'bandpass';
+      filter.frequency.value = 200 + Math.random() * 150;
+      filter.Q.value = 0.5 + Math.random() * 0.5;
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(startTime);
+      osc.stop(startTime + duration + 0.1);
+    }
+  }
+
+  /**
+   * Start ambient background sounds
+   * Plays bird chirps and wind at random intervals
+   */
+  startAmbience(): void {
+    if (this.ambienceActive) return;
+    this.ambienceActive = true;
+    this.ensureContext();
+
+    const scheduleBirds = (): void => {
+      if (!this.ambienceActive) return;
+
+      this.playAmbientBirds();
+
+      // Random interval between 4-12 seconds for next bird
+      const nextInterval = 4000 + Math.random() * 8000;
+      const timeoutId = window.setTimeout(scheduleBirds, nextInterval);
+      this.ambienceTimeouts.push(timeoutId);
+    };
+
+    const scheduleWind = (): void => {
+      if (!this.ambienceActive) return;
+
+      this.playAmbientWind();
+
+      // Random interval between 8-20 seconds for next wind
+      const nextInterval = 8000 + Math.random() * 12000;
+      const timeoutId = window.setTimeout(scheduleWind, nextInterval);
+      this.ambienceTimeouts.push(timeoutId);
+    };
+
+    // Start with slight delays so sounds don't all play at once
+    const birdStartDelay = window.setTimeout(() => {
+      if (this.ambienceActive) scheduleBirds();
+    }, 2000 + Math.random() * 3000);
+
+    const windStartDelay = window.setTimeout(() => {
+      if (this.ambienceActive) scheduleWind();
+    }, 5000 + Math.random() * 5000);
+
+    this.ambienceTimeouts.push(birdStartDelay, windStartDelay);
+  }
+
+  /**
+   * Stop ambient background sounds
+   */
+  stopAmbience(): void {
+    this.ambienceActive = false;
+
+    // Clear all scheduled ambient sound timeouts
+    this.ambienceTimeouts.forEach((timeoutId) => {
+      window.clearTimeout(timeoutId);
+    });
+    this.ambienceTimeouts = [];
   }
 }
 
