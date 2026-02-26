@@ -71,6 +71,8 @@ export class PlayerController {
   // Ground pound state
   private isGroundPounding: boolean = false;
   private groundPoundLockout: number = 0;
+  private groundPoundWindupTimer: number = 0;
+  private readonly GROUND_POUND_WINDUP_DURATION: number = 0.08; // Brief hover at apex before dive
 
   // Long jump state
   private isLongJumping: boolean = false;
@@ -392,6 +394,21 @@ export class PlayerController {
 
     // Skip normal movement during ground pound
     if (this.isGroundPounding) {
+      // Process windup timer (hover at apex before diving)
+      if (this.groundPoundWindupTimer > 0) {
+        this.groundPoundWindupTimer -= dt;
+        // Keep player frozen during windup
+        this.velocityCache!.x = 0;
+        this.velocityCache!.y = 0;
+        this.velocityCache!.z = 0;
+        this.playerBody.setLinvel(this.velocityCache!, true);
+
+        // Execute dive when windup completes
+        if (this.groundPoundWindupTimer <= 0) {
+          this.executeGroundPoundDive();
+        }
+        return;
+      }
       // But still apply air currents even during ground pound (slows the slam)
       this.applyAirCurrents();
       return;
@@ -928,17 +945,18 @@ export class PlayerController {
   }
 
   /**
-   * Start ground pound
+   * Start ground pound (enters windup phase first for anticipation)
    */
   private startGroundPound(): void {
     this.isGroundPounding = true;
+    this.groundPoundWindupTimer = this.GROUND_POUND_WINDUP_DURATION;
 
     // Kill horizontal momentum
     this.momentum.set(0, 0, 0);
 
-    // Apply strong downward force (reuse cached velocity)
+    // Freeze velocity during windup (hover at apex)
     this.velocityCache!.x = 0;
-    this.velocityCache!.y = this.GROUND_POUND_FORCE;
+    this.velocityCache!.y = 0;
     this.velocityCache!.z = 0;
     this.playerBody.setLinvel(this.velocityCache!, true);
 
@@ -946,6 +964,17 @@ export class PlayerController {
     this.animationManager?.setState('groundPound');
 
     this.callbacks.onGroundPound?.();
+  }
+
+  /**
+   * Execute ground pound dive (after windup completes)
+   */
+  private executeGroundPoundDive(): void {
+    // Apply strong downward force (reuse cached velocity)
+    this.velocityCache!.x = 0;
+    this.velocityCache!.y = this.GROUND_POUND_FORCE;
+    this.velocityCache!.z = 0;
+    this.playerBody.setLinvel(this.velocityCache!, true);
   }
 
   /**

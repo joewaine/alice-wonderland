@@ -530,6 +530,33 @@ export class AudioManager {
   }
 
   /**
+   * Play bounce pad sound (springy "boing")
+   */
+  playBounce(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    // Triangle wave for soft, springy feel
+    osc.type = 'triangle';
+    // Start high, sweep down for "boing" effect
+    osc.frequency.setValueAtTime(600, this.audioContext.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, this.audioContext.currentTime + 0.2);
+
+    gain.gain.setValueAtTime(0.3, this.audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.2);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.audioContext.currentTime + 0.2);
+  }
+
+  /**
    * Toggle mute
    */
   toggleMute(): boolean {

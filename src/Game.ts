@@ -150,6 +150,10 @@ export class Game {
   private prevVerticalVelocity: number = 0;
   private bouncePadCooldown: number = 0;
 
+  // Long jump trail spawning
+  private longJumpTrailTimer: number = 0;
+  private readonly LONG_JUMP_TRAIL_INTERVAL: number = 0.05; // seconds between trail spawns
+
   constructor() {
     // Create renderer - BasicShadowMap for hard cel-shaded shadows
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1257,8 +1261,9 @@ export class Game {
           if (this.tempPosCache.x >= bounds.min.x && this.tempPosCache.x <= bounds.max.x &&
               this.tempPosCache.z >= bounds.min.z && this.tempPosCache.z <= bounds.max.z &&
               this.tempPosCache.y >= bounds.max.y - 1 && this.tempPosCache.y <= bounds.max.y + 2) {
-            // Player bounced off this platform - create particle effect
+            // Player bounced off this platform - create particle effect and sound
             this.particleManager.createBouncePadEffect(this.tempPosCache);
+            audioManager.playBounce();
             this.bouncePadCooldown = 0.3;  // Cooldown to prevent multiple effects
             // Squash effect for bounce
             this.targetSquash.set(1.3, 0.8, 1.3);
@@ -1267,6 +1272,20 @@ export class Game {
         }
       }
       this.prevVerticalVelocity = vel.y;
+
+      // Long jump trail particles: spawn continuously while long jumping
+      if (this.playerController.getIsLongJumping()) {
+        this.longJumpTrailTimer += dt;
+        if (this.longJumpTrailTimer >= this.LONG_JUMP_TRAIL_INTERVAL) {
+          this.longJumpTrailTimer = 0;
+          const playerPos = this.playerBody.translation();
+          this.tempPosCache.set(playerPos.x, playerPos.y, playerPos.z);
+          const momentum = this.playerController.getMomentum();
+          this.particleManager.createLongJumpTrail(this.tempPosCache, momentum);
+        }
+      } else {
+        this.longJumpTrailTimer = 0;
+      }
 
       // Speed-based vignette effect: intensifies at high speeds
       this.updateSpeedVignette(vel.x, vel.z, dt);
