@@ -285,6 +285,14 @@ export class Game {
     this.sceneManager.onCollectiblePickup = (type, position) => {
       const color = type === 'key' ? 0xffd700 : type === 'star' ? 0xffff00 : 0xff6b6b;
       this.particleManager.createCollectBurst(position, color);
+
+      // Create trail particles arcing toward UI counter (stars and cards only)
+      if (type === 'star') {
+        this.particleManager.createCollectTrail(position, 0xffd700);  // Gold
+      } else if (type === 'card') {
+        this.particleManager.createCollectTrail(position, 0xff6b6b);  // Red
+      }
+
       // Audio feedback
       if (type === 'key') {
         audioManager.playKeyCollect();
@@ -316,6 +324,12 @@ export class Game {
     // Handle collectible magnet drift particle effects
     this.sceneManager.onCollectibleMagnetDrift = (position, direction) => {
       this.particleManager.createMagnetTrail(position, direction);
+    };
+
+    // Handle checkpoint activation - screen flash and sound
+    this.sceneManager.onCheckpointActivated = () => {
+      this.sceneManager?.flashScreen();
+      audioManager.playCheckpoint();
     };
 
     // Setup menu callbacks

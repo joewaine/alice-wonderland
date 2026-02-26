@@ -234,6 +234,44 @@ export class HUD {
   }
 
   /**
+   * Brief white screen flash (for checkpoint hit)
+   * Quick pulse: ~0.1s to peak, ~0.2s total fade
+   */
+  flashScreen(): void {
+    // Create a temporary white overlay for the flash
+    const flashOverlay = document.createElement('div');
+    flashOverlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 999;
+    `;
+    this.container.appendChild(flashOverlay);
+
+    // Animate: quick fade in to 0.35 opacity, then fade out
+    requestAnimationFrame(() => {
+      flashOverlay.style.transition = 'opacity 0.1s ease-out';
+      flashOverlay.style.opacity = '0.35';
+
+      // After peak, fade out
+      setTimeout(() => {
+        flashOverlay.style.transition = 'opacity 0.15s ease-in';
+        flashOverlay.style.opacity = '0';
+
+        // Remove element after animation completes
+        setTimeout(() => {
+          this.container.removeChild(flashOverlay);
+        }, 150);
+      }, 100);
+    });
+  }
+
+  /**
    * Fade screen to black (for death)
    */
   fadeToBlack(): Promise<void> {

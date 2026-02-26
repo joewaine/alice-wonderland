@@ -42,6 +42,7 @@ export class SceneManager {
   public onGateEnter: ((position: THREE.Vector3) => void) | null = null;
   public onWonderStarCollected: ((star: WonderStar, collected: number, total: number) => void) | null = null;
   public onCollectibleMagnetDrift: ((position: THREE.Vector3, direction: THREE.Vector3) => void) | null = null;
+  public onCheckpointActivated: ((checkpoint: { position: THREE.Vector3; order: number }) => void) | null = null;
 
   constructor(scene: THREE.Scene, world: RAPIER.World, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
@@ -413,11 +414,51 @@ export class SceneManager {
     // Check size puzzle zones
     this.checkSizePuzzleZones(playerPosition);
 
+    // Check checkpoints
+    this.checkCheckpoints(playerPosition, playerRadius);
+
     // Update bouncy platforms
     this.updateBouncyPlatforms(dt, playerPosition);
 
     // Animate foliage wind
     this.updateWindAnimation(dt);
+  }
+
+  /**
+   * Check if player passes through any checkpoints
+   */
+  private checkCheckpoints(playerPosition: THREE.Vector3, playerRadius: number): void {
+    if (!this.currentLevel) return;
+
+    for (const checkpoint of this.currentLevel.checkpoints) {
+      if (checkpoint.passed) continue;
+
+      // Check if player is within checkpoint radius
+      const dx = playerPosition.x - checkpoint.position.x;
+      const dy = playerPosition.y - checkpoint.position.y;
+      const dz = playerPosition.z - checkpoint.position.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      const threshold = checkpoint.radius + playerRadius;
+
+      if (distSq < threshold * threshold) {
+        // Checkpoint activated!
+        checkpoint.passed = true;
+
+        // Visual feedback: change checkpoint color to gold
+        const material = checkpoint.mesh.material as THREE.ShaderMaterial;
+        if (material.uniforms?.uColor) {
+          material.uniforms.uColor.value.setHex(0xFFD700);
+        }
+
+        // Trigger callback
+        if (this.onCheckpointActivated) {
+          this.onCheckpointActivated({
+            position: checkpoint.position.clone(),
+            order: checkpoint.order
+          });
+        }
+      }
+    }
   }
 
   /**
@@ -662,6 +703,13 @@ export class SceneManager {
    */
   fadeIn(): Promise<void> {
     return this.hud.fadeIn();
+  }
+
+  /**
+   * Flash screen (for checkpoint)
+   */
+  flashScreen(): void {
+    this.hud.flashScreen();
   }
 
   // ===== Wonder Star Methods =====
