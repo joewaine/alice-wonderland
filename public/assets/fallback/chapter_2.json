@@ -179,5 +179,61 @@
       "required_size": "small",
       "hint": "Shrink to dive deeper and reach the underwater key!"
     }
+  ],
+  "wonder_stars": [
+    {
+      "id": "ch2_star_1",
+      "name": "Deep Diver",
+      "position": { "x": -6, "y": -4, "z": -10 },
+      "challenge_type": "exploration",
+      "requirements": {
+        "reach_position": { "x": -8, "y": -5, "z": -12 },
+        "reach_radius": 3
+      },
+      "hint": "Dive to the deepest underwater platform"
+    },
+    {
+      "id": "ch2_star_2",
+      "name": "Island Hopper",
+      "position": { "x": 60, "y": 9, "z": 3 },
+      "challenge_type": "exploration",
+      "requirements": {
+        "reach_position": { "x": 55, "y": 8, "z": 5 },
+        "reach_radius": 4
+      },
+      "hint": "Reach the far island beyond the pool",
+      "spawn_near": { "x": 0, "y": 6, "z": 0 }
+    },
+    {
+      "id": "ch2_star_3",
+      "name": "Treasure Hunter",
+      "position": { "x": 22, "y": 0, "z": -3 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_stars": 3
+      },
+      "hint": "Find all 3 stars - some are underwater!"
+    },
+    {
+      "id": "ch2_star_4",
+      "name": "Card Collector",
+      "position": { "x": 48, "y": 2, "z": 8 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_cards": 4
+      },
+      "hint": "Gather all 4 playing cards scattered across the pools"
+    },
+    {
+      "id": "ch2_star_5",
+      "name": "Bouncy Explorer",
+      "position": { "x": 2, "y": 11, "z": 22 },
+      "challenge_type": "exploration",
+      "requirements": {
+        "reach_position": { "x": 0, "y": 10, "z": 20 },
+        "reach_radius": 3
+      },
+      "hint": "Find and reach the bouncy platform above the water"
+    }
   ]
 }

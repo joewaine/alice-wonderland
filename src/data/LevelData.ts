@@ -47,6 +47,30 @@ export interface Checkpoint {
   order: number;  // 0 = start/finish, 1+ = checkpoints
 }
 
+export interface WonderStar {
+  id: string;
+  name: string;
+  position: Vector3;
+  challenge_type: 'exploration' | 'race' | 'puzzle' | 'collection' | 'skill';
+  requirements: {
+    // For exploration - reach a specific location
+    reach_position?: Vector3;
+    reach_radius?: number;
+    // For race - beat a time
+    beat_time?: number;
+    // For puzzle - activate switches or break platforms
+    break_platforms?: number;
+    // For collection - collect items
+    collect_stars?: number;
+    collect_cards?: number;
+    // For skill - perform specific moves
+    perform_ground_pounds?: number;
+    perform_long_jumps?: number;
+  };
+  hint: string;
+  spawn_near?: Vector3;  // Optional spawn point when selecting this star
+}
+
 export interface Collectible {
   type: 'key' | 'star' | 'card';
   position: Vector3;
@@ -99,6 +123,7 @@ export interface LevelData {
   water_zones?: WaterZone[];
   speed_boosts?: SpeedBoost[];
   checkpoints?: Checkpoint[];
+  wonder_stars?: WonderStar[];
 }
 
 /**

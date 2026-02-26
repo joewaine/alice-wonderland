@@ -7,9 +7,10 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { LevelData } from '../data/LevelData';
+import type { LevelData, WonderStar } from '../data/LevelData';
 import { LevelBuilder, type BuiltLevel } from '../world/LevelBuilder';
 import { CollectibleManager } from '../world/Collectible';
+import { WonderStarManager } from '../world/WonderStarManager';
 import { Gate } from '../world/Gate';
 import { HUD } from '../ui/HUD';
 import { audioManager } from '../audio/AudioManager';
@@ -19,32 +20,38 @@ export class SceneManager {
   private renderer: THREE.WebGLRenderer;
   private levelBuilder: LevelBuilder;
   private collectibleManager: CollectibleManager;
+  private wonderStarManager: WonderStarManager;
   private hud: HUD;
   private gate: Gate | null = null;
   private currentLevel: BuiltLevel | null = null;
   private currentChapter: number = 1;
   private currentSkyboxTexture: THREE.Texture | null = null;
   private skyboxMesh: THREE.Mesh | null = null;
+  private currentLevelData: LevelData | null = null;
 
   // Callbacks
   public onChapterComplete: ((nextChapter: number) => void) | null = null;
   public onPlayerSpawn: ((position: THREE.Vector3) => void) | null = null;
   public onCollectiblePickup: ((type: string, position: THREE.Vector3) => void) | null = null;
   public onGateUnlock: ((position: THREE.Vector3) => void) | null = null;
+  public onWonderStarCollected: ((star: WonderStar, collected: number, total: number) => void) | null = null;
 
   constructor(scene: THREE.Scene, world: RAPIER.World, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
     this.renderer = renderer;
     this.levelBuilder = new LevelBuilder(scene, world);
     this.collectibleManager = new CollectibleManager();
+    this.wonderStarManager = new WonderStarManager(scene);
     this.hud = new HUD();
 
-    // Wire up collectible updates to HUD
+    // Wire up collectible updates to HUD and wonder star tracking
     this.collectibleManager.onCollect = (type, state, position) => {
       this.hud.updateCollectibles(state);
       if (this.onCollectiblePickup) {
         this.onCollectiblePickup(type, position);
       }
+      // Track for wonder star challenges
+      this.wonderStarManager.trackCollectible(type as 'star' | 'card' | 'key');
     };
 
     // Wire up key collection to gate unlock
@@ -56,6 +63,13 @@ export class SceneManager {
           this.onGateUnlock(this.currentLevel?.gatePosition || new THREE.Vector3());
         }
       }
+    };
+
+    // Wire up wonder star collection
+    this.wonderStarManager.onStarCollected = (star, collected, total) => {
+      this.hud.showMessage(`Wonder Star: ${star.name}!`, 3000);
+      audioManager.playKeyCollect();  // Use key sound for wonder stars
+      this.onWonderStarCollected?.(star, collected, total);
     };
   }
 
@@ -90,6 +104,12 @@ export class SceneManager {
     this.gate = new Gate(this.currentLevel.gatePosition);
     this.gate.setup(this.scene);
     this.gate.onEnter = () => this.handleGateEnter();
+
+    // Setup wonder stars
+    this.currentLevelData = levelData;
+    if (levelData.wonder_stars) {
+      this.wonderStarManager.setStars(levelData.wonder_stars);
+    }
 
     // Load skybox
     await this.loadSkybox(chapterNumber);
@@ -255,6 +275,12 @@ export class SceneManager {
   update(dt: number, playerPosition: THREE.Vector3, playerRadius: number): void {
     // Update collectibles
     this.collectibleManager.update(dt, playerPosition, playerRadius);
+
+    // Update wonder stars
+    this.wonderStarManager.update(dt, playerPosition, playerRadius);
+
+    // Track exploration challenges (player reaching positions)
+    this.wonderStarManager.trackReachPosition(playerPosition);
 
     // Update gate
     if (this.gate) {
@@ -457,6 +483,66 @@ export class SceneManager {
     return this.hud.fadeIn();
   }
 
+  // ===== Wonder Star Methods =====
+
+  /**
+   * Get wonder stars for current level
+   */
+  getWonderStars(): WonderStar[] {
+    return this.currentLevelData?.wonder_stars || [];
+  }
+
+  /**
+   * Get collected star IDs
+   */
+  getCollectedStarIds(): string[] {
+    return this.wonderStarManager.getStars()
+      .filter(s => s.collected)
+      .map(s => s.data.id);
+  }
+
+  /**
+   * Set active wonder star challenge
+   */
+  setActiveWonderStar(starId: string | null): void {
+    this.wonderStarManager.setActiveStar(starId);
+  }
+
+  /**
+   * Get spawn point for active star (if specified)
+   */
+  getActiveStarSpawn(): THREE.Vector3 | null {
+    return this.wonderStarManager.getActiveStarSpawn();
+  }
+
+  /**
+   * Track platform break for wonder star challenges
+   */
+  trackPlatformBreak(): void {
+    this.wonderStarManager.trackPlatformBreak();
+  }
+
+  /**
+   * Track ground pound for wonder star challenges
+   */
+  trackGroundPound(): void {
+    this.wonderStarManager.trackGroundPound();
+  }
+
+  /**
+   * Track long jump for wonder star challenges
+   */
+  trackLongJump(): void {
+    this.wonderStarManager.trackLongJump();
+  }
+
+  /**
+   * Get wonder star stats
+   */
+  getWonderStarStats(): { collected: number; total: number } {
+    return this.wonderStarManager.getStats();
+  }
+
   /**
    * Clean up
    */
@@ -472,6 +558,7 @@ export class SceneManager {
       this.skyboxMesh.geometry.dispose();
       (this.skyboxMesh.material as THREE.Material).dispose();
     }
+    this.wonderStarManager.cleanup();
     this.hud.dispose();
   }
 }

@@ -195,5 +195,68 @@
       "required_size": "large",
       "hint": "This elevated wall needs a giant to break through!"
     }
+  ],
+  "wonder_stars": [
+    {
+      "id": "ch4_star_1",
+      "name": "Wall Breaker",
+      "position": { "x": 30, "y": 3, "z": 0 },
+      "challenge_type": "puzzle",
+      "requirements": {
+        "break_platforms": 1
+      },
+      "hint": "Break through a wooden wall as Giant Alice"
+    },
+    {
+      "id": "ch4_star_2",
+      "name": "Demolition Expert",
+      "position": { "x": 52, "y": 5, "z": 8 },
+      "challenge_type": "puzzle",
+      "requirements": {
+        "break_platforms": 3
+      },
+      "hint": "Smash through all 3 breakable walls in the level"
+    },
+    {
+      "id": "ch4_star_3",
+      "name": "Ground Pounder",
+      "position": { "x": -23, "y": 7, "z": 17 },
+      "challenge_type": "skill",
+      "requirements": {
+        "perform_ground_pounds": 5
+      },
+      "hint": "Perform 5 ground pounds"
+    },
+    {
+      "id": "ch4_star_4",
+      "name": "House Explorer",
+      "position": { "x": 58, "y": 10, "z": 2 },
+      "challenge_type": "exploration",
+      "requirements": {
+        "reach_position": { "x": 55, "y": 8, "z": 0 },
+        "reach_radius": 4
+      },
+      "hint": "Reach the White Rabbit's final platform"
+    },
+    {
+      "id": "ch4_star_5",
+      "name": "Card Finder",
+      "position": { "x": 0, "y": 11, "z": 2 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_cards": 3
+      },
+      "hint": "Collect all 3 playing cards in the house"
+    },
+    {
+      "id": "ch4_star_6",
+      "name": "Star Gatherer",
+      "position": { "x": -13, "y": 8, "z": 8 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_stars": 3
+      },
+      "hint": "Find all 3 stars hidden throughout the level"
+    }
   ]
 }

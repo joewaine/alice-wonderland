@@ -173,5 +173,60 @@
       "required_size": "small",
       "hint": "You must shrink to fit through the tiny door to the garden"
     }
+  ],
+  "wonder_stars": [
+    {
+      "id": "ch1_star_1",
+      "name": "Descent Master",
+      "position": { "x": 5, "y": 3, "z": 5 },
+      "challenge_type": "exploration",
+      "requirements": {
+        "reach_position": { "x": 0, "y": 2, "z": 0 },
+        "reach_radius": 5
+      },
+      "hint": "Reach the bottom of the rabbit hole",
+      "spawn_near": { "x": 0, "y": 103, "z": 0 }
+    },
+    {
+      "id": "ch1_star_2",
+      "name": "Pound the Ground",
+      "position": { "x": -8, "y": 86, "z": -2 },
+      "challenge_type": "skill",
+      "requirements": {
+        "perform_ground_pounds": 5
+      },
+      "hint": "Perform 5 ground pounds during your descent",
+      "spawn_near": { "x": 0, "y": 103, "z": 0 }
+    },
+    {
+      "id": "ch1_star_3",
+      "name": "Star Collector",
+      "position": { "x": 12, "y": 54, "z": -3 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_stars": 3
+      },
+      "hint": "Collect all 3 stars hidden in the tunnel"
+    },
+    {
+      "id": "ch1_star_4",
+      "name": "Card Shark",
+      "position": { "x": -10, "y": 30, "z": -6 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_cards": 3
+      },
+      "hint": "Find all 3 playing cards as you fall"
+    },
+    {
+      "id": "ch1_star_5",
+      "name": "Leaping Legend",
+      "position": { "x": 8, "y": 14, "z": 6 },
+      "challenge_type": "skill",
+      "requirements": {
+        "perform_long_jumps": 3
+      },
+      "hint": "Perform 3 long jumps between platforms"
+    }
   ]
 }
