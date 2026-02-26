@@ -736,6 +736,9 @@ export class Game {
         // Hitstop freeze effect (50ms / 3 frames at 60fps)
         this.hitstopRemaining = 0.05;
 
+        // Expanding ring shockwave effect
+        this.particleManager.createGroundPoundShockwave(position);
+
         // Check for breakable platforms
         if (this.sceneManager && this.sizeManager) {
           const currentSize = this.sizeManager.getCurrentSize();

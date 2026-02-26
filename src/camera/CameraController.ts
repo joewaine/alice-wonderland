@@ -173,10 +173,21 @@ export class CameraController {
     this.canvas.addEventListener('contextmenu', this.handleContextMenu);
   }
 
+  // Dead zone threshold for mouse input (in pixels)
+  // Prevents small accidental movements from causing camera drift
+  private readonly MOUSE_DEAD_ZONE = 0.5;
+
   /**
    * Rotate camera by delta amounts
    */
   rotate(deltaX: number, deltaY: number): void {
+    // Apply dead zone to prevent drift from small accidental inputs
+    if (Math.abs(deltaX) < this.MOUSE_DEAD_ZONE) deltaX = 0;
+    if (Math.abs(deltaY) < this.MOUSE_DEAD_ZONE) deltaY = 0;
+
+    // Skip if both deltas are within dead zone
+    if (deltaX === 0 && deltaY === 0) return;
+
     this.yaw += deltaX * this.config.mouseSensitivity;
     this.pitch += deltaY * this.config.mouseSensitivity;
 
