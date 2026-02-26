@@ -11,6 +11,7 @@ import { InputManager } from './engine/InputManager';
 import { SceneManager } from './engine/SceneManager';
 import { SizeManager } from './player/SizeManager';
 import { PlayerController } from './player/PlayerController';
+import { CameraController } from './camera/CameraController';
 import { SizePickup } from './world/SizePickup';
 import { NPCController } from './npcs/NPCController';
 import { ParticleManager } from './effects/ParticleManager';
@@ -20,6 +21,9 @@ import { StarSelect } from './ui/StarSelect';
 import { audioManager } from './audio/AudioManager';
 import { musicManager } from './audio/MusicManager';
 import { assetLoader } from './engine/AssetLoader';
+import { applyCelShaderToObject, updateCelShaderLightDirection } from './shaders/CelShaderMaterial';
+import { addOutlinesToObject } from './shaders/OutlineEffect';
+import { AnimationStateManager } from './animation/AnimationStateManager';
 
 export class Game {
   // Three.js core
@@ -65,11 +69,12 @@ export class Game {
   private baseSpeed: number = 14;
   private baseJump: number = 14;
 
-  // Third-person camera settings
-  private cameraYaw: number = 0;
-  private cameraPitch: number = 0.3;
-  private cameraDistance: number = 8;
-  private cameraHeightOffset: number = 2;
+  // Camera controller
+  private cameraController: CameraController | null = null;
+
+  // Player animation
+  private playerAnimationManager: AnimationStateManager | null = null;
+  private playerMixer: THREE.AnimationMixer | null = null;
 
   // HUD elements
   private instructionsDiv: HTMLDivElement | null = null;
@@ -91,13 +96,20 @@ export class Game {
   // Chapter loading state
   private isLoadingChapter: boolean = false;
 
+  // Sun light reference for cel-shader sync
+  private sunLight: THREE.DirectionalLight | null = null;
+
+  // Pre-allocated vectors to avoid per-frame GC pressure
+  private playerPosCache: THREE.Vector3 = new THREE.Vector3();
+  private tempPosCache: THREE.Vector3 = new THREE.Vector3();
+
   constructor() {
-    // Create renderer
+    // Create renderer - BasicShadowMap for hard cel-shaded shadows
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.BasicShadowMap; // Hard edges for cel-shading
 
     // Setup DOM
     document.body.innerHTML = '';
@@ -105,9 +117,16 @@ export class Game {
     document.body.style.overflow = 'hidden';
     document.body.appendChild(this.renderer.domElement);
 
-    // Create scene
+    // Create scene with BotW-inspired cel-shaded atmosphere
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x87ceeb);
+
+    // Soft blue sky (BotW style - clean, not pink)
+    const skyColor = new THREE.Color(0x87ceeb);  // Sky blue
+    const horizonColor = new THREE.Color(0xb8d4e8);  // Pale blue-white
+    this.scene.background = skyColor;
+
+    // Atmospheric fog for depth - lighter for cel-shaded look
+    this.scene.fog = new THREE.Fog(horizonColor, 30, 150);
 
     // Create camera
     this.camera = new THREE.PerspectiveCamera(
@@ -238,8 +257,9 @@ export class Game {
     this.isLoadingChapter = true;
 
     try {
-      // Clear old size pickups
+      // Clear old size pickups and camera zones
       this.clearSizePickups();
+      this.cameraController?.clearZones();
 
       // Load the level
       await this.sceneManager.loadLevel(chapterNumber);
@@ -274,6 +294,9 @@ export class Game {
       if (wonderStars.length > 0) {
         this.showStarSelect();
       }
+
+      // Sync cel-shader lighting after level loads
+      this.syncCelShaderLighting();
     } catch (error) {
       console.error(`Failed to load chapter ${chapterNumber}:`, error);
       // Fall back to chapter 1 if not already on it
@@ -369,19 +392,21 @@ export class Game {
     }
 
     // Reset camera
-    this.cameraYaw = 0;
-    this.cameraPitch = 0.3;
+    this.cameraController?.reset();
   }
 
   /**
-   * Setup lighting
+   * Setup lighting - BotW-style cel-shaded illumination
+   * Lower ambient for more contrast, dramatic sun angle
    */
   private setupLighting(): void {
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    // Reduced ambient - cel-shading needs shadow/light contrast
+    const ambient = new THREE.AmbientLight(0xffffff, 0.4);
     this.scene.add(ambient);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1);
-    sun.position.set(10, 20, 10);
+    // Strong directional sun at dramatic angle (late afternoon BotW feel)
+    const sun = new THREE.DirectionalLight(0xfffaf0, 1.2);
+    sun.position.set(20, 30, 15);
     sun.castShadow = true;
     sun.shadow.mapSize.width = 2048;
     sun.shadow.mapSize.height = 2048;
@@ -391,10 +416,24 @@ export class Game {
     sun.shadow.camera.right = 50;
     sun.shadow.camera.top = 50;
     sun.shadow.camera.bottom = -50;
+    // No shadow radius blur - BasicShadowMap gives hard edges
     this.scene.add(sun);
 
-    const hemi = new THREE.HemisphereLight(0x87ceeb, 0x88cc88, 0.4);
+    // Store sun reference for cel-shader light direction sync
+    this.sunLight = sun;
+
+    // Sky/ground hemisphere - blue sky, green ground bounce
+    const hemi = new THREE.HemisphereLight(0x87ceeb, 0x98d982, 0.3);
     this.scene.add(hemi);
+  }
+
+  /**
+   * Sync cel-shader light direction with sun position
+   */
+  private syncCelShaderLighting(): void {
+    if (this.sunLight) {
+      updateCelShaderLightDirection(this.scene, this.sunLight.position);
+    }
   }
 
   /**
@@ -403,16 +442,37 @@ export class Game {
   private async setupPlayer(): Promise<void> {
     if (!this.world) return;
 
-    // Load Alice 3D model
+    // Load Alice 3D model with animations
     try {
-      const model = await assetLoader.loadModel(`${import.meta.env.BASE_URL}assets/models/alice.glb`);
+      const { model, animations } = await assetLoader.loadModelWithAnimations(
+        `${import.meta.env.BASE_URL}assets/models/alice.glb`
+      );
 
-      // Scale down and center
-      model.scale.setScalar(0.5);
-
-      // Ground the model
+      // Calculate model bounds to properly ground it
       const box = new THREE.Box3().setFromObject(model);
-      model.position.y = -box.min.y * 0.5;
+      const modelHeight = box.max.y - box.min.y;
+
+      // Scale model to match physics capsule height (capsule height = 0.5*2 + 0.4*2 = 1.8)
+      const targetHeight = 1.8;
+      const scaleFactor = targetHeight / modelHeight;
+      model.scale.setScalar(scaleFactor);
+
+      // Recalculate bounds after scaling
+      box.setFromObject(model);
+
+      // Position model so its feet are at y=0 relative to container
+      // Physics capsule center is at body position, bottom is at y - (halfHeight + radius) = y - 0.9
+      model.position.y = -box.min.y - 0.9;
+
+      // Apply cel-shading and outlines to Alice
+      applyCelShaderToObject(model, {
+        rimColor: 0x88ccff,  // Soft blue rim for Alice
+        rimPower: 2.5,
+      });
+      addOutlinesToObject(model, {
+        color: 0x2a2a3e,  // Dark blue-ish outline
+        thickness: 0.02,
+      });
 
       // Wrap in container for positioning
       const container = new THREE.Group();
@@ -421,11 +481,22 @@ export class Game {
       this.playerMesh.castShadow = true;
       this.scene.add(this.playerMesh);
 
-      console.log('Loaded Alice player model');
+      // Setup animation if model has animations
+      if (animations.length > 0) {
+        this.playerMixer = new THREE.AnimationMixer(model);
+        this.playerAnimationManager = new AnimationStateManager(this.playerMixer);
+        this.playerAnimationManager.registerAnimationsFromGLTF(animations);
+        console.log(`Loaded Alice with ${animations.length} animations:`,
+          animations.map(a => a.name).join(', '));
+      } else {
+        console.log('Loaded Alice model (no animations found)');
+      }
+
+      console.log('Loaded Alice player model with cel-shading, scale:', scaleFactor.toFixed(2));
     } catch {
-      // Fallback to capsule
+      // Fallback to capsule - sized to match physics (halfHeight=0.5, radius=0.4)
       console.log('Using fallback player capsule');
-      const capsuleGeo = new THREE.CapsuleGeometry(0.4, 1, 8, 16);
+      const capsuleGeo = new THREE.CapsuleGeometry(0.4, 1.0, 8, 16);
       const capsuleMat = new THREE.MeshStandardMaterial({ color: 0x4fc3f7 });
       this.playerMesh = new THREE.Mesh(capsuleGeo, capsuleMat);
       this.playerMesh.castShadow = true;
@@ -447,8 +518,9 @@ export class Game {
     this.sizeManager.setPlayerMesh(this.playerMesh);
 
     this.sizeManager.onSizeChange = (size, config) => {
-      this.cameraDistance = 8 * config.scale;
-      this.cameraHeightOffset = 2 * config.scale;
+      // Update camera for new player size
+      this.cameraController?.setTargetDistance(8 * config.scale);
+      this.cameraController?.setHeightOffset(2 * config.scale);
 
       // Update player controller multipliers and ground check
       const speedMult = config.moveSpeed / this.baseSpeed;
@@ -456,15 +528,18 @@ export class Game {
       this.playerController?.setMultipliers(speedMult, jumpMult);
       this.playerController?.setGroundCheckDistance(config.capsuleHeight + 0.6);
 
+      // Scale animation speed based on size (small = faster, large = slower)
+      this.playerController?.setAnimationSpeed(1.0 / config.scale);
+
       // Particle effect and audio on size change
       if (this.playerBody) {
         const pos = this.playerBody.translation();
-        const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+        this.tempPosCache.set(pos.x, pos.y, pos.z);
         if (size === 'small') {
-          this.particleManager.createSizeChangeBurst(playerPos, 'shrink');
+          this.particleManager.createSizeChangeBurst(this.tempPosCache, 'shrink');
           audioManager.playShrink();
         } else if (size === 'large') {
-          this.particleManager.createSizeChangeBurst(playerPos, 'grow');
+          this.particleManager.createSizeChangeBurst(this.tempPosCache, 'grow');
           audioManager.playGrow();
         }
       }
@@ -489,10 +564,10 @@ export class Game {
         audioManager.playLand();
         if (this.playerBody) {
           const pos = this.playerBody.translation();
-          const landPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+          this.tempPosCache.set(pos.x, pos.y, pos.z);
           const intensity = Math.min(fallSpeed / 15, 1.5);
           if (intensity > 0.2) {
-            this.particleManager.createLandingDust(landPos, intensity);
+            this.particleManager.createLandingDust(this.tempPosCache, intensity);
           }
         }
         this.targetSquash.set(1.3, 0.7, 1.3);
@@ -532,6 +607,13 @@ export class Game {
     // Initialize ground check distance for normal size
     this.playerController.setGroundCheckDistance(0.5 + 0.6);
 
+    // Connect animation manager if available
+    if (this.playerAnimationManager) {
+      this.playerController.setAnimationManager(this.playerAnimationManager);
+    }
+
+    // Camera controller
+    this.cameraController = new CameraController(this.camera, this.world, this.renderer);
     this.camera.position.set(0, 5, 10);
   }
 
@@ -617,14 +699,14 @@ export class Game {
     if (!this.sceneManager || !this.playerBody || !this.sizeManager) return;
 
     const pos = this.playerBody.translation();
-    const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+    this.playerPosCache.set(pos.x, pos.y, pos.z);
     const playerRadius = this.sizeManager.config.capsuleRadius;
 
-    this.sceneManager.update(dt, playerPos, playerRadius);
+    this.sceneManager.update(dt, this.playerPosCache, playerRadius);
 
     // Update NPC interactions
     const isInteractPressed = this.input.isKeyDown('e');
-    this.npcController.update(playerPos, isInteractPressed, dt);
+    this.npcController.update(this.playerPosCache, isInteractPressed, dt);
   }
 
   /**
@@ -664,18 +746,14 @@ export class Game {
       this.sizeManager.grow();
     }
 
-    // Camera orbit from arrow keys
-    const cameraSpeed = 2.5 * 0.016;
-    if (this.input.lookLeft) this.cameraYaw += cameraSpeed;
-    if (this.input.lookRight) this.cameraYaw -= cameraSpeed;
-    if (this.input.lookUp) this.cameraPitch -= cameraSpeed * 0.5;
-    if (this.input.lookDown) this.cameraPitch += cameraSpeed * 0.5;
-    this.cameraPitch = Math.max(0.1, Math.min(1.2, this.cameraPitch));
-
     // Update player controller (momentum-based movement, jumps, etc.)
-    if (this.playerController) {
-      this.playerController.setCameraYaw(this.cameraYaw);
+    if (this.playerController && this.cameraController) {
+      // Camera controller handles rotation from input
+      this.playerController.setCameraYaw(this.cameraController.getYaw());
       this.playerController.update(dt, this.input);
+
+      // Update skeletal animation
+      this.playerController.updateAnimation(dt);
 
       // Return to normal squash when grounded and not jumping
       if (this.playerController.getIsGrounded() && !this.input.jump) {
@@ -707,20 +785,17 @@ export class Game {
       );
     }
 
-    // Camera
-    const camX = pos.x + Math.sin(this.cameraYaw) * Math.cos(this.cameraPitch) * this.cameraDistance;
-    const camY = pos.y + Math.sin(this.cameraPitch) * this.cameraDistance + this.cameraHeightOffset;
-    const camZ = pos.z + Math.cos(this.cameraYaw) * Math.cos(this.cameraPitch) * this.cameraDistance;
+    // Update camera (handles wall collision, contextual zoom, smooth transitions)
+    if (this.cameraController) {
+      this.playerPosCache.set(pos.x, pos.y, pos.z);
+      this.cameraController.update(dt, this.playerPosCache, this.input);
+    }
 
-    this.camera.position.set(camX, camY, camZ);
-    this.camera.lookAt(pos.x, pos.y + this.cameraHeightOffset * 0.5, pos.z);
-
-    // Pickup collisions
-    const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+    // Pickup collisions (reuse cached position)
     const playerRadius = this.sizeManager.config.capsuleRadius;
 
     for (const pickup of this.sizePickups) {
-      if (pickup.checkOverlap(playerPos, playerRadius)) {
+      if (pickup.checkOverlap(this.playerPosCache, playerRadius)) {
         pickup.collect();
         if (pickup.type === 'shrink') {
           this.sizeManager.shrink();
@@ -747,8 +822,8 @@ export class Game {
     if (!this.playerBody) return;
 
     const pos = this.playerBody.translation();
-    const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
-    this.particleManager.update(dt, playerPos);
+    this.playerPosCache.set(pos.x, pos.y, pos.z);
+    this.particleManager.update(dt, this.playerPosCache);
   }
 
   /**
