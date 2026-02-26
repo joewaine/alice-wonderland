@@ -17,6 +17,7 @@ export interface PlayerControllerCallbacks {
   onJump?: (isDoubleJump: boolean) => void;
   onLand?: (fallSpeed: number) => void;
   onGroundPound?: () => void;
+  onGroundPoundLand?: (position: THREE.Vector3) => void;
   onLongJump?: () => void;
   onFootstep?: () => void;
 }
@@ -188,6 +189,10 @@ export class PlayerController {
       if (this.isGroundPounding) {
         this.isGroundPounding = false;
         this.groundPoundLockout = this.GROUND_POUND_LOCKOUT;
+
+        // Callback for breaking platforms
+        const pos = this.playerBody.translation();
+        this.callbacks.onGroundPoundLand?.(new THREE.Vector3(pos.x, pos.y, pos.z));
       }
     }
 

@@ -16,6 +16,7 @@ import { assetLoader } from '../engine/AssetLoader';
 export interface BuiltLevel {
   platforms: THREE.Mesh[];
   bouncyPlatforms: BouncyPlatform[];
+  breakablePlatforms: BreakablePlatform[];
   collectibles: CollectibleObject[];
   npcs: NPCObject[];
   sizePuzzleZones: SizePuzzleZone[];
@@ -86,6 +87,14 @@ export interface CheckpointObject {
   passed: boolean;
 }
 
+export interface BreakablePlatform {
+  mesh: THREE.Mesh;
+  body: RAPIER.RigidBody;
+  bounds: THREE.Box3;
+  requiresSize: 'large' | undefined;
+  broken: boolean;
+}
+
 export class LevelBuilder {
   private scene: THREE.Scene;
   private world: RAPIER.World;
@@ -107,7 +116,7 @@ export class LevelBuilder {
     this.applyAtmosphere(levelData.atmosphere);
 
     // Build platforms
-    const { meshes: platforms, bouncy: bouncyPlatforms } = this.buildPlatforms(levelData.platforms);
+    const { meshes: platforms, bouncy: bouncyPlatforms, breakable: breakablePlatforms } = this.buildPlatforms(levelData.platforms);
 
     // Create collectibles
     const collectibles = this.buildCollectibles(levelData.collectibles);
@@ -149,6 +158,7 @@ export class LevelBuilder {
     return {
       platforms,
       bouncyPlatforms,
+      breakablePlatforms,
       collectibles,
       npcs,
       sizePuzzleZones,
@@ -187,9 +197,10 @@ export class LevelBuilder {
   /**
    * Build platforms with physics
    */
-  private buildPlatforms(platforms: Platform[]): { meshes: THREE.Mesh[], bouncy: BouncyPlatform[] } {
+  private buildPlatforms(platforms: Platform[]): { meshes: THREE.Mesh[], bouncy: BouncyPlatform[], breakable: BreakablePlatform[] } {
     const meshes: THREE.Mesh[] = [];
     const bouncy: BouncyPlatform[] = [];
+    const breakable: BreakablePlatform[] = [];
 
     for (const platform of platforms) {
       // Visual mesh
@@ -241,10 +252,34 @@ export class LevelBuilder {
       }
 
       this.world.createCollider(colliderDesc, body);
+
+      // Track breakable platforms
+      if (platform.breakable) {
+        // Make breakable platforms visually distinct (cracked appearance)
+        (mesh.material as THREE.MeshStandardMaterial).color.multiplyScalar(0.7);
+
+        const halfSize = new THREE.Vector3(
+          platform.size.x / 2,
+          platform.size.y / 2,
+          platform.size.z / 2
+        );
+        const pos = new THREE.Vector3(platform.position.x, platform.position.y, platform.position.z);
+
+        breakable.push({
+          mesh,
+          body,
+          bounds: new THREE.Box3(
+            pos.clone().sub(halfSize),
+            pos.clone().add(halfSize)
+          ),
+          requiresSize: platform.break_requires_size,
+          broken: false
+        });
+      }
     }
 
-    console.log(`Built ${meshes.length} platforms`);
-    return { meshes, bouncy };
+    console.log(`Built ${meshes.length} platforms (${breakable.length} breakable)`);
+    return { meshes, bouncy, breakable };
   }
 
   /**

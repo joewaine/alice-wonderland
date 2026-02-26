@@ -82,6 +82,13 @@ export class SizeManager {
   }
 
   /**
+   * Get current size state
+   */
+  getCurrentSize(): SizeState {
+    return this.currentSize;
+  }
+
+  /**
    * Change to a new size
    */
   changeSize(newSize: SizeState): void {

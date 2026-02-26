@@ -399,10 +399,10 @@ Level designed to require frequent size changes:
 - Timed size puzzles: shrink before ceiling crushes you
 
 **Tasks:**
-- [ ] Add breakable property to platforms
-- [ ] Implement destruction effects (debris, sound)
+- [x] Add breakable property to platforms
+- [x] Implement destruction effects (debris, sound)
 - [ ] Add size-specific interaction prompts
-- [ ] Redesign chapter_4.json with size puzzles
+- [x] Redesign chapter_4.json with size puzzles
 - [ ] Create pressure plates that trigger size-dependent events
 
 ---
