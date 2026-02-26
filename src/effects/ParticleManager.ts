@@ -908,6 +908,79 @@ export class ParticleManager {
   }
 
   /**
+   * Quest complete celebration burst - large colorful fanfare
+   * Gold, green, white particles in upward spray pattern
+   */
+  createQuestCompleteBurst(position: THREE.Vector3): void {
+    const count = 60;  // Large burst of 50+ particles
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Celebration color palette (gold, green, white)
+    const celebrationColors = [
+      new THREE.Color(0xFFD700),  // Gold
+      new THREE.Color(0xFFAA33),  // Orange-gold
+      new THREE.Color(0x7CB342),  // Green
+      new THREE.Color(0x8BC34A),  // Light green
+      new THREE.Color(0xFFFFFF),  // White
+      new THREE.Color(0xFFF8E1),  // Cream white
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start at celebration point
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.5;
+      positions[i * 3 + 1] = position.y;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.5;
+
+      // Assign random celebration color
+      const color = celebrationColors[Math.floor(Math.random() * celebrationColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Upward spray pattern with outward spread
+      const angle = Math.random() * Math.PI * 2;
+      const outwardSpeed = Math.random() * 3 + 1;
+      const upwardSpeed = Math.random() * 6 + 4;  // Strong upward bias
+
+      velocities[i * 3] = Math.cos(angle) * outwardSpeed;
+      velocities[i * 3 + 1] = upwardSpeed;
+      velocities[i * 3 + 2] = Math.sin(angle) * outwardSpeed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.25,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 1.0,  // Longer lifetime (1s)
+      isLooping: false,
+      elapsed: 0
+      // Note: gravity is applied by default for natural arc
+    });
+  }
+
+  /**
    * Gate unlock effect
    */
   createGateUnlockEffect(position: THREE.Vector3): void {

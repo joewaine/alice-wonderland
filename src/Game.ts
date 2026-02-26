@@ -259,8 +259,12 @@ export class Game {
       // Audio feedback
       if (type === 'key') {
         audioManager.playKeyCollect();
+        // Subtle FOV bump for key collection (60 -> 62 degrees, return over 0.2s)
+        this.cameraController?.kickFOV(62, 0.2);
       } else {
         audioManager.playCollect();
+        // Small screen shake for star/card collection
+        this.cameraController?.shake(0.1);
       }
     };
 
@@ -458,7 +462,21 @@ export class Game {
     this.questManager.callbacks.onQuestCompleted = (quest) => {
       // Show quest completed notification
       console.log(`Quest completed: ${quest.name}`);
+
+      // Visual celebration: particle burst at player position
+      if (this.playerBody) {
+        const pos = this.playerBody.translation();
+        this.tempPosCache.set(pos.x, pos.y, pos.z);
+        this.particleManager.createQuestCompleteBurst(this.tempPosCache);
+      }
+
+      // Screen shake for impact
+      this.cameraController?.shake(0.3);
+
+      // Fanfare audio
       audioManager.playKeyCollect();
+
+      // UI notification
       this.questNotification.showQuestCompleted(quest.name);
     };
 
