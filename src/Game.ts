@@ -901,6 +901,11 @@ export class Game {
         // Dust/spark particles when sliding along walls
         this.particleManager.createWallSlideParticles(position, wallNormal);
       },
+      onWallJump: (position, wallNormal) => {
+        // Spark burst when wall jumping
+        this.particleManager.createWallJumpSpark(position, wallNormal);
+        audioManager.playJump();
+      },
     });
 
     // Initialize ground check distance for normal size
