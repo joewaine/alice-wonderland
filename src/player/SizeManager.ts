@@ -21,28 +21,28 @@ interface SizeConfig {
 
 const SIZE_CONFIGS: Record<SizeState, SizeConfig> = {
   small: {
-    scale: 0.3,
-    capsuleHeight: 0.15,
-    capsuleRadius: 0.12,
-    eyeHeight: 0.25,
-    jumpForce: 8,      // Lower jump when small
-    moveSpeed: 6       // Slightly slower
+    scale: 0.5,
+    capsuleHeight: 0.25,
+    capsuleRadius: 0.2,
+    eyeHeight: 0.4,
+    jumpForce: 12,     // Slightly lower jump when small
+    moveSpeed: 12      // Slightly slower
   },
   normal: {
     scale: 1.0,
     capsuleHeight: 0.5,
     capsuleRadius: 0.4,
-    eyeHeight: 0.7,
-    jumpForce: 12,
-    moveSpeed: 8
+    eyeHeight: 1.0,
+    jumpForce: 14,     // Match baseJump in Game.ts
+    moveSpeed: 14      // Match baseSpeed in Game.ts
   },
   large: {
-    scale: 2.5,
-    capsuleHeight: 1.25,
-    capsuleRadius: 1.0,
-    eyeHeight: 1.75,
-    jumpForce: 15,     // Higher jump when large
-    moveSpeed: 10      // Faster movement
+    scale: 2.0,
+    capsuleHeight: 1.0,
+    capsuleRadius: 0.8,
+    eyeHeight: 2.0,
+    jumpForce: 16,     // Higher jump when large
+    moveSpeed: 16      // Faster movement
   }
 };
 

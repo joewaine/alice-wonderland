@@ -46,10 +46,10 @@ export class Gate {
     this.isUnlocked = true;
 
     if (this.barrier) {
-      // Change to green and make more transparent
+      // Change to soft mint green - inviting and magical
       const material = this.barrier.material as THREE.MeshBasicMaterial;
-      material.color.set(0x00ff00);
-      material.opacity = 0.3;
+      material.color.set(0xC4E8D4);  // Soft mint
+      material.opacity = 0.4;
 
       // Add pulsing animation via userData
       this.barrier.userData.pulseTime = 0;

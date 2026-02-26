@@ -19,6 +19,8 @@ export interface Platform {
   requires_size?: 'small' | 'normal' | 'large';
   breakable?: boolean;  // Can be destroyed by ground pound
   break_requires_size?: 'large';  // Size required to break
+  asset_id?: string;  // Garden asset ID (e.g., "hedge_straight", "fountain")
+  rotation?: Vector3;  // Rotation in degrees (y-axis rotation most common)
 }
 
 export interface AirCurrent {

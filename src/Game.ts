@@ -26,6 +26,9 @@ import { addOutlinesToObject } from './shaders/OutlineEffect';
 import { AnimationStateManager } from './animation/AnimationStateManager';
 import { QuestManager } from './quests/QuestManager';
 import { AreaGate } from './world/AreaGate';
+import { QuestNotification } from './ui/QuestNotification';
+import { FoliageAnimator } from './effects/FoliageAnimator';
+import { AreaIndicator } from './ui/AreaIndicator';
 
 export class Game {
   // Three.js core
@@ -61,6 +64,9 @@ export class Game {
 
   // Particle effects
   private particleManager: ParticleManager;
+
+  // Foliage animation
+  private foliageAnimator: FoliageAnimator;
 
   // Menu system
   private mainMenu: MainMenu;
@@ -108,6 +114,15 @@ export class Game {
   // Quest system
   private questManager: QuestManager | null = null;
   private areaGates: AreaGate[] = [];
+  private questNotification: QuestNotification;
+  private areaIndicator: AreaIndicator;
+
+  // Performance stats overlay
+  private statsOverlay: HTMLDivElement | null = null;
+  private showStats: boolean = false;
+  private wasBacktickPressed: boolean = false;
+  private frameTimeHistory: number[] = [];
+  private lastStatsUpdate: number = 0;
 
   constructor() {
     // Create renderer - BasicShadowMap for hard cel-shaded shadows
@@ -151,6 +166,9 @@ export class Game {
     // Particle effects
     this.particleManager = new ParticleManager(this.scene);
 
+    // Foliage animation (wind sway)
+    this.foliageAnimator = new FoliageAnimator();
+
     // Main menu
     this.mainMenu = new MainMenu();
 
@@ -160,11 +178,20 @@ export class Game {
     // Star select UI
     this.starSelect = new StarSelect();
 
+    // Quest notification UI
+    this.questNotification = new QuestNotification();
+
+    // Area name indicator
+    this.areaIndicator = new AreaIndicator();
+
     // Handle window resize
     window.addEventListener('resize', () => this.onResize());
 
     // Show instructions
     this.showInstructions();
+
+    // Create performance stats overlay (hidden by default)
+    this.createStatsOverlay();
   }
 
   /**
@@ -270,6 +297,13 @@ export class Game {
       // Load the level
       await this.sceneManager.loadLevel(chapterNumber);
 
+      // Setup camera zones from level areas
+      this.setupCameraZones();
+
+      // Setup area indicator
+      const areas = this.sceneManager.getAreas();
+      this.areaIndicator.setAreas(areas);
+
       // Wire up NPCs for dialogue
       const npcs = this.sceneManager.getNPCs();
       this.npcController.setNPCs(npcs);
@@ -291,6 +325,21 @@ export class Game {
 
       // Setup ambient particles for atmosphere
       this.particleManager.createAmbientParticles(0xffeedd, 150);
+
+      // Setup rose petals for Queen's Garden (chapter 5)
+      if (chapterNumber === 5) {
+        const gardenBounds = new THREE.Box3(
+          new THREE.Vector3(-60, 0, -55),
+          new THREE.Vector3(65, 20, 20)
+        );
+        this.particleManager.createRosePetals(gardenBounds, 100);
+
+        // Setup foliage wind animation for garden assets
+        this.setupGardenFoliage();
+      } else {
+        this.particleManager.stopRosePetals();
+        this.foliageAnimator.clear();
+      }
 
       // Update music mood for chapter
       musicManager.setChapterMood(chapterNumber);
@@ -383,19 +432,26 @@ export class Game {
       if (gate) {
         gate.unlock();
         audioManager.playGateUnlock();
+        // Create unlock particle effect at gate position
+        this.particleManager.createGateUnlockEffect(gate.getPosition());
+        // Show area unlocked notification
+        const area = this.sceneManager?.getAreas().find(a => a.id === areaId);
+        this.questNotification.showAreaUnlocked(area?.name || areaId);
       }
     };
 
     this.questManager.callbacks.onQuestStarted = (quest) => {
       // Show quest started notification
       console.log(`Quest started: ${quest.name}`);
-      audioManager.playCollect();  // Use collect sound for quest start
+      audioManager.playCollect();
+      this.questNotification.showQuestStarted(quest.name);
     };
 
     this.questManager.callbacks.onQuestCompleted = (quest) => {
       // Show quest completed notification
       console.log(`Quest completed: ${quest.name}`);
-      audioManager.playKeyCollect();  // Use key fanfare for quest complete
+      audioManager.playKeyCollect();
+      this.questNotification.showQuestCompleted(quest.name);
     };
 
     console.log(`QuestManager initialized with ${quests.length} quests and ${this.areaGates.length} area gates`);
@@ -755,6 +811,95 @@ export class Game {
   }
 
   /**
+   * Setup camera zones from level area data
+   */
+  private setupCameraZones(): void {
+    if (!this.sceneManager || !this.cameraController) return;
+
+    const areas = this.sceneManager.getAreas();
+    if (!areas || areas.length === 0) return;
+
+    const cameraZones: Array<{
+      bounds: THREE.Box3;
+      targetDistance: number;
+      heightOffset: number;
+    }> = [];
+
+    for (const area of areas) {
+      if (!area.camera_config) continue;
+
+      const bounds = new THREE.Box3(
+        new THREE.Vector3(area.bounds.min.x, area.bounds.min.y, area.bounds.min.z),
+        new THREE.Vector3(area.bounds.max.x, area.bounds.max.y, area.bounds.max.z)
+      );
+
+      cameraZones.push({
+        bounds,
+        targetDistance: area.camera_config.targetDistance,
+        heightOffset: area.camera_config.heightOffset,
+      });
+    }
+
+    if (cameraZones.length > 0) {
+      this.cameraController.setZones(cameraZones);
+      console.log(`Game: Set up ${cameraZones.length} camera zones`);
+    }
+  }
+
+  /**
+   * Setup foliage animation for garden assets
+   */
+  private setupGardenFoliage(): void {
+    this.foliageAnimator.clear();
+
+    // Find foliage objects in the scene by traversing
+    const foliageNames = ['hedge', 'rose', 'topiary', 'bush'];
+    let count = 0;
+
+    this.scene.traverse((object) => {
+      // Check if this object's name or parent's name suggests foliage
+      const name = object.name.toLowerCase();
+      const parentName = object.parent?.name?.toLowerCase() || '';
+
+      const isFoliage = foliageNames.some(f => name.includes(f) || parentName.includes(f));
+
+      if (isFoliage && object instanceof THREE.Group) {
+        // Different sway amounts based on type
+        let swayAmount = 0.02;
+        let swaySpeed = 1.2;
+
+        if (name.includes('rose') || parentName.includes('rose')) {
+          swayAmount = 0.04;  // Roses sway more
+          swaySpeed = 1.5;
+        } else if (name.includes('topiary') || parentName.includes('topiary')) {
+          swayAmount = 0.015;  // Topiaries are stiffer
+          swaySpeed = 0.8;
+        }
+
+        this.foliageAnimator.addFoliage(object, { swayAmount, swaySpeed });
+        count++;
+      }
+    });
+
+    // Also add any platforms that were created with garden asset IDs
+    // by checking userData or by position matching known foliage locations
+    if (this.sceneManager) {
+      const platforms = this.sceneManager.getPlatformMeshes();
+      for (const platform of platforms) {
+        // Check if it's a group (garden asset) vs simple mesh
+        if (platform instanceof THREE.Group) {
+          this.foliageAnimator.addFoliage(platform, { swayAmount: 0.02, swaySpeed: 1.0 });
+          count++;
+        }
+      }
+    }
+
+    if (count > 0) {
+      console.log(`Game: Set up ${count} foliage objects for wind animation`);
+    }
+  }
+
+  /**
    * Start the game loop
    */
   start(): void {
@@ -796,6 +941,9 @@ export class Game {
     // Render
     this.renderer.render(this.scene, this.camera);
 
+    // Update performance stats overlay
+    this.updateStats(dt);
+
     // Reset input
     this.input.resetMouseDelta();
   }
@@ -829,6 +977,9 @@ export class Game {
         this.playerPosCache.z
       );
     }
+
+    // Update area indicator
+    this.areaIndicator.update(this.playerPosCache);
   }
 
   /**
@@ -847,9 +998,9 @@ export class Game {
     }
     this.wasMutePressed = isMutePressed;
 
-    // Debug: Jump to chapter (1-4 keys)
+    // Debug: Jump to chapter (1-5 keys)
     let chapterKeyPressed = '';
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 5; i++) {
       if (this.input.isKeyDown(i.toString())) {
         chapterKeyPressed = i.toString();
         break;
@@ -880,6 +1031,19 @@ export class Game {
       // Return to normal squash when grounded and not jumping
       if (this.playerController.getIsGrounded() && !this.input.jump) {
         this.targetSquash.set(1, 1, 1);
+      }
+
+      // Footstep dust particles when walking on ground
+      if (this.playerController.getIsGrounded()) {
+        const vel = this.playerBody.linvel();
+        const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+        if (horizontalSpeed > 2) {  // Only when moving at decent speed
+          const pos = this.playerBody.translation();
+          this.particleManager.createFootstepDust(
+            new THREE.Vector3(pos.x, pos.y, pos.z),
+            horizontalSpeed / 10
+          );
+        }
       }
     }
 
@@ -938,7 +1102,7 @@ export class Game {
   }
 
   /**
-   * Update particle effects
+   * Update particle effects and foliage animation
    */
   private updateParticles(dt: number): void {
     if (!this.playerBody) return;
@@ -946,6 +1110,9 @@ export class Game {
     const pos = this.playerBody.translation();
     this.playerPosCache.set(pos.x, pos.y, pos.z);
     this.particleManager.update(dt, this.playerPosCache);
+
+    // Update foliage wind animation
+    this.foliageAnimator.update(dt);
   }
 
   /**
@@ -989,8 +1156,83 @@ export class Game {
       <p style="margin:5px 0"><b>Q/R</b> - Shrink/Grow</p>
       <p style="margin:5px 0"><b>E</b> - Talk to NPCs</p>
       <p style="margin:5px 0"><b>M</b> - Mute</p>
-      <p style="margin:5px 0"><b>1-4</b> - Jump to Chapter</p>
+      <p style="margin:5px 0"><b>1-5</b> - Jump to Chapter</p>
+      <p style="margin:5px 0"><b>\`</b> - Performance Stats</p>
     `;
     document.body.appendChild(this.instructionsDiv);
+  }
+
+  /**
+   * Create performance stats overlay
+   */
+  private createStatsOverlay(): void {
+    this.statsOverlay = document.createElement('div');
+    this.statsOverlay.style.cssText = `
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 12px;
+      background: rgba(0,0,0,0.8);
+      padding: 10px;
+      border-radius: 4px;
+      pointer-events: none;
+      display: none;
+      min-width: 150px;
+    `;
+    document.body.appendChild(this.statsOverlay);
+  }
+
+  /**
+   * Update performance stats display
+   */
+  private updateStats(dt: number): void {
+    // Check for backtick toggle
+    const isBacktickPressed = this.input.isKeyDown('`') || this.input.isKeyDown('Backquote');
+    if (isBacktickPressed && !this.wasBacktickPressed) {
+      this.showStats = !this.showStats;
+      if (this.statsOverlay) {
+        this.statsOverlay.style.display = this.showStats ? 'block' : 'none';
+      }
+    }
+    this.wasBacktickPressed = isBacktickPressed;
+
+    if (!this.showStats || !this.statsOverlay) return;
+
+    // Track frame time
+    const frameTime = dt * 1000;
+    this.frameTimeHistory.push(frameTime);
+    if (this.frameTimeHistory.length > 60) {
+      this.frameTimeHistory.shift();
+    }
+
+    // Only update display every 200ms
+    const now = performance.now();
+    if (now - this.lastStatsUpdate < 200) return;
+    this.lastStatsUpdate = now;
+
+    // Calculate average FPS
+    const avgFrameTime = this.frameTimeHistory.reduce((a, b) => a + b, 0) / this.frameTimeHistory.length;
+    const fps = Math.round(1000 / avgFrameTime);
+
+    // Get renderer info
+    const info = this.renderer.info;
+    const drawCalls = info.render.calls;
+    const triangles = info.render.triangles;
+    const textures = info.memory.textures;
+    const geometries = info.memory.geometries;
+
+    // FPS color indicator
+    const fpsColor = fps >= 55 ? '#0f0' : fps >= 30 ? '#ff0' : '#f00';
+
+    this.statsOverlay.innerHTML = `
+      <div style="color:${fpsColor};font-size:16px;font-weight:bold">${fps} FPS</div>
+      <div style="margin-top:5px">Frame: ${avgFrameTime.toFixed(1)}ms</div>
+      <div>Draw calls: ${drawCalls}</div>
+      <div>Triangles: ${(triangles / 1000).toFixed(1)}k</div>
+      <div style="margin-top:5px;color:#888">Textures: ${textures}</div>
+      <div style="color:#888">Geometries: ${geometries}</div>
+    `;
   }
 }

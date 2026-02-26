@@ -25,6 +25,13 @@ export class ParticleManager {
   // Ambient particles
   private ambientParticles: THREE.Points | null = null;
 
+  // Rose petal system (for Queen's Garden)
+  private rosePetals: {
+    points: THREE.Points;
+    velocities: Float32Array;
+    bounds: THREE.Box3;
+  } | null = null;
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
   }
@@ -256,6 +263,70 @@ export class ParticleManager {
     });
   }
 
+  // Footstep dust throttling
+  private lastFootstepTime: number = 0;
+  private footstepInterval: number = 0.2;  // Seconds between footstep particles
+
+  /**
+   * Footstep dust puff (small, subtle)
+   * Call frequently when player is walking - throttled internally
+   */
+  createFootstepDust(position: THREE.Vector3, movementSpeed: number = 1): void {
+    const now = performance.now() / 1000;
+    if (now - this.lastFootstepTime < this.footstepInterval) return;
+    this.lastFootstepTime = now;
+
+    // Only create dust if moving fast enough
+    if (movementSpeed < 0.3) return;
+
+    const count = 4;  // Small number of particles
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+      // Start at feet level
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 1] = position.y - 0.8;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
+
+      // Small outward puff
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 0.5 + 0.2;
+
+      velocities[i * 3] = Math.cos(angle) * speed;
+      velocities[i * 3 + 1] = Math.random() * 0.5 + 0.2;
+      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.PointsMaterial({
+      color: 0xd4c4a8,  // Light dusty tan
+      size: 0.08,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.NormalBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.3,  // Quick fade
+      isLooping: false,
+      elapsed: 0
+    });
+  }
+
   /**
    * Gate unlock effect
    */
@@ -315,6 +386,9 @@ export class ParticleManager {
     // Update ambient particles
     this.updateAmbientParticles(dt, playerPosition);
 
+    // Update rose petals
+    this.updateRosePetals(dt);
+
     // Update burst systems
     const toRemove: number[] = [];
 
@@ -372,6 +446,147 @@ export class ParticleManager {
   }
 
   /**
+   * Create rose petal emitter for Queen's Garden
+   * Pink/red petals that drift slowly with wind simulation
+   */
+  createRosePetals(bounds: THREE.Box3, count: number = 80): void {
+    // Clean up existing
+    if (this.rosePetals) {
+      this.scene.remove(this.rosePetals.points);
+      this.rosePetals.points.geometry.dispose();
+      (this.rosePetals.points.material as THREE.Material).dispose();
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const velocities = new Float32Array(count * 3);
+
+    const size = new THREE.Vector3();
+    bounds.getSize(size);
+    const center = new THREE.Vector3();
+    bounds.getCenter(center);
+
+    // Petal color palette (pink to red variations)
+    const petalColors = [
+      new THREE.Color(0xFF69B4), // Hot pink
+      new THREE.Color(0xFFB6C1), // Light pink
+      new THREE.Color(0xC41E3A), // Cardinal red
+      new THREE.Color(0xFF1493), // Deep pink
+      new THREE.Color(0xDB7093), // Pale violet red
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Random position within bounds
+      positions[i * 3] = center.x + (Math.random() - 0.5) * size.x;
+      positions[i * 3 + 1] = center.y + Math.random() * size.y;
+      positions[i * 3 + 2] = center.z + (Math.random() - 0.5) * size.z;
+
+      // Random petal color
+      const color = petalColors[Math.floor(Math.random() * petalColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Random size for variety
+      sizes[i] = Math.random() * 0.15 + 0.1;
+
+      // Initial velocity (gentle downward drift with slight horizontal)
+      velocities[i * 3] = (Math.random() - 0.5) * 0.5;
+      velocities[i * 3 + 1] = -Math.random() * 0.8 - 0.2; // Downward
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.15,
+      transparent: true,
+      opacity: 0.9,
+      vertexColors: true,
+      sizeAttenuation: true,
+      blending: THREE.NormalBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.rosePetals = { points, velocities, bounds };
+  }
+
+  /**
+   * Update rose petals with wind simulation
+   */
+  private updateRosePetals(dt: number, windDirection: THREE.Vector3 = new THREE.Vector3(0.3, 0, 0.1)): void {
+    if (!this.rosePetals) return;
+
+    const positions = this.rosePetals.points.geometry.attributes.position;
+    const arr = positions.array as Float32Array;
+    const count = positions.count;
+    const bounds = this.rosePetals.bounds;
+    const velocities = this.rosePetals.velocities;
+
+    const size = new THREE.Vector3();
+    bounds.getSize(size);
+    const center = new THREE.Vector3();
+    bounds.getCenter(center);
+
+    for (let i = 0; i < count; i++) {
+      // Add wind influence with slight turbulence
+      const turbulence = Math.sin(arr[i * 3] * 0.5 + arr[i * 3 + 1] * 0.3) * 0.1;
+
+      // Update velocity with wind
+      velocities[i * 3] += windDirection.x * dt + turbulence * dt;
+      velocities[i * 3 + 2] += windDirection.z * dt + turbulence * dt;
+
+      // Apply velocity
+      arr[i * 3] += velocities[i * 3] * dt;
+      arr[i * 3 + 1] += velocities[i * 3 + 1] * dt;
+      arr[i * 3 + 2] += velocities[i * 3 + 2] * dt;
+
+      // Slight swaying motion
+      arr[i * 3] += Math.sin(arr[i * 3 + 1] * 2 + i) * dt * 0.3;
+
+      // Reset if below bounds or drifted too far
+      if (arr[i * 3 + 1] < bounds.min.y ||
+          arr[i * 3] < bounds.min.x - 5 || arr[i * 3] > bounds.max.x + 5 ||
+          arr[i * 3 + 2] < bounds.min.z - 5 || arr[i * 3 + 2] > bounds.max.z + 5) {
+        // Respawn at top of bounds
+        arr[i * 3] = center.x + (Math.random() - 0.5) * size.x;
+        arr[i * 3 + 1] = bounds.max.y + Math.random() * 2;
+        arr[i * 3 + 2] = center.z + (Math.random() - 0.5) * size.z;
+
+        // Reset velocity
+        velocities[i * 3] = (Math.random() - 0.5) * 0.5;
+        velocities[i * 3 + 1] = -Math.random() * 0.8 - 0.2;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+      }
+
+      // Dampen horizontal velocity
+      velocities[i * 3] *= 0.99;
+      velocities[i * 3 + 2] *= 0.99;
+    }
+
+    positions.needsUpdate = true;
+  }
+
+  /**
+   * Stop rose petal effect
+   */
+  stopRosePetals(): void {
+    if (this.rosePetals) {
+      this.scene.remove(this.rosePetals.points);
+      this.rosePetals.points.geometry.dispose();
+      (this.rosePetals.points.material as THREE.Material).dispose();
+      this.rosePetals = null;
+    }
+  }
+
+  /**
    * Clean up all particles
    */
   dispose(): void {
@@ -381,6 +596,9 @@ export class ParticleManager {
       (this.ambientParticles.material as THREE.Material).dispose();
       this.ambientParticles = null;
     }
+
+    // Clean up rose petals
+    this.stopRosePetals();
 
     for (const system of this.systems) {
       this.scene.remove(system.points);

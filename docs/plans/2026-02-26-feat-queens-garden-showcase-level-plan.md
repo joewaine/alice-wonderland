@@ -431,10 +431,10 @@ async function loadGardenAsset(assetId: string): Promise<THREE.Group> {
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `src/world/GardenAssetLoader.ts` | Create | Asset loading with cel-shader |
-| `src/world/LevelBuilder.ts` | Modify | Support asset_id on platforms |
-| `public/assets/models/garden/` | Create | Asset directory |
-| `public/assets/fallback/queens_garden.json` | Create | Level data |
+| `src/world/GardenAssetLoader.ts` | ~~Create~~ ✅ | Asset loading with cel-shader |
+| `src/world/LevelBuilder.ts` | ~~Modify~~ ✅ | Support asset_id on platforms |
+| `public/assets/models/garden/` | ~~Create~~ ✅ | Asset directory |
+| `public/assets/fallback/chapter_5.json` | ~~Create~~ ✅ | Level data (The Queen's Garden) |
 
 ---
 
@@ -598,8 +598,8 @@ function buildStairs(
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `public/assets/fallback/queens_garden.json` | Create | Full level data |
-| `src/world/LevelBuilder.ts` | Modify | Add stair builder, asset loading |
+| `public/assets/fallback/chapter_5.json` | ~~Create~~ ✅ | Full level data (renamed from queens_garden.json) |
+| `src/world/LevelBuilder.ts` | ~~Modify~~ ✅ | Add stair builder, asset loading |
 | `src/engine/SceneManager.ts` | Modify | Load chapter 5 |
 
 ---
@@ -678,8 +678,8 @@ initializeNPCs(npcs: NPCObject[]): void {
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `src/npcs/NPCController.ts` | Modify | Add tiered updates, mesh caching |
-| `src/Game.ts` | Modify | Add performance monitoring |
+| `src/npcs/NPCController.ts` | ~~Modify~~ ✅ | Add tiered updates, mesh caching |
+| `src/Game.ts` | Modify | Add performance monitoring (optional) |
 
 ---
 

@@ -39,6 +39,17 @@ export class NPCController {
   // Skeletal animation tracking
   private animatedNPCs: Set<NPCObject> = new Set();
 
+  // Performance: Tiered update distances
+  private readonly TIER_DISTANCES = {
+    FULL: 10,      // Full animation, face player, speech bubble
+    REDUCED: 25,   // Half-rate animation, no facing
+    STATIC: 50     // No animation, frozen pose
+  };
+  private frameCount: number = 0;
+
+  // Performance: Mesh cache for avoiding traversal
+  private meshCache: Map<NPCObject, THREE.Mesh[]> = new Map();
+
   constructor(questManager?: QuestManager) {
     this.questManager = questManager || null;
     this.dialogueUI = new DialogueUI();
@@ -111,16 +122,27 @@ export class NPCController {
    * Set NPCs to manage
    */
   setNPCs(npcs: NPCObject[]): void {
-    // Clean up old speech bubbles
+    // Clean up old speech bubbles and mesh cache
     this.clearSpeechBubbles();
     this.animatedNPCs.clear();
+    this.meshCache.clear();
 
     this.npcs = npcs;
     this.currentNPC = null;
 
-    // Create speech bubbles for each NPC and detect animated NPCs
-    if (this.bubbleTexture) {
-      for (const npc of npcs) {
+    // Create speech bubbles for each NPC, detect animated NPCs, and cache meshes
+    for (const npc of npcs) {
+      // Cache mesh references for performance (avoid traversal in update loop)
+      const meshes: THREE.Mesh[] = [];
+      npc.mesh.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          meshes.push(child);
+        }
+      });
+      this.meshCache.set(npc, meshes);
+
+      // Create speech bubble
+      if (this.bubbleTexture) {
         const material = new THREE.SpriteMaterial({
           map: this.bubbleTexture,
           transparent: true,
@@ -135,16 +157,16 @@ export class NPCController {
         // Add as child of NPC mesh
         npc.mesh.add(sprite);
         this.speechBubbles.set(npc, sprite);
+      }
 
-        // Track NPCs with skeletal animation
-        if (npc.hasSkeletalAnimation && npc.mixer) {
-          this.animatedNPCs.add(npc);
+      // Track NPCs with skeletal animation
+      if (npc.hasSkeletalAnimation && npc.mixer) {
+        this.animatedNPCs.add(npc);
 
-          // Start idle animation if available
-          const idleAction = npc.animations?.get('idle');
-          if (idleAction) {
-            idleAction.play();
-          }
+        // Start idle animation if available
+        const idleAction = npc.animations?.get('idle');
+        if (idleAction) {
+          idleAction.play();
         }
       }
     }
@@ -231,33 +253,84 @@ export class NPCController {
       }
     }
 
-    // Update idle animation time
+    // Update idle animation time and frame counter
     this.idleTime += dt;
+    this.frameCount++;
 
-    // Make NPCs face the player and animate
+    // Tiered NPC updates based on distance from player
     for (const npc of this.npcs) {
-      // Face player
-      const direction = new THREE.Vector3()
-        .subVectors(playerPosition, npc.position)
-        .normalize();
-      const angle = Math.atan2(direction.x, direction.z);
-      npc.mesh.rotation.y = angle;
+      const distance = playerPosition.distanceTo(npc.position);
 
-      // Update skeletal animation if present
-      if (this.animatedNPCs.has(npc) && npc.mixer) {
-        npc.mixer.update(dt);
-        // Skip procedural animation for skeletal NPCs
-        continue;
+      if (distance < this.TIER_DISTANCES.FULL) {
+        // FULL TIER: Full animation, face player, speech bubble
+        this.updateNPCFull(npc, playerPosition, dt);
+      } else if (distance < this.TIER_DISTANCES.REDUCED) {
+        // REDUCED TIER: Half-rate animation, no facing
+        this.updateNPCReduced(npc, dt);
+      } else if (distance < this.TIER_DISTANCES.STATIC) {
+        // STATIC TIER: No animation updates, frozen pose
+        this.updateNPCStatic(npc);
       }
+      // Beyond STATIC: NPC culled by Three.js frustum culling (no update needed)
+    }
+  }
 
-      // Procedural idle animation for non-skeletal NPCs
-      // Subtle idle bob
-      const bobOffset = Math.sin(this.idleTime * 2 + npc.position.x) * 0.05;
-      npc.mesh.position.y = npc.position.y + bobOffset;
+  /**
+   * Full-tier NPC update: animation + facing + speech bubble
+   */
+  private updateNPCFull(npc: NPCObject, playerPosition: THREE.Vector3, dt: number): void {
+    // Face player
+    const direction = new THREE.Vector3()
+      .subVectors(playerPosition, npc.position)
+      .normalize();
+    const angle = Math.atan2(direction.x, direction.z);
+    npc.mesh.rotation.y = angle;
 
-      // Subtle scale pulse
-      const scalePulse = 1 + Math.sin(this.idleTime * 1.5 + npc.position.z) * 0.02;
-      npc.mesh.scale.setScalar(scalePulse);
+    // Update skeletal animation if present
+    if (this.animatedNPCs.has(npc) && npc.mixer) {
+      npc.mixer.update(dt);
+      return;
+    }
+
+    // Procedural idle animation for non-skeletal NPCs
+    const bobOffset = Math.sin(this.idleTime * 2 + npc.position.x) * 0.05;
+    npc.mesh.position.y = npc.position.y + bobOffset;
+
+    const scalePulse = 1 + Math.sin(this.idleTime * 1.5 + npc.position.z) * 0.02;
+    npc.mesh.scale.setScalar(scalePulse);
+  }
+
+  /**
+   * Reduced-tier NPC update: half-rate animation, no facing
+   */
+  private updateNPCReduced(npc: NPCObject, dt: number): void {
+    // Only animate every other frame
+    if (this.frameCount % 2 !== 0) return;
+
+    // Update skeletal animation at double delta to compensate
+    if (this.animatedNPCs.has(npc) && npc.mixer) {
+      npc.mixer.update(dt * 2);
+      return;
+    }
+
+    // Reduced procedural animation
+    const bobOffset = Math.sin(this.idleTime * 2 + npc.position.x) * 0.03;
+    npc.mesh.position.y = npc.position.y + bobOffset;
+  }
+
+  /**
+   * Static-tier NPC update: no animation, just ensure visibility
+   */
+  private updateNPCStatic(npc: NPCObject): void {
+    // Reset to neutral pose
+    npc.mesh.position.y = npc.position.y;
+    npc.mesh.scale.setScalar(1);
+
+    // Hide speech bubble for distant NPCs
+    const sprite = this.speechBubbles.get(npc);
+    if (sprite) {
+      const material = sprite.material as THREE.SpriteMaterial;
+      material.opacity = 0;
     }
   }
 
