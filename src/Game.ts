@@ -251,6 +251,10 @@ export class Game {
       const waterZones = this.sceneManager.getWaterZones();
       this.playerController?.setWaterZones(waterZones);
 
+      // Wire up speed boost zones
+      const speedBoostZones = this.sceneManager.getSpeedBoostZones();
+      this.playerController?.setSpeedBoostZones(speedBoostZones);
+
       // Setup ambient particles for atmosphere
       this.particleManager.createAmbientParticles(0xffeedd, 150);
 

@@ -359,11 +359,11 @@ export class SpeedBoost {
 ```
 
 **Tasks:**
-- [ ] Create RaceManager.ts with checkpoint system
-- [ ] Create SpeedBoost.ts for boost pads
+- [x] Create RaceManager.ts with checkpoint system
+- [x] Create SpeedBoost.ts for boost pads
 - [ ] Add race HUD (timer, checkpoint counter)
 - [ ] Implement NPC racers (simple AI following path)
-- [ ] Redesign chapter_3.json with race track layout
+- [x] Redesign chapter_3.json with race track layout
 - [ ] Add Wonder Stars for beating time targets
 
 ---

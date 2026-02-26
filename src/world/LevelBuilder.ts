@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle, AirCurrent, WaterZone } from '../data/LevelData';
+import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle, AirCurrent, WaterZone, SpeedBoost, Checkpoint } from '../data/LevelData';
 import { assetLoader } from '../engine/AssetLoader';
 
 export interface BuiltLevel {
@@ -21,6 +21,8 @@ export interface BuiltLevel {
   sizePuzzleZones: SizePuzzleZone[];
   airCurrentZones: AirCurrentZone[];
   waterZones: WaterZoneObject[];
+  speedBoostZones: SpeedBoostZone[];
+  checkpoints: CheckpointObject[];
   spawnPoint: THREE.Vector3;
   gatePosition: THREE.Vector3;
   cleanup: () => void;
@@ -69,6 +71,21 @@ export interface WaterZoneObject {
   mesh: THREE.Mesh;
 }
 
+export interface SpeedBoostZone {
+  bounds: THREE.Box3;
+  direction: THREE.Vector3;
+  force: number;
+  mesh: THREE.Mesh;
+}
+
+export interface CheckpointObject {
+  position: THREE.Vector3;
+  radius: number;
+  order: number;
+  mesh: THREE.Mesh;
+  passed: boolean;
+}
+
 export class LevelBuilder {
   private scene: THREE.Scene;
   private world: RAPIER.World;
@@ -107,6 +124,12 @@ export class LevelBuilder {
     // Create water zones
     const waterZones = this.buildWaterZones(levelData.water_zones || []);
 
+    // Create speed boost zones
+    const speedBoostZones = this.buildSpeedBoosts(levelData.speed_boosts || []);
+
+    // Create checkpoints
+    const checkpoints = this.buildCheckpoints(levelData.checkpoints || []);
+
     // Create gate
     this.buildGate(levelData.gate_position);
 
@@ -131,6 +154,8 @@ export class LevelBuilder {
       sizePuzzleZones,
       airCurrentZones,
       waterZones,
+      speedBoostZones,
+      checkpoints,
       spawnPoint,
       gatePosition,
       cleanup: () => this.cleanup()
@@ -622,6 +647,108 @@ export class LevelBuilder {
 
     console.log(`Built ${zones.length} water zones`);
     return zones;
+  }
+
+  /**
+   * Build speed boost zones (racing pads)
+   */
+  private buildSpeedBoosts(boosts: SpeedBoost[]): SpeedBoostZone[] {
+    const zones: SpeedBoostZone[] = [];
+
+    for (const boost of boosts) {
+      const pos = new THREE.Vector3(boost.position.x, boost.position.y, boost.position.z);
+      const size = new THREE.Vector3(boost.size.x, boost.size.y, boost.size.z);
+      const dir = new THREE.Vector3(boost.direction.x, boost.direction.y, boost.direction.z).normalize();
+
+      // Create bounds
+      const halfSize = size.clone().multiplyScalar(0.5);
+      const min = pos.clone().sub(halfSize);
+      const max = pos.clone().add(halfSize);
+
+      // Create arrow-shaped boost pad
+      const group = new THREE.Group();
+
+      // Base pad
+      const padGeo = new THREE.BoxGeometry(size.x, 0.2, size.z);
+      const padMat = new THREE.MeshStandardMaterial({
+        color: 0xffaa00,
+        emissive: 0xff6600,
+        emissiveIntensity: 0.5,
+        metalness: 0.8,
+        roughness: 0.2
+      });
+      const pad = new THREE.Mesh(padGeo, padMat);
+      group.add(pad);
+
+      // Arrow indicator
+      const arrowGeo = new THREE.ConeGeometry(0.5, 1.5, 4);
+      const arrowMat = new THREE.MeshStandardMaterial({
+        color: 0xffff00,
+        emissive: 0xffaa00,
+        emissiveIntensity: 0.8
+      });
+      const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+      arrow.rotation.x = -Math.PI / 2;
+      arrow.position.y = 0.5;
+      group.add(arrow);
+
+      // Rotate to point in boost direction
+      group.lookAt(pos.clone().add(dir));
+      group.position.copy(pos);
+
+      this.scene.add(group);
+      this.createdMeshes.push(group);
+
+      zones.push({
+        bounds: new THREE.Box3(min, max),
+        direction: dir,
+        force: boost.force,
+        mesh: pad
+      });
+    }
+
+    console.log(`Built ${zones.length} speed boost zones`);
+    return zones;
+  }
+
+  /**
+   * Build checkpoint rings
+   */
+  private buildCheckpoints(checkpointData: Checkpoint[]): CheckpointObject[] {
+    const checkpoints: CheckpointObject[] = [];
+
+    for (const cp of checkpointData) {
+      const pos = new THREE.Vector3(cp.position.x, cp.position.y, cp.position.z);
+
+      // Create ring mesh
+      const ringGeo = new THREE.TorusGeometry(cp.radius, 0.3, 8, 24);
+      const ringMat = new THREE.MeshStandardMaterial({
+        color: cp.order === 0 ? 0x00ff00 : 0xffff00,  // Green for start, yellow for others
+        emissive: cp.order === 0 ? 0x00aa00 : 0xaaaa00,
+        emissiveIntensity: 0.5,
+        transparent: true,
+        opacity: 0.8
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.position.copy(pos);
+      ring.rotation.x = Math.PI / 2;  // Make ring vertical
+      this.scene.add(ring);
+      this.createdMeshes.push(ring);
+
+      checkpoints.push({
+        position: pos,
+        radius: cp.radius,
+        order: cp.order,
+        mesh: ring,
+        passed: false
+      });
+    }
+
+    // Sort by order
+    checkpoints.sort((a, b) => a.order - b.order);
+
+    console.log(`Built ${checkpoints.length} checkpoints`);
+    return checkpoints;
   }
 
   /**

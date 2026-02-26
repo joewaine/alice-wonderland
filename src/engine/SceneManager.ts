@@ -342,6 +342,20 @@ export class SceneManager {
   }
 
   /**
+   * Get current level's speed boost zones
+   */
+  getSpeedBoostZones() {
+    return this.currentLevel?.speedBoostZones || [];
+  }
+
+  /**
+   * Get current level's checkpoints
+   */
+  getCheckpoints() {
+    return this.currentLevel?.checkpoints || [];
+  }
+
+  /**
    * Get NPCs for dialogue system
    */
   getNPCs() {
