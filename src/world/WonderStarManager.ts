@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import type { WonderStar as WonderStarData } from '../data/LevelData';
+import { createCelShaderMaterial } from '../shaders/CelShaderMaterial';
 
 export interface WonderStarObject {
   data: WonderStarData;
@@ -315,12 +316,12 @@ export class WonderStarManager {
 
     // Main star shape
     const geometry = new THREE.OctahedronGeometry(0.8);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0xffd700,
-      emissive: 0xffa500,
-      emissiveIntensity: 0.8,
-      metalness: 0.9,
-      roughness: 0.1
+    const material = createCelShaderMaterial({
+      color: 0xFFD700,
+      shadowColor: 0xCC9900,
+      highlightColor: 0xFFFF88,
+      rimColor: 0xFFE55C,
+      rimPower: 2.0
     });
     const star = new THREE.Mesh(geometry, material);
     group.add(star);
@@ -372,8 +373,11 @@ export class WonderStarManager {
    */
   private setStarActiveAppearance(mesh: THREE.Group): void {
     mesh.traverse(child => {
-      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-        child.material.emissiveIntensity = 1.2;
+      if (child instanceof THREE.Mesh) {
+        if (child.material instanceof THREE.ShaderMaterial && child.material.uniforms.uHighlightColor) {
+          // Brighten the highlight for active stars
+          child.material.uniforms.uHighlightColor.value.set(0xFFFFAA);
+        }
       }
     });
   }
@@ -383,8 +387,11 @@ export class WonderStarManager {
    */
   private setStarInactiveAppearance(mesh: THREE.Group): void {
     mesh.traverse(child => {
-      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-        child.material.emissiveIntensity = 0.5;
+      if (child instanceof THREE.Mesh) {
+        if (child.material instanceof THREE.ShaderMaterial && child.material.uniforms.uHighlightColor) {
+          // Dim the highlight for inactive stars
+          child.material.uniforms.uHighlightColor.value.set(0xFFFF88);
+        }
       }
     });
   }
@@ -395,10 +402,12 @@ export class WonderStarManager {
   private setStarCollectedAppearance(mesh: THREE.Group): void {
     mesh.traverse(child => {
       if (child instanceof THREE.Mesh) {
-        if (child.material instanceof THREE.MeshStandardMaterial) {
-          child.material.color.set(0x888888);
-          child.material.emissive.set(0x444444);
-          child.material.emissiveIntensity = 0.2;
+        if (child.material instanceof THREE.ShaderMaterial && child.material.uniforms.uColor) {
+          // Gray out the cel-shaded star
+          child.material.uniforms.uColor.value.set(0x888888);
+          child.material.uniforms.uShadowColor.value.set(0x555555);
+          child.material.uniforms.uHighlightColor.value.set(0xAAAAAA);
+          child.material.uniforms.uRimColor.value.set(0x777777);
         } else if (child.material instanceof THREE.MeshBasicMaterial) {
           child.material.opacity = 0.1;
         }
