@@ -44,8 +44,9 @@ export class AudioManager {
 
   /**
    * Play jump sound (upward sweep)
+   * @param isDoubleJump - If true, plays at slightly higher pitch
    */
-  playJump(): void {
+  playJump(isDoubleJump: boolean = false): void {
     if (this.muted) return;
     this.ensureContext();
     if (!this.audioContext || !this.masterGain) return;
@@ -53,9 +54,16 @@ export class AudioManager {
     const osc = this.audioContext.createOscillator();
     const gain = this.audioContext.createGain();
 
+    // Random pitch variation (0.95 to 1.05) for natural feel
+    const pitchVariation = 0.95 + Math.random() * 0.1;
+    // Double jump is slightly higher pitched
+    const pitchMultiplier = isDoubleJump ? 1.15 : 1.0;
+    const basePitch = 200 * pitchVariation * pitchMultiplier;
+    const endPitch = 600 * pitchVariation * pitchMultiplier;
+
     osc.type = 'square';
-    osc.frequency.setValueAtTime(200, this.audioContext.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(600, this.audioContext.currentTime + 0.1);
+    osc.frequency.setValueAtTime(basePitch, this.audioContext.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(endPitch, this.audioContext.currentTime + 0.1);
 
     gain.gain.setValueAtTime(0.3, this.audioContext.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.15);

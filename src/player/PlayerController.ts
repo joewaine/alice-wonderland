@@ -27,6 +27,7 @@ export interface PlayerControllerCallbacks {
   onSpeedBoost?: () => void;
   onSpeedBoostActive?: (position: THREE.Vector3, direction: THREE.Vector3) => void;
   onWaterEnter?: (position: THREE.Vector3, surfaceY: number) => void;
+  onWaterExit?: (position: THREE.Vector3, surfaceY: number) => void;
   onSwimmingSplash?: (position: THREE.Vector3, surfaceY: number) => void;
   onWallSlide?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
   onWallJump?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
@@ -716,6 +717,13 @@ export class PlayerController {
         }
         return;
       }
+    }
+
+    // Detect water exit (just left water)
+    if (this.wasInWater) {
+      // Create splash position at water surface level
+      this.callbackPosCache.set(pos.x, this.waterSurfaceY, pos.z);
+      this.callbacks.onWaterExit?.(this.callbackPosCache, this.waterSurfaceY);
     }
 
     this.inWater = false;
