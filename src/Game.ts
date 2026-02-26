@@ -756,6 +756,13 @@ export class Game {
       onLongJump: () => {
         audioManager.playJump();
         this.targetSquash.set(0.6, 1.2, 1.4); // Stretch forward
+        // Motion trail particles for visual flair
+        if (this.playerBody && this.playerController) {
+          const pos = this.playerBody.translation();
+          this.tempPosCache.set(pos.x, pos.y, pos.z);
+          const momentum = this.playerController.getMomentum();
+          this.particleManager.createLongJumpTrail(this.tempPosCache, momentum);
+        }
         // Track for wonder star challenges
         this.sceneManager?.trackLongJump();
       },
@@ -765,6 +772,18 @@ export class Game {
       onSpeedBoost: () => {
         // FOV kick for speed effect - kick to 68 degrees, return over 0.4s
         this.cameraController?.kickFOV(68, 0.4);
+      },
+      onWaterEnter: (position) => {
+        // High intensity splash when entering water
+        this.particleManager.createWaterSplash(position, 1.5);
+      },
+      onSwimmingSplash: (position) => {
+        // Low intensity splash while swimming
+        this.particleManager.createWaterSplash(position, 0.4);
+      },
+      onWallSlide: (position, wallNormal) => {
+        // Dust/spark particles when sliding along walls
+        this.particleManager.createWallSlideParticles(position, wallNormal);
       },
     });
 
