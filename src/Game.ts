@@ -247,6 +247,10 @@ export class Game {
       const airCurrentZones = this.sceneManager.getAirCurrentZones();
       this.playerController?.setAirCurrentZones(airCurrentZones);
 
+      // Wire up water zones for swimming
+      const waterZones = this.sceneManager.getWaterZones();
+      this.playerController?.setWaterZones(waterZones);
+
       // Setup ambient particles for atmosphere
       this.particleManager.createAmbientParticles(0xffeedd, 150);
 

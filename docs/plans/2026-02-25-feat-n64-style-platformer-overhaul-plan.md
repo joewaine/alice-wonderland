@@ -287,12 +287,12 @@ setWaterLevel(level: number) {
 ```
 
 **Tasks:**
-- [ ] Add water type to LevelData.ts Platform interface
-- [ ] Create water volume detection in LevelBuilder
-- [ ] Implement swimming physics (buoyancy, drag)
-- [ ] Add swim up/dive down controls
+- [x] Add water type to LevelData.ts Platform interface
+- [x] Create water volume detection in LevelBuilder
+- [x] Implement swimming physics (buoyancy, drag)
+- [x] Add swim up/dive down controls
 - [ ] Implement rising/falling water system
-- [ ] Redesign chapter_2.json with water puzzles
+- [x] Redesign chapter_2.json with water puzzles
 - [ ] Add water surface shader effect
 
 ---

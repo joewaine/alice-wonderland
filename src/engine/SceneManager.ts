@@ -335,6 +335,13 @@ export class SceneManager {
   }
 
   /**
+   * Get current level's water zones
+   */
+  getWaterZones() {
+    return this.currentLevel?.waterZones || [];
+  }
+
+  /**
    * Get NPCs for dialogue system
    */
   getNPCs() {

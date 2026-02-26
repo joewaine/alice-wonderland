@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle, AirCurrent } from '../data/LevelData';
+import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle, AirCurrent, WaterZone } from '../data/LevelData';
 import { assetLoader } from '../engine/AssetLoader';
 
 export interface BuiltLevel {
@@ -20,6 +20,7 @@ export interface BuiltLevel {
   npcs: NPCObject[];
   sizePuzzleZones: SizePuzzleZone[];
   airCurrentZones: AirCurrentZone[];
+  waterZones: WaterZoneObject[];
   spawnPoint: THREE.Vector3;
   gatePosition: THREE.Vector3;
   cleanup: () => void;
@@ -61,6 +62,13 @@ export interface AirCurrentZone {
   mesh: THREE.Mesh;
 }
 
+export interface WaterZoneObject {
+  bounds: THREE.Box3;
+  surfaceY: number;
+  current: THREE.Vector3;
+  mesh: THREE.Mesh;
+}
+
 export class LevelBuilder {
   private scene: THREE.Scene;
   private world: RAPIER.World;
@@ -96,6 +104,9 @@ export class LevelBuilder {
     // Create air current zones
     const airCurrentZones = this.buildAirCurrents(levelData.air_currents || []);
 
+    // Create water zones
+    const waterZones = this.buildWaterZones(levelData.water_zones || []);
+
     // Create gate
     this.buildGate(levelData.gate_position);
 
@@ -119,6 +130,7 @@ export class LevelBuilder {
       npcs,
       sizePuzzleZones,
       airCurrentZones,
+      waterZones,
       spawnPoint,
       gatePosition,
       cleanup: () => this.cleanup()
@@ -546,6 +558,69 @@ export class LevelBuilder {
     }
 
     console.log(`Built ${zones.length} air current zones`);
+    return zones;
+  }
+
+  /**
+   * Build water zones (swimming areas)
+   */
+  private buildWaterZones(waters: WaterZone[]): WaterZoneObject[] {
+    const zones: WaterZoneObject[] = [];
+
+    for (const water of waters) {
+      const pos = new THREE.Vector3(water.position.x, water.position.y, water.position.z);
+      const size = new THREE.Vector3(water.size.x, water.size.y, water.size.z);
+
+      // Create bounds
+      const halfSize = size.clone().multiplyScalar(0.5);
+      const min = pos.clone().sub(halfSize);
+      const max = pos.clone().add(halfSize);
+
+      // Water current (default to zero)
+      const current = water.current
+        ? new THREE.Vector3(water.current.x, water.current.y, water.current.z)
+        : new THREE.Vector3(0, 0, 0);
+
+      // Create water volume mesh with semi-transparent blue material
+      const geo = new THREE.BoxGeometry(size.x, size.y, size.z);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x3399ff,
+        transparent: true,
+        opacity: 0.4,
+        side: THREE.DoubleSide,
+        metalness: 0.1,
+        roughness: 0.2
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      this.scene.add(mesh);
+      this.createdMeshes.push(mesh);
+
+      // Create surface plane for visual effect
+      const surfaceGeo = new THREE.PlaneGeometry(size.x, size.z);
+      const surfaceMat = new THREE.MeshStandardMaterial({
+        color: 0x66ccff,
+        transparent: true,
+        opacity: 0.6,
+        side: THREE.DoubleSide,
+        metalness: 0.3,
+        roughness: 0.1
+      });
+      const surface = new THREE.Mesh(surfaceGeo, surfaceMat);
+      surface.rotation.x = -Math.PI / 2;
+      surface.position.set(pos.x, water.surface_y, pos.z);
+      this.scene.add(surface);
+      this.createdMeshes.push(surface);
+
+      zones.push({
+        bounds: new THREE.Box3(min, max),
+        surfaceY: water.surface_y,
+        current,
+        mesh
+      });
+    }
+
+    console.log(`Built ${zones.length} water zones`);
     return zones;
   }
 

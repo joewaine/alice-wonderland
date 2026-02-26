@@ -26,6 +26,12 @@ export interface AirCurrentZoneRef {
   force: number;
 }
 
+export interface WaterZoneRef {
+  bounds: THREE.Box3;
+  surfaceY: number;
+  current: THREE.Vector3;
+}
+
 export class PlayerController {
   // Physics body reference
   private playerBody: RAPIER.RigidBody;
@@ -50,6 +56,11 @@ export class PlayerController {
 
   // Long jump state
   private isLongJumping: boolean = false;
+
+  // Water/swimming state
+  private inWater: boolean = false;
+  private waterSurfaceY: number = 0;
+  private currentWaterCurrent: THREE.Vector3 = new THREE.Vector3();
 
   // Tuning constants - movement
   private readonly GROUND_ACCEL = 0.85;
@@ -91,6 +102,7 @@ export class PlayerController {
 
   // Level-specific zones
   private airCurrentZones: AirCurrentZoneRef[] = [];
+  private waterZones: WaterZoneRef[] = [];
 
   constructor(world: RAPIER.World, playerBody: RAPIER.RigidBody) {
     this.world = world;
@@ -134,6 +146,13 @@ export class PlayerController {
   }
 
   /**
+   * Set water zones for the current level
+   */
+  setWaterZones(zones: WaterZoneRef[]): void {
+    this.waterZones = zones;
+  }
+
+  /**
    * Main update - call each frame
    */
   update(dt: number, input: InputManager): void {
@@ -162,8 +181,11 @@ export class PlayerController {
       this.groundPoundLockout -= dt;
     }
 
-    // Landing detection
-    if (this.isGrounded && !this.wasGrounded) {
+    // Check if in water
+    this.checkWaterZones();
+
+    // Landing detection (not while swimming)
+    if (this.isGrounded && !this.wasGrounded && !this.inWater) {
       const fallSpeed = Math.abs(vel.y);
       this.callbacks.onLand?.(fallSpeed);
     }
@@ -189,7 +211,13 @@ export class PlayerController {
     const worldX = moveX * cos - moveZ * sin;
     const worldZ = moveX * sin + moveZ * cos;
 
-    // Handle ground pound (crouch in air)
+    // Handle swimming if in water
+    if (this.inWater) {
+      this.applySwimmingMovement(worldX, worldZ, input);
+      return;
+    }
+
+    // Handle ground pound (crouch in air, not in water)
     const isCrouching = input.isKeyDown('shift') || input.isKeyDown('control');
     if (isCrouching && !this.isGrounded && !this.isGroundPounding && this.groundPoundLockout <= 0) {
       this.startGroundPound();
@@ -285,6 +313,94 @@ export class PlayerController {
         );
         break;  // Only apply one air current at a time
       }
+    }
+  }
+
+  /**
+   * Check if player is in a water zone
+   */
+  private checkWaterZones(): void {
+    if (this.waterZones.length === 0) {
+      this.inWater = false;
+      return;
+    }
+
+    const pos = this.playerBody.translation();
+    const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+
+    for (const zone of this.waterZones) {
+      if (zone.bounds.containsPoint(playerPos)) {
+        this.inWater = true;
+        this.waterSurfaceY = zone.surfaceY;
+        this.currentWaterCurrent.copy(zone.current);
+        return;
+      }
+    }
+
+    this.inWater = false;
+  }
+
+  /**
+   * Apply swimming movement when in water
+   */
+  private applySwimmingMovement(
+    inputX: number,
+    inputZ: number,
+    input: InputManager
+  ): void {
+    const pos = this.playerBody.translation();
+
+    // Swimming acceleration (slower than ground)
+    const swimAccel = 0.4 * this.speedMultiplier;
+    const swimFriction = 0.92;  // Water drag
+
+    // Horizontal movement
+    this.momentum.x += inputX * swimAccel;
+    this.momentum.z += inputZ * swimAccel;
+
+    // Vertical swimming controls
+    if (input.jump) {
+      // Swim up
+      this.momentum.y = (this.momentum.y || 0) + 0.6;
+    } else if (input.isKeyDown('shift') || input.isKeyDown('control')) {
+      // Dive down
+      this.momentum.y = (this.momentum.y || 0) - 0.4;
+    } else {
+      // Buoyancy - gently push toward surface
+      const depthBelowSurface = this.waterSurfaceY - pos.y;
+      const buoyancy = Math.max(0, depthBelowSurface) * 0.15;
+      this.momentum.y = (this.momentum.y || 0) + buoyancy;
+    }
+
+    // Apply water current
+    this.momentum.x += this.currentWaterCurrent.x * 0.1;
+    this.momentum.y += this.currentWaterCurrent.y * 0.1;
+    this.momentum.z += this.currentWaterCurrent.z * 0.1;
+
+    // Apply water drag to all axes
+    this.momentum.x *= swimFriction;
+    this.momentum.y *= swimFriction;
+    this.momentum.z *= swimFriction;
+
+    // Clamp speeds
+    const maxSwimSpeed = 8 * this.speedMultiplier;
+    const horizSpeed = Math.sqrt(this.momentum.x ** 2 + this.momentum.z ** 2);
+    if (horizSpeed > maxSwimSpeed) {
+      const scale = maxSwimSpeed / horizSpeed;
+      this.momentum.x *= scale;
+      this.momentum.z *= scale;
+    }
+    this.momentum.y = Math.max(-10, Math.min(10, this.momentum.y));
+
+    // Apply to physics body (override gravity effect)
+    this.playerBody.setLinvel(
+      new RAPIER.Vector3(this.momentum.x, this.momentum.y, this.momentum.z),
+      true
+    );
+
+    // Reset jump count when in water (can jump out of water)
+    if (pos.y > this.waterSurfaceY - 0.5) {
+      this.jumpCount = 0;
     }
   }
 
@@ -439,6 +555,13 @@ export class PlayerController {
    */
   getIsGrounded(): boolean {
     return this.isGrounded;
+  }
+
+  /**
+   * Check if in water
+   */
+  getIsInWater(): boolean {
+    return this.inWater;
   }
 
   /**
