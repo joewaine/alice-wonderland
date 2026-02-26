@@ -356,6 +356,52 @@ export class SceneManager {
   }
 
   /**
+   * Get current level's breakable platforms
+   */
+  getBreakablePlatforms() {
+    return this.currentLevel?.breakablePlatforms || [];
+  }
+
+  /**
+   * Try to break a platform at the given position
+   * Returns true if a platform was broken
+   */
+  tryBreakPlatform(position: THREE.Vector3, playerSize: 'small' | 'normal' | 'large'): boolean {
+    if (!this.currentLevel) return false;
+
+    for (const platform of this.currentLevel.breakablePlatforms) {
+      if (platform.broken) continue;
+
+      // Check if position is on top of the platform
+      const expandedBounds = platform.bounds.clone();
+      expandedBounds.max.y += 1;  // Check slightly above platform
+
+      if (expandedBounds.containsPoint(position)) {
+        // Check if player has required size
+        if (platform.requiresSize && playerSize !== platform.requiresSize) {
+          return false;  // Wrong size
+        }
+
+        // Break the platform!
+        platform.broken = true;
+
+        // Remove from scene
+        this.scene.remove(platform.mesh);
+        platform.mesh.geometry.dispose();
+        (platform.mesh.material as THREE.Material).dispose();
+
+        // Remove physics body
+        this.levelBuilder['world'].removeRigidBody(platform.body);
+
+        console.log('Platform broken!');
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Get NPCs for dialogue system
    */
   getNPCs() {

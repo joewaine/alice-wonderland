@@ -454,6 +454,18 @@ export class Game {
         this.targetSquash.set(1.5, 0.5, 1.5);
         audioManager.playLand(); // Use land sound for now
       },
+      onGroundPoundLand: (position) => {
+        // Check for breakable platforms
+        if (this.sceneManager && this.sizeManager) {
+          const currentSize = this.sizeManager.getCurrentSize();
+          const broke = this.sceneManager.tryBreakPlatform(position, currentSize);
+          if (broke) {
+            // Extra particles and sound for breaking
+            this.particleManager.createLandingDust(position, 2.0);
+            audioManager.playLand();
+          }
+        }
+      },
       onLongJump: () => {
         audioManager.playJump();
         this.targetSquash.set(0.6, 1.2, 1.4); // Stretch forward

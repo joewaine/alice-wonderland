@@ -1,349 +1,199 @@
 {
   "chapter_number": 4,
   "chapter_title": "The Rabbit Sends in a Little Bill",
-  "setting": "White Rabbit's cozy house with multiple rooms, a garden with cucumber frames, and surrounding woodland. The house has narrow passages, a chimney, and windows. Outside features broken glass, scattered tools, and a thick forest beyond.",
+  "setting": "White Rabbit's house where Alice grows too big and must shrink to escape. Breakable walls block the way - only giant Alice can smash through. Tiny passages require small Alice to navigate.",
   "atmosphere": {
-    "sky_color": "#87CEEB",
-    "fog_color": "#E6E6FA",
-    "fog_near": 25,
-    "fog_far": 80,
-    "ambient_light": "#FFF8DC"
+    "sky_color": "#7ab3d4",
+    "fog_color": "#c4dce8",
+    "fog_near": 30,
+    "fog_far": 100,
+    "ambient_light": "#e8dcc4"
   },
   "platforms": [
     {
-      "position": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
-      "size": {
-        "x": 8,
-        "y": 1,
-        "z": 8
-      },
+      "position": { "x": 0, "y": 0, "z": 0 },
+      "size": { "x": 12, "y": 1, "z": 12 },
       "type": "solid",
-      "color": "#8B4513"
+      "color": "#8b7355"
     },
     {
-      "position": {
-        "x": 12,
-        "y": 2,
-        "z": 5
-      },
-      "size": {
-        "x": 6,
-        "y": 1,
-        "z": 4
-      },
+      "position": { "x": 0, "y": 6, "z": 0 },
+      "size": { "x": 10, "y": 0.5, "z": 10 },
       "type": "solid",
-      "color": "#D2691E"
+      "color": "#6b5344"
     },
     {
-      "position": {
-        "x": -10,
-        "y": 3,
-        "z": -8
-      },
-      "size": {
-        "x": 5,
-        "y": 1,
-        "z": 5
-      },
+      "position": { "x": 18, "y": 0, "z": 0 },
+      "size": { "x": 3, "y": 4, "z": 8 },
       "type": "solid",
-      "color": "#CD853F"
+      "color": "#8b4513",
+      "breakable": true,
+      "break_requires_size": "large"
     },
     {
-      "position": {
-        "x": 5,
-        "y": 5,
-        "z": -15
-      },
-      "size": {
-        "x": 4,
-        "y": 1,
-        "z": 6
-      },
+      "position": { "x": 28, "y": 0, "z": 0 },
+      "size": { "x": 10, "y": 1, "z": 10 },
       "type": "solid",
-      "color": "#DEB887"
+      "color": "#7a6a5a"
     },
     {
-      "position": {
-        "x": -15,
-        "y": 1,
-        "z": 10
-      },
-      "size": {
-        "x": 7,
-        "y": 1,
-        "z": 3
-      },
+      "position": { "x": 28, "y": 4, "z": -6 },
+      "size": { "x": 6, "y": 1, "z": 4 },
       "type": "solid",
-      "color": "#F4A460"
+      "color": "#8b7355"
     },
     {
-      "position": {
-        "x": 20,
-        "y": 4,
-        "z": -5
-      },
-      "size": {
-        "x": 5,
-        "y": 1,
-        "z": 5
-      },
+      "position": { "x": 40, "y": 1, "z": 8 },
+      "size": { "x": 2, "y": 3, "z": 6 },
       "type": "solid",
-      "color": "#DAA520"
+      "color": "#8b4513",
+      "breakable": true,
+      "break_requires_size": "large"
     },
     {
-      "position": {
-        "x": -5,
-        "y": 7,
-        "z": 15
-      },
-      "size": {
-        "x": 6,
-        "y": 1,
-        "z": 4
-      },
+      "position": { "x": 50, "y": 0, "z": 5 },
+      "size": { "x": 8, "y": 1, "z": 8 },
       "type": "solid",
-      "color": "#B8860B"
+      "color": "#6b5344"
     },
     {
-      "position": {
-        "x": 15,
-        "y": 6,
-        "z": 12
-      },
-      "size": {
-        "x": 4,
-        "y": 1,
-        "z": 7
-      },
+      "position": { "x": 50, "y": 3, "z": 5 },
+      "size": { "x": 4, "y": 1, "z": 4 },
       "type": "solid",
-      "color": "#8B7355"
+      "color": "#7a6a5a"
     },
     {
-      "position": {
-        "x": -20,
-        "y": 5,
-        "z": -12
-      },
-      "size": {
-        "x": 5,
-        "y": 1,
-        "z": 5
-      },
+      "position": { "x": -15, "y": 0, "z": 5 },
+      "size": { "x": 6, "y": 1, "z": 6 },
       "type": "solid",
-      "color": "#A0522D"
+      "color": "#8b7355"
     },
     {
-      "position": {
-        "x": 8,
-        "y": 8,
-        "z": 20
-      },
-      "size": {
-        "x": 6,
-        "y": 1,
-        "z": 4
-      },
+      "position": { "x": -15, "y": 4, "z": 5 },
+      "size": { "x": 4, "y": 1, "z": 4 },
       "type": "solid",
-      "color": "#D2B48C"
+      "color": "#6b5344"
     },
     {
-      "position": {
-        "x": -12,
-        "y": 9,
-        "z": -20
-      },
-      "size": {
-        "x": 4,
-        "y": 1,
-        "z": 6
-      },
+      "position": { "x": -25, "y": 2, "z": 0 },
+      "size": { "x": 8, "y": 1, "z": 8 },
       "type": "solid",
-      "color": "#DEB887"
+      "color": "#7a6a5a"
     },
     {
-      "position": {
-        "x": 0,
-        "y": 3,
-        "z": -8
-      },
-      "size": {
-        "x": 3,
-        "y": 1,
-        "z": 3
-      },
+      "position": { "x": -25, "y": 6, "z": 8 },
+      "size": { "x": 2, "y": 3, "z": 4 },
+      "type": "solid",
+      "color": "#654321",
+      "breakable": true,
+      "break_requires_size": "large"
+    },
+    {
+      "position": { "x": -25, "y": 5, "z": 15 },
+      "size": { "x": 6, "y": 1, "z": 6 },
+      "type": "solid",
+      "color": "#8b7355"
+    },
+    {
+      "position": { "x": 35, "y": 6, "z": -5 },
+      "size": { "x": 3, "y": 1, "z": 3 },
       "type": "bouncy",
-      "color": "#FF69B4"
+      "color": "#ff69b4"
     },
     {
-      "position": {
-        "x": -8,
-        "y": 6,
-        "z": 8
-      },
-      "size": {
-        "x": 3,
-        "y": 1,
-        "z": 3
-      },
-      "type": "bouncy",
-      "color": "#FF69B4"
+      "position": { "x": 55, "y": 6, "z": 0 },
+      "size": { "x": 8, "y": 1, "z": 8 },
+      "type": "solid",
+      "color": "#6b5344"
     }
   ],
   "collectibles": [
     {
       "type": "key",
-      "position": {
-        "x": 12,
-        "y": 3,
-        "z": 5
-      }
+      "position": { "x": 55, "y": 9, "z": 2 }
     },
     {
       "type": "star",
-      "position": {
-        "x": -10,
-        "y": 4,
-        "z": -8
-      }
+      "position": { "x": 30, "y": 3, "z": 2 }
     },
     {
       "type": "star",
-      "position": {
-        "x": 20,
-        "y": 5,
-        "z": -5
-      }
+      "position": { "x": -23, "y": 8, "z": 17 }
     },
     {
       "type": "star",
-      "position": {
-        "x": -5,
-        "y": 8,
-        "z": 15
-      }
+      "position": { "x": 52, "y": 6, "z": 7 }
     },
     {
       "type": "card",
-      "position": {
-        "x": 5,
-        "y": 6,
-        "z": -15
-      }
+      "position": { "x": 0, "y": 9, "z": 0 },
+      "card_suit": "hearts",
+      "card_value": 10
     },
     {
       "type": "card",
-      "position": {
-        "x": -15,
-        "y": 2,
-        "z": 10
-      }
+      "position": { "x": -15, "y": 7, "z": 7 },
+      "card_suit": "spades",
+      "card_value": 4
     },
     {
       "type": "card",
-      "position": {
-        "x": 15,
-        "y": 7,
-        "z": 12
-      }
-    },
-    {
-      "type": "card",
-      "position": {
-        "x": -20,
-        "y": 6,
-        "z": -12
-      }
-    },
-    {
-      "type": "card",
-      "position": {
-        "x": 8,
-        "y": 9,
-        "z": 20
-      }
+      "position": { "x": 45, "y": 3, "z": 3 },
+      "card_suit": "diamonds",
+      "card_value": 8
     }
   ],
   "npcs": [
     {
-      "name": "White Rabbit",
-      "model_id": "white_rabbit",
-      "position": {
-        "x": -8,
-        "y": 1,
-        "z": 3
-      },
+      "name": "Bill the Lizard",
+      "model_id": "lizard",
+      "position": { "x": 30, "y": 2, "z": -4 },
       "dialogue": [
-        "Mary Ann! Where are my gloves and fan?",
-        "Oh my dear paws! The Duchess will have me executed!",
-        "Quick now! Fetch them from upstairs!",
-        "You there! You must be tiny to fit through my house door.",
-        "But be careful with the cakes - they make you GROW!"
+        "Ow! Watch where you're stepping!",
+        "The White Rabbit sent me down the chimney!",
+        "Those wooden walls can be smashed - if you're BIG enough!",
+        "Use Q to shrink, R to grow!",
+        "Ground pound (SHIFT in air) the breakable walls when you're LARGE!"
       ]
     },
     {
-      "name": "Bill the Lizard",
-      "model_id": "bill_the_lizard",
-      "position": {
-        "x": 18,
-        "y": 1,
-        "z": -10
-      },
+      "name": "White Rabbit",
+      "model_id": "white_rabbit",
+      "position": { "x": 57, "y": 8, "z": -2 },
       "dialogue": [
-        "Well, I hardly know what happened...",
-        "Something came at me like a Jack-in-the-box!",
-        "Up I went like a sky-rocket!",
-        "They tried to send me down the chimney, and I shan't do it again!",
-        "The key to the garden gate is somewhere in the house.",
-        "Congratulations! You've completed the demo!"
+        "My gloves! My fan! Where are they?",
+        "You broke through all my walls!",
+        "The gate leads to the garden party!",
+        "Mind you don't crush anything else!"
       ]
     }
   ],
-  "spawn_point": {
-    "x": 0,
-    "y": 2,
-    "z": 0
-  },
-  "gate_position": {
-    "x": -12,
-    "y": 10,
-    "z": -20
-  },
+  "spawn_point": { "x": 0, "y": 2, "z": -4 },
+  "gate_position": { "x": 58, "y": 8, "z": 4 },
   "size_puzzles": [
     {
       "area_bounds": {
-        "min": {
-          "x": 10,
-          "y": 2,
-          "z": 3
-        },
-        "max": {
-          "x": 14,
-          "y": 6,
-          "z": 7
-        }
+        "min": { "x": 14, "y": -1, "z": -5 },
+        "max": { "x": 22, "y": 6, "z": 5 }
       },
-      "required_size": "small",
-      "hint": "You must be small enough to fit through the narrow doorway, just like Alice in the tiny house!"
+      "required_size": "large",
+      "hint": "Grow LARGE and ground pound (SHIFT in air) to break through this wall!"
     },
     {
       "area_bounds": {
-        "min": {
-          "x": -7,
-          "y": 7,
-          "z": 13
-        },
-        "max": {
-          "x": -3,
-          "y": 10,
-          "z": 17
-        }
+        "min": { "x": 36, "y": -1, "z": 2 },
+        "max": { "x": 44, "y": 5, "z": 14 }
       },
       "required_size": "large",
-      "hint": "Only when you're large enough can you reach the high chimney opening!"
+      "hint": "Another breakable wall blocks the path - smash it when LARGE!"
+    },
+    {
+      "area_bounds": {
+        "min": { "x": -28, "y": 4, "z": 5 },
+        "max": { "x": -22, "y": 10, "z": 12 }
+      },
+      "required_size": "large",
+      "hint": "This elevated wall needs a giant to break through!"
     }
   ]
 }

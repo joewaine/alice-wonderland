@@ -17,6 +17,8 @@ export interface Platform {
   type: 'solid' | 'bouncy';
   color?: string;  // Hex color
   requires_size?: 'small' | 'normal' | 'large';
+  breakable?: boolean;  // Can be destroyed by ground pound
+  break_requires_size?: 'large';  // Size required to break
 }
 
 export interface AirCurrent {
