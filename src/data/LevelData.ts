@@ -32,6 +32,19 @@ export interface WaterZone {
   current?: Vector3;  // Optional water current direction/strength
 }
 
+export interface SpeedBoost {
+  position: Vector3;
+  size: Vector3;
+  direction: Vector3;  // Direction of boost (normalized)
+  force: number;       // Boost strength
+}
+
+export interface Checkpoint {
+  position: Vector3;
+  radius: number;
+  order: number;  // 0 = start/finish, 1+ = checkpoints
+}
+
 export interface Collectible {
   type: 'key' | 'star' | 'card';
   position: Vector3;
@@ -82,6 +95,8 @@ export interface LevelData {
   // Optional chapter-specific features
   air_currents?: AirCurrent[];
   water_zones?: WaterZone[];
+  speed_boosts?: SpeedBoost[];
+  checkpoints?: Checkpoint[];
 }
 
 /**

@@ -1,386 +1,208 @@
 {
   "chapter_number": 3,
   "chapter_title": "A Caucus-Race and a Long Tale",
-  "setting": "A circular riverbank clearing where wet animals gather for a caucus-race",
+  "setting": "A circular race track around a clearing where wet animals compete in a mad dash. Speed boost pads line the track, and checkpoints mark your progress.",
   "atmosphere": {
-    "sky_color": "#9CA4B8",
-    "fog_color": "#B8C4D4",
-    "fog_near": 25,
-    "fog_far": 120,
-    "ambient_light": "#D4DCE8"
+    "sky_color": "#7a9bc4",
+    "fog_color": "#a4b8cc",
+    "fog_near": 30,
+    "fog_far": 150,
+    "ambient_light": "#c4d4e8"
   },
   "platforms": [
     {
-      "position": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
-      "size": {
-        "x": 8,
-        "y": 1,
-        "z": 8
-      },
+      "position": { "x": 0, "y": 0, "z": 0 },
+      "size": { "x": 12, "y": 1, "z": 12 },
       "type": "solid",
-      "color": "#8B7355"
+      "color": "#7a6a5a"
     },
     {
-      "position": {
-        "x": 15,
-        "y": 2,
-        "z": 5
-      },
-      "size": {
-        "x": 4,
-        "y": 1,
-        "z": 4
-      },
+      "position": { "x": 20, "y": 0, "z": 0 },
+      "size": { "x": 10, "y": 1, "z": 8 },
       "type": "solid",
-      "color": "#9C8A6B"
+      "color": "#8a7a6a"
     },
     {
-      "position": {
-        "x": 25,
-        "y": 1,
-        "z": -3
-      },
-      "size": {
-        "x": 5,
-        "y": 1,
-        "z": 3
-      },
+      "position": { "x": 35, "y": 1, "z": 8 },
+      "size": { "x": 10, "y": 1, "z": 8 },
       "type": "solid",
-      "color": "#8B7355"
+      "color": "#7a6a5a"
     },
     {
-      "position": {
-        "x": 35,
-        "y": 3,
-        "z": 8
-      },
-      "size": {
-        "x": 4,
-        "y": 1,
-        "z": 4
-      },
+      "position": { "x": 45, "y": 2, "z": 20 },
+      "size": { "x": 8, "y": 1, "z": 10 },
       "type": "solid",
-      "color": "#A0906F"
+      "color": "#8a7a6a"
     },
     {
-      "position": {
-        "x": 30,
-        "y": 5,
-        "z": 18
-      },
-      "size": {
-        "x": 3,
-        "y": 1,
-        "z": 6
-      },
+      "position": { "x": 40, "y": 3, "z": 35 },
+      "size": { "x": 10, "y": 1, "z": 8 },
       "type": "solid",
-      "color": "#9C8A6B"
+      "color": "#7a6a5a"
     },
     {
-      "position": {
-        "x": 18,
-        "y": 4,
-        "z": 25
-      },
-      "size": {
-        "x": 5,
-        "y": 1,
-        "z": 4
-      },
+      "position": { "x": 25, "y": 4, "z": 42 },
+      "size": { "x": 12, "y": 1, "z": 8 },
       "type": "solid",
-      "color": "#8B7355"
+      "color": "#8a7a6a"
     },
     {
-      "position": {
-        "x": 5,
-        "y": 2,
-        "z": 30
-      },
-      "size": {
-        "x": 4,
-        "y": 1,
-        "z": 5
-      },
+      "position": { "x": 8, "y": 5, "z": 38 },
+      "size": { "x": 10, "y": 1, "z": 10 },
       "type": "solid",
-      "color": "#A0906F"
+      "color": "#7a6a5a"
     },
     {
-      "position": {
-        "x": -8,
-        "y": 3,
-        "z": 22
-      },
-      "size": {
-        "x": 3,
-        "y": 1,
-        "z": 4
-      },
+      "position": { "x": -8, "y": 4, "z": 28 },
+      "size": { "x": 8, "y": 1, "z": 10 },
       "type": "solid",
-      "color": "#9C8A6B"
+      "color": "#8a7a6a"
     },
     {
-      "position": {
-        "x": -15,
-        "y": 1,
-        "z": 10
-      },
-      "size": {
-        "x": 5,
-        "y": 1,
-        "z": 3
-      },
+      "position": { "x": -12, "y": 3, "z": 12 },
+      "size": { "x": 8, "y": 1, "z": 10 },
       "type": "solid",
-      "color": "#8B7355"
+      "color": "#7a6a5a"
     },
     {
-      "position": {
-        "x": -20,
-        "y": 4,
-        "z": -5
-      },
-      "size": {
-        "x": 4,
-        "y": 1,
-        "z": 4
-      },
+      "position": { "x": -8, "y": 2, "z": -2 },
+      "size": { "x": 8, "y": 1, "z": 8 },
       "type": "solid",
-      "color": "#A0906F"
+      "color": "#8a7a6a"
     },
     {
-      "position": {
-        "x": -10,
-        "y": 6,
-        "z": -18
-      },
-      "size": {
-        "x": 6,
-        "y": 1,
-        "z": 3
-      },
-      "type": "solid",
-      "color": "#9C8A6B"
-    },
-    {
-      "position": {
-        "x": 8,
-        "y": 3,
-        "z": -25
-      },
-      "size": {
-        "x": 4,
-        "y": 1,
-        "z": 5
-      },
-      "type": "solid",
-      "color": "#8B7355"
-    },
-    {
-      "position": {
-        "x": 22,
-        "y": 7,
-        "z": -15
-      },
-      "size": {
-        "x": 3,
-        "y": 1,
-        "z": 4
-      },
-      "type": "solid",
-      "color": "#A0906F"
-    },
-    {
-      "position": {
-        "x": -3,
-        "y": 1,
-        "z": 15
-      },
-      "size": {
-        "x": 3,
-        "y": 1,
-        "z": 3
-      },
+      "position": { "x": 28, "y": 6, "z": 20 },
+      "size": { "x": 6, "y": 1, "z": 6 },
       "type": "bouncy",
-      "color": "#FF69B4"
+      "color": "#ff69b4"
+    },
+    {
+      "position": { "x": 0, "y": 7, "z": 20 },
+      "size": { "x": 8, "y": 1, "z": 8 },
+      "type": "solid",
+      "color": "#6a5a4a"
+    }
+  ],
+  "speed_boosts": [
+    {
+      "position": { "x": 14, "y": 0.5, "z": 0 },
+      "size": { "x": 4, "y": 1, "z": 4 },
+      "direction": { "x": 1, "y": 0, "z": 0 },
+      "force": 12
+    },
+    {
+      "position": { "x": 40, "y": 1.5, "z": 14 },
+      "size": { "x": 4, "y": 1, "z": 4 },
+      "direction": { "x": 0.3, "y": 0, "z": 1 },
+      "force": 12
+    },
+    {
+      "position": { "x": 32, "y": 4.5, "z": 40 },
+      "size": { "x": 4, "y": 1, "z": 4 },
+      "direction": { "x": -1, "y": 0, "z": 0 },
+      "force": 12
+    },
+    {
+      "position": { "x": 0, "y": 5.5, "z": 32 },
+      "size": { "x": 4, "y": 1, "z": 4 },
+      "direction": { "x": 0, "y": 0, "z": -1 },
+      "force": 12
+    },
+    {
+      "position": { "x": -10, "y": 2.5, "z": 5 },
+      "size": { "x": 4, "y": 1, "z": 4 },
+      "direction": { "x": 1, "y": 0, "z": -0.3 },
+      "force": 10
+    }
+  ],
+  "checkpoints": [
+    {
+      "position": { "x": 5, "y": 3, "z": 0 },
+      "radius": 4,
+      "order": 0
+    },
+    {
+      "position": { "x": 40, "y": 4, "z": 6 },
+      "radius": 3,
+      "order": 1
+    },
+    {
+      "position": { "x": 42, "y": 5, "z": 28 },
+      "radius": 3,
+      "order": 2
+    },
+    {
+      "position": { "x": 15, "y": 7, "z": 40 },
+      "radius": 3,
+      "order": 3
+    },
+    {
+      "position": { "x": -6, "y": 6, "z": 20 },
+      "radius": 3,
+      "order": 4
     }
   ],
   "collectibles": [
     {
       "type": "key",
-      "position": {
-        "x": 0,
-        "y": 3,
-        "z": 0
-      }
+      "position": { "x": 0, "y": 10, "z": 22 }
     },
     {
       "type": "star",
-      "position": {
-        "x": 15,
-        "y": 5,
-        "z": 5
-      }
+      "position": { "x": 30, "y": 3, "z": 10 }
     },
     {
       "type": "star",
-      "position": {
-        "x": -15,
-        "y": 4,
-        "z": 10
-      }
+      "position": { "x": 43, "y": 5, "z": 35 }
     },
     {
       "type": "star",
-      "position": {
-        "x": 30,
-        "y": 8,
-        "z": 18
-      }
+      "position": { "x": -10, "y": 6, "z": 30 }
     },
     {
       "type": "card",
-      "position": {
-        "x": 25,
-        "y": 4,
-        "z": -3
-      },
-      "card_suit": "hearts",
-      "card_value": 2
-    },
-    {
-      "type": "card",
-      "position": {
-        "x": 35,
-        "y": 6,
-        "z": 8
-      },
+      "position": { "x": 22, "y": 2, "z": 2 },
       "card_suit": "clubs",
-      "card_value": 5
-    },
-    {
-      "type": "card",
-      "position": {
-        "x": 5,
-        "y": 5,
-        "z": 30
-      },
-      "card_suit": "diamonds",
-      "card_value": 7
-    },
-    {
-      "type": "card",
-      "position": {
-        "x": -20,
-        "y": 7,
-        "z": -5
-      },
-      "card_suit": "spades",
-      "card_value": 9
-    },
-    {
-      "type": "card",
-      "position": {
-        "x": 8,
-        "y": 6,
-        "z": -25
-      },
-      "card_suit": "hearts",
       "card_value": 3
+    },
+    {
+      "type": "card",
+      "position": { "x": 48, "y": 4, "z": 22 },
+      "card_suit": "hearts",
+      "card_value": 6
+    },
+    {
+      "type": "card",
+      "position": { "x": 10, "y": 8, "z": 40 },
+      "card_suit": "diamonds",
+      "card_value": 9
     }
   ],
   "npcs": [
     {
       "name": "Dodo",
       "model_id": "dodo",
-      "position": {
-        "x": 12,
-        "y": 2,
-        "z": 12
-      },
+      "position": { "x": -5, "y": 1, "z": 5 },
       "dialogue": [
-        "The best way to explain a Caucus-race is to do it!",
-        "First, mark out a race-course, in a sort of circle.",
-        "Then all the party were placed along the course, here and there.",
-        "Everybody has won, and all must have prizes!",
-        "The key awaits at the center. Run the race to claim it!"
+        "The best way to explain it is to do it!",
+        "A Caucus-race has no rules - just run!",
+        "Follow the checkpoints around the track.",
+        "Hit the orange boost pads for extra speed!",
+        "The key is on the center platform - find your way up!"
       ]
     },
     {
       "name": "Mouse",
       "model_id": "mouse",
-      "position": {
-        "x": -5,
-        "y": 2,
-        "z": -5
-      },
+      "position": { "x": 28, "y": 7, "z": 22 },
       "dialogue": [
-        "I'll soon make you dry enough with the driest thing I know!",
-        "Mine is a long and a sad tale!",
-        "It IS a long tail, certainly, but why do you call it sad?",
-        "Follow the circular path - all winners get prizes!"
-      ]
-    },
-    {
-      "name": "Lory",
-      "model_id": "lory",
-      "position": {
-        "x": 18,
-        "y": 2,
-        "z": -10
-      },
-      "dialogue": [
-        "I am older than you, and must know better!",
-        "What a pity it wouldn't stay!",
-        "Stuff and nonsense! The idea of giving prizes!",
-        "The gate to the rabbit's house is beyond the high platform."
+        "Round and round we go!",
+        "The bouncy pad can launch you to the center!",
+        "My tail is a long tale indeed..."
       ]
     }
   ],
-  "spawn_point": {
-    "x": 0,
-    "y": 2,
-    "z": 0
-  },
-  "gate_position": {
-    "x": 22,
-    "y": 10,
-    "z": -15
-  },
-  "size_puzzles": [
-    {
-      "area_bounds": {
-        "min": {
-          "x": 10,
-          "y": 0,
-          "z": 10
-        },
-        "max": {
-          "x": 20,
-          "y": 10,
-          "z": 20
-        }
-      },
-      "required_size": "small",
-      "hint": "Only the smallest can fit through the mouse hole in the riverbank"
-    },
-    {
-      "area_bounds": {
-        "min": {
-          "x": -25,
-          "y": 0,
-          "z": -10
-        },
-        "max": {
-          "x": -15,
-          "y": 10,
-          "z": 0
-        }
-      },
-      "required_size": "large",
-      "hint": "You must be as big as the Dodo to reach this high platform"
-    }
-  ]
+  "spawn_point": { "x": 0, "y": 2, "z": -4 },
+  "gate_position": { "x": 2, "y": 9, "z": 22 },
+  "size_puzzles": []
 }

@@ -32,6 +32,12 @@ export interface WaterZoneRef {
   current: THREE.Vector3;
 }
 
+export interface SpeedBoostZoneRef {
+  bounds: THREE.Box3;
+  direction: THREE.Vector3;
+  force: number;
+}
+
 export class PlayerController {
   // Physics body reference
   private playerBody: RAPIER.RigidBody;
@@ -103,6 +109,8 @@ export class PlayerController {
   // Level-specific zones
   private airCurrentZones: AirCurrentZoneRef[] = [];
   private waterZones: WaterZoneRef[] = [];
+  private speedBoostZones: SpeedBoostZoneRef[] = [];
+  private boostCooldown: number = 0;
 
   constructor(world: RAPIER.World, playerBody: RAPIER.RigidBody) {
     this.world = world;
@@ -153,6 +161,13 @@ export class PlayerController {
   }
 
   /**
+   * Set speed boost zones for the current level
+   */
+  setSpeedBoostZones(zones: SpeedBoostZoneRef[]): void {
+    this.speedBoostZones = zones;
+  }
+
+  /**
    * Main update - call each frame
    */
   update(dt: number, input: InputManager): void {
@@ -179,6 +194,9 @@ export class PlayerController {
     // Decrement lockout timers
     if (this.groundPoundLockout > 0) {
       this.groundPoundLockout -= dt;
+    }
+    if (this.boostCooldown > 0) {
+      this.boostCooldown -= dt;
     }
 
     // Check if in water
@@ -237,6 +255,9 @@ export class PlayerController {
     if (!this.isGrounded) {
       this.applyAirCurrents();
     }
+
+    // Check for speed boosts
+    this.checkSpeedBoosts();
 
     // Handle jumping
     this.handleJump(input, isCrouching, now);
@@ -312,6 +333,37 @@ export class PlayerController {
           true
         );
         break;  // Only apply one air current at a time
+      }
+    }
+  }
+
+  /**
+   * Check for speed boost zones and apply boost
+   */
+  private checkSpeedBoosts(): void {
+    if (this.speedBoostZones.length === 0 || this.boostCooldown > 0) return;
+
+    const pos = this.playerBody.translation();
+    const playerPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+
+    for (const zone of this.speedBoostZones) {
+      if (zone.bounds.containsPoint(playerPos)) {
+        // Apply boost in the zone's direction
+        this.momentum.x += zone.direction.x * zone.force;
+        this.momentum.z += zone.direction.z * zone.force;
+
+        // Also add vertical boost if specified
+        if (zone.direction.y !== 0) {
+          const vel = this.playerBody.linvel();
+          this.playerBody.setLinvel(
+            new RAPIER.Vector3(this.momentum.x, vel.y + zone.direction.y * zone.force * 0.5, this.momentum.z),
+            true
+          );
+        }
+
+        // Set cooldown to prevent repeated boosts
+        this.boostCooldown = 0.5;
+        break;
       }
     }
   }
