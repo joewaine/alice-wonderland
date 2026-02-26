@@ -776,6 +776,78 @@ export class ParticleManager {
   }
 
   /**
+   * Swimming bubbles trail - small bubbles floating upward when underwater
+   * Creates 2-3 bubbles per call, throttled to spawn every 0.2 seconds
+   * @param position - Player position underwater
+   */
+  createSwimmingBubbles(position: THREE.Vector3): void {
+    const now = performance.now() / 1000;
+    if (now - this.lastSwimmingBubblesTime < this.swimmingBubblesInterval) return;
+    this.lastSwimmingBubblesTime = now;
+
+    const count = 2 + Math.floor(Math.random() * 2);  // 2-3 bubbles
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Bubble color palette (light blue to white)
+    const bubbleColors = [
+      new THREE.Color(0xADD8E6),  // Light blue
+      new THREE.Color(0xE0FFFF),  // Light cyan
+      new THREE.Color(0xFFFFFF),  // White
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start slightly behind/below player with random offset
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.4;
+      positions[i * 3 + 1] = position.y - 0.3 + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.4;
+
+      // Assign random bubble color
+      const color = bubbleColors[Math.floor(Math.random() * bubbleColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Bubbles float upward with slight wobble
+      // Wobble is achieved through horizontal velocity variation
+      velocities[i * 3] = (Math.random() - 0.5) * 0.8;  // Horizontal wobble X
+      velocities[i * 3 + 1] = Math.random() * 1.5 + 1.5;  // Upward (1.5-3.0)
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.8;  // Horizontal wobble Z
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.05 + Math.random() * 0.05,  // Size 0.05-0.1
+      transparent: true,
+      opacity: 0.7,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.8,  // 0.8 second duration
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Bubbles float upward, don't fall
+    });
+  }
+
+  /**
    * Water splash effect - particles spray upward and outward
    * @param position - splash position (water surface level)
    * @param intensity - 0-1 for low (swimming), 1+ for high (water entry)
@@ -1007,6 +1079,10 @@ export class ParticleManager {
   // Magnet trail throttling
   private lastMagnetTrailTime: number = 0;
   private magnetTrailInterval: number = 0.08;  // 80ms between trail spawns
+
+  // Swimming bubbles throttling
+  private lastSwimmingBubblesTime: number = 0;
+  private swimmingBubblesInterval: number = 0.2;  // 200ms between bubble spawns
 
   /**
    * Subtle sparkle trail for collectible magnet effect
@@ -1247,6 +1323,72 @@ export class ParticleManager {
       isLooping: false,
       elapsed: 0,
       noGravity: true  // Sparkles float, ring expands without gravity
+    });
+  }
+
+  /**
+   * Ledge grab shimmer - soft golden sparkles at grab point
+   * Delicate, floating particles for visual feedback
+   */
+  createLedgeGrabShimmer(position: THREE.Vector3): void {
+    const count = 8;
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Soft golden sparkle palette
+    const shimmerColors = [
+      new THREE.Color(0xFFD700),  // Gold
+      new THREE.Color(0xFFFACD),  // Lemon chiffon
+      new THREE.Color(0xFFF8DC),  // Cornsilk
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start at grab point with slight random offset
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.2;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
+
+      // Assign random shimmer color
+      const color = shimmerColors[Math.floor(Math.random() * shimmerColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Gentle upward float with slight spread
+      velocities[i * 3] = (Math.random() - 0.5) * 0.3;
+      velocities[i * 3 + 1] = Math.random() * 0.8 + 0.3;  // Upward bias
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.08,
+      transparent: true,
+      opacity: 0.8,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.5,  // 0.5 second duration
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Shimmer floats gently upward
     });
   }
 
