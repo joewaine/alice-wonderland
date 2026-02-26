@@ -268,6 +268,10 @@ export class ParticleManager {
   private lastFootstepTime: number = 0;
   private footstepInterval: number = 0.2;  // Seconds between footstep particles
 
+  // Run dust puff throttling
+  private lastRunDustTime: number = 0;
+  private runDustInterval: number = 0.15;  // Seconds between run dust puffs
+
   /**
    * Footstep dust puff (small, subtle)
    * Call frequently when player is walking - throttled internally
@@ -323,6 +327,78 @@ export class ParticleManager {
       velocities,
       lifetimes,
       maxLife: 0.3,  // Quick fade
+      isLooping: false,
+      elapsed: 0
+    });
+  }
+
+  /**
+   * Run dust puff - more prominent dust when running at full speed
+   * Stone/dust colors, puff outward and slightly up, quick fade
+   */
+  createRunDustPuff(position: THREE.Vector3): void {
+    const now = performance.now() / 1000;
+    if (now - this.lastRunDustTime < this.runDustInterval) return;
+    this.lastRunDustTime = now;
+
+    const count = 5 + Math.floor(Math.random() * 4);  // 5-8 particles
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Stone/dust color palette
+    const dustColors = [
+      new THREE.Color(0xD2B48C),  // Tan
+      new THREE.Color(0xC4A882),  // Darker tan
+      new THREE.Color(0xBEB5A0),  // Stone gray-tan
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start at feet level, slightly behind player
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.4;
+      positions[i * 3 + 1] = position.y - 0.7;
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.4;
+
+      // Assign random dust color
+      const color = dustColors[Math.floor(Math.random() * dustColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Puff outward and slightly up
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 1.5 + 0.8;
+
+      velocities[i * 3] = Math.cos(angle) * speed;
+      velocities[i * 3 + 1] = Math.random() * 1.2 + 0.5;  // Upward bias
+      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.12,
+      transparent: true,
+      opacity: 0.7,
+      vertexColors: true,
+      blending: THREE.NormalBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.2,  // Quick fade (0.2s)
       isLooping: false,
       elapsed: 0
     });

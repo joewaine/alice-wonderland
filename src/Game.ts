@@ -124,6 +124,9 @@ export class Game {
   private frameTimeHistory: number[] = [];
   private lastStatsUpdate: number = 0;
 
+  // Screen vignette overlay
+  private vignetteOverlay: HTMLDivElement | null = null;
+
   // Hitstop effect (freeze frames on ground pound impact)
   private hitstopRemaining: number = 0;
 
@@ -216,6 +219,9 @@ export class Game {
 
     // Create performance stats overlay (hidden by default)
     this.createStatsOverlay();
+
+    // Create cinematic vignette overlay
+    this.createVignetteOverlay();
   }
 
   /**
@@ -779,6 +785,10 @@ export class Game {
     // Player controller with momentum physics
     this.playerController = new PlayerController(this.world, this.playerBody);
     this.playerController.setCallbacks({
+      onJumpAnticipation: (_isDoubleJump) => {
+        // Brief squash before jump - wider and shorter for "crouch" feel
+        this.targetSquash.set(1.2, 0.8, 1.2);
+      },
       onJump: (isDoubleJump) => {
         audioManager.playJump();
         // Different squash for double jump
@@ -1158,6 +1168,18 @@ export class Game {
           );
         }
 
+        // Run dust puffs when at 80%+ max speed (max speed is ~16)
+        const maxSpeed = 16;
+        if (horizontalSpeed > maxSpeed * 0.8) {
+          const pos = this.playerBody.translation();
+          // Position slightly behind player based on velocity direction
+          const behindX = pos.x - (vel.x / horizontalSpeed) * 0.3;
+          const behindZ = pos.z - (vel.z / horizontalSpeed) * 0.3;
+          this.particleManager.createRunDustPuff(
+            new THREE.Vector3(behindX, pos.y, behindZ)
+          );
+        }
+
         // Detect surface type for footstep sounds
         if (this.sceneManager) {
           const pos = this.playerBody.translation();
@@ -1307,6 +1329,29 @@ export class Game {
       min-width: 150px;
     `;
     document.body.appendChild(this.statsOverlay);
+  }
+
+  /**
+   * Create cinematic vignette overlay
+   * Subtle darkening at screen edges to draw focus to center
+   */
+  private createVignetteOverlay(): void {
+    this.vignetteOverlay = document.createElement('div');
+    this.vignetteOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: radial-gradient(
+        ellipse at center,
+        transparent 50%,
+        rgba(0, 0, 0, 0.3) 100%
+      );
+      z-index: 100;
+    `;
+    document.body.appendChild(this.vignetteOverlay);
   }
 
   /**

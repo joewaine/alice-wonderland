@@ -17,6 +17,7 @@ import type { AnimationState } from '../animation/AnimationStateManager';
 import type { SurfaceType } from '../audio/AudioManager';
 
 export interface PlayerControllerCallbacks {
+  onJumpAnticipation?: (isDoubleJump: boolean) => void;
   onJump?: (isDoubleJump: boolean) => void;
   onLand?: (fallSpeed: number) => void;
   onGroundPound?: () => void;
@@ -74,6 +75,13 @@ export class PlayerController {
 
   // Landing lockout state (prevents instant re-jump after hard landings)
   private landingLockout: number = 0;
+
+  // Jump anticipation state (brief squash before jump)
+  private pendingJump: boolean = false;
+  private pendingJumpIsDouble: boolean = false;
+  private pendingJumpForce: number = 0;
+  private jumpAnticipationTimer: number = 0;
+  private readonly JUMP_ANTICIPATION_DURATION: number = 0.05; // 50ms squash before jump
 
   // Water/swimming state
   private inWater: boolean = false;
@@ -302,6 +310,14 @@ export class PlayerController {
     }
     if (this.boostCooldown > 0) {
       this.boostCooldown -= dt;
+    }
+
+    // Process pending jump after anticipation squash
+    if (this.pendingJump) {
+      this.jumpAnticipationTimer -= dt;
+      if (this.jumpAnticipationTimer <= 0) {
+        this.executePendingJump();
+      }
     }
 
     // Check if in water
@@ -703,7 +719,7 @@ export class PlayerController {
     }
 
     // Normal jump or double jump
-    if (wantsToJump && this.jumpCount < 2) {
+    if (wantsToJump && this.jumpCount < 2 && !this.pendingJump) {
       // First jump requires being grounded or coyote time
       if (this.jumpCount === 0 && !this.isGrounded && !canCoyoteJump) {
         return;
@@ -712,10 +728,29 @@ export class PlayerController {
       const isDoubleJump = this.jumpCount === 1;
       const force = isDoubleJump ? this.DOUBLE_JUMP_FORCE : this.JUMP_FORCE;
 
-      this.performJump(force * this.jumpMultiplier, isDoubleJump);
-      this.jumpCount++;
+      // Double jumps are instant (already in air), first jumps get anticipation squash
+      if (isDoubleJump) {
+        this.performJump(force * this.jumpMultiplier, isDoubleJump);
+        this.jumpCount++;
+      } else {
+        // Queue the jump with anticipation
+        this.pendingJump = true;
+        this.pendingJumpIsDouble = false;
+        this.pendingJumpForce = force * this.jumpMultiplier;
+        this.jumpAnticipationTimer = this.JUMP_ANTICIPATION_DURATION;
+        this.callbacks.onJumpAnticipation?.(false);
+      }
       this.jumpBufferTime = 0;
     }
+  }
+
+  /**
+   * Execute the pending jump after anticipation squash
+   */
+  private executePendingJump(): void {
+    this.pendingJump = false;
+    this.performJump(this.pendingJumpForce, this.pendingJumpIsDouble);
+    this.jumpCount++;
   }
 
   /**
