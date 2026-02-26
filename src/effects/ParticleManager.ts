@@ -1533,6 +1533,62 @@ export class ParticleManager {
   }
 
   /**
+   * Collect trail - particles arc upward toward top-left of screen (UI counter location)
+   * Called when collecting stars/cards to visually connect pickup to HUD
+   * @param startPos - World position where collectible was picked up
+   * @param color - Particle color matching collectible type (gold for stars, red for cards)
+   */
+  createCollectTrail(startPos: THREE.Vector3, color: number): void {
+    const count = 6;  // 5-6 particles
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+      // Start at collection position with slight spread
+      positions[i * 3] = startPos.x + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 1] = startPos.y + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 2] = startPos.z + (Math.random() - 0.5) * 0.3;
+
+      // Arc toward top-left of screen (UI counter)
+      // Combine upward velocity with leftward velocity for arc
+      // Stagger velocities for spread effect
+      const stagger = 0.8 + (i / count) * 0.4;  // 0.8 to 1.2 multiplier
+      velocities[i * 3] = (-2 + Math.random() * 0.5) * stagger;  // Leftward
+      velocities[i * 3 + 1] = (8 + Math.random() * 2) * stagger;  // Upward (strong)
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.5;  // Slight z variance
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.PointsMaterial({
+      color,
+      size: 0.2,
+      transparent: true,
+      opacity: 1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.6,  // 0.6 second duration
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Arc upward without falling back down
+    });
+  }
+
+  /**
    * Gate unlock effect
    */
   createGateUnlockEffect(position: THREE.Vector3): void {

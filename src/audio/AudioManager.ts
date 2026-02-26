@@ -470,6 +470,37 @@ export class AudioManager {
   }
 
   /**
+   * Play checkpoint activation sound (short ascending chime)
+   */
+  playCheckpoint(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    // Quick bright chime - satisfying "ding" confirmation
+    const frequencies = [523, 784]; // C5, G5 - perfect fifth
+
+    frequencies.forEach((freq, i) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      const startTime = this.audioContext!.currentTime + i * 0.03;
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.25, startTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.15);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(startTime);
+      osc.stop(startTime + 0.2);
+    });
+  }
+
+  /**
    * Play chapter complete jingle
    */
   playChapterComplete(): void {
