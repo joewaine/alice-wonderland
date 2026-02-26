@@ -204,5 +204,70 @@
   ],
   "spawn_point": { "x": 0, "y": 2, "z": -4 },
   "gate_position": { "x": 2, "y": 9, "z": 22 },
-  "size_puzzles": []
+  "size_puzzles": [],
+  "wonder_stars": [
+    {
+      "id": "ch3_star_1",
+      "name": "Speed Demon",
+      "position": { "x": 5, "y": 4, "z": 2 },
+      "challenge_type": "race",
+      "requirements": {
+        "beat_time": 45
+      },
+      "hint": "Complete a lap around the track in under 45 seconds",
+      "spawn_near": { "x": 0, "y": 2, "z": -4 }
+    },
+    {
+      "id": "ch3_star_2",
+      "name": "Lightning Lap",
+      "position": { "x": 38, "y": 4, "z": 10 },
+      "challenge_type": "race",
+      "requirements": {
+        "beat_time": 30
+      },
+      "hint": "Master the track - finish in under 30 seconds!",
+      "spawn_near": { "x": 0, "y": 2, "z": -4 }
+    },
+    {
+      "id": "ch3_star_3",
+      "name": "Long Jump Champion",
+      "position": { "x": 44, "y": 6, "z": 32 },
+      "challenge_type": "skill",
+      "requirements": {
+        "perform_long_jumps": 5
+      },
+      "hint": "Use the speed boosts and perform 5 long jumps"
+    },
+    {
+      "id": "ch3_star_4",
+      "name": "Track Star",
+      "position": { "x": 18, "y": 8, "z": 42 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_stars": 3
+      },
+      "hint": "Find all 3 stars scattered around the race track"
+    },
+    {
+      "id": "ch3_star_5",
+      "name": "Card Runner",
+      "position": { "x": -8, "y": 5, "z": 20 },
+      "challenge_type": "collection",
+      "requirements": {
+        "collect_cards": 3
+      },
+      "hint": "Grab all 3 cards while racing around"
+    },
+    {
+      "id": "ch3_star_6",
+      "name": "Center Stage",
+      "position": { "x": 2, "y": 10, "z": 20 },
+      "challenge_type": "exploration",
+      "requirements": {
+        "reach_position": { "x": 0, "y": 9, "z": 20 },
+        "reach_radius": 3
+      },
+      "hint": "Reach the elevated center platform"
+    }
+  ]
 }

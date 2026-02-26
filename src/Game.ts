@@ -16,6 +16,7 @@ import { NPCController } from './npcs/NPCController';
 import { ParticleManager } from './effects/ParticleManager';
 import { MainMenu } from './ui/MainMenu';
 import { LoadingScreen } from './ui/LoadingScreen';
+import { StarSelect } from './ui/StarSelect';
 import { audioManager } from './audio/AudioManager';
 import { musicManager } from './audio/MusicManager';
 import { assetLoader } from './engine/AssetLoader';
@@ -58,6 +59,7 @@ export class Game {
   // Menu system
   private mainMenu: MainMenu;
   private loadingScreen: LoadingScreen;
+  private starSelect: StarSelect;
 
   // Current player config (used by SizeManager callback)
   private baseSpeed: number = 14;
@@ -129,6 +131,9 @@ export class Game {
 
     // Loading screen
     this.loadingScreen = new LoadingScreen();
+
+    // Star select UI
+    this.starSelect = new StarSelect();
 
     // Handle window resize
     window.addEventListener('resize', () => this.onResize());
@@ -263,6 +268,12 @@ export class Game {
 
       // Add size pickups for the level
       this.setupSizePickups();
+
+      // Show star select UI if there are wonder stars
+      const wonderStars = this.sceneManager.getWonderStars();
+      if (wonderStars.length > 0) {
+        this.showStarSelect();
+      }
     } catch (error) {
       console.error(`Failed to load chapter ${chapterNumber}:`, error);
       // Fall back to chapter 1 if not already on it
@@ -274,6 +285,43 @@ export class Game {
     } finally {
       this.isLoadingChapter = false;
     }
+  }
+
+  /**
+   * Show star select UI
+   */
+  private showStarSelect(): void {
+    if (!this.sceneManager) return;
+
+    const stars = this.sceneManager.getWonderStars();
+    const collectedIds = this.sceneManager.getCollectedStarIds();
+
+    // Pause game while selecting
+    this.isRunning = false;
+
+    this.starSelect.show(stars, collectedIds, {
+      onStarSelected: (starId) => {
+        this.sceneManager?.setActiveWonderStar(starId);
+
+        // Spawn at star-specific location if specified
+        const spawnPoint = this.sceneManager?.getActiveStarSpawn();
+        if (spawnPoint) {
+          this.spawnPlayerAt(spawnPoint);
+        }
+
+        // Resume game
+        this.isRunning = true;
+        this.lastTime = performance.now();
+        this.gameLoop();
+      },
+      onClose: () => {
+        // No star selected, just play normally
+        this.sceneManager?.setActiveWonderStar(null);
+        this.isRunning = true;
+        this.lastTime = performance.now();
+        this.gameLoop();
+      }
+    });
   }
 
   /**
@@ -453,6 +501,8 @@ export class Game {
         // Strong squash and screen shake
         this.targetSquash.set(1.5, 0.5, 1.5);
         audioManager.playLand(); // Use land sound for now
+        // Track for wonder star challenges
+        this.sceneManager?.trackGroundPound();
       },
       onGroundPoundLand: (position) => {
         // Check for breakable platforms
@@ -463,12 +513,16 @@ export class Game {
             // Extra particles and sound for breaking
             this.particleManager.createLandingDust(position, 2.0);
             audioManager.playLand();
+            // Track for wonder star challenges
+            this.sceneManager.trackPlatformBreak();
           }
         }
       },
       onLongJump: () => {
         audioManager.playJump();
         this.targetSquash.set(0.6, 1.2, 1.4); // Stretch forward
+        // Track for wonder star challenges
+        this.sceneManager?.trackLongJump();
       },
       onFootstep: () => {
         audioManager.playFootstep();
