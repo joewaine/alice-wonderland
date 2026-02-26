@@ -237,21 +237,66 @@ export class ParticleManager {
   }
 
   /**
-   * Landing dust effect
+   * Landing dust effect with surface-specific colors
+   * @param position - Landing position
+   * @param intensity - Effect intensity (scales particle count)
+   * @param surfaceType - Surface type for color selection (grass, stone, wood, bouncy)
    */
-  createLandingDust(position: THREE.Vector3, intensity: number = 1): void {
+  createLandingDust(position: THREE.Vector3, intensity: number = 1, surfaceType: string = 'grass'): void {
     const count = Math.floor(15 * intensity);
 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
     const velocities = new Float32Array(count * 3);
     const lifetimes = new Float32Array(count);
+
+    // Surface-specific color palettes
+    let dustColors: THREE.Color[];
+    switch (surfaceType) {
+      case 'grass':
+        dustColors = [
+          new THREE.Color(0x7CB342),  // Green
+          new THREE.Color(0x8D6E63),  // Brown
+          new THREE.Color(0x9CCC65),  // Light green
+        ];
+        break;
+      case 'stone':
+        dustColors = [
+          new THREE.Color(0x9E9E9E),  // Gray
+          new THREE.Color(0xBDBDBD),  // Light gray
+          new THREE.Color(0x757575),  // Dark gray
+        ];
+        break;
+      case 'wood':
+        dustColors = [
+          new THREE.Color(0xD7CCC8),  // Tan
+          new THREE.Color(0xA1887F),  // Brown
+          new THREE.Color(0xBCAAA4),  // Light brown
+        ];
+        break;
+      case 'bouncy':
+        // Bouncy surfaces use the dedicated bounce pad effect instead
+        // Fall through to default if called directly
+      default:
+        dustColors = [
+          new THREE.Color(0xccbb99),  // Dusty tan (default)
+          new THREE.Color(0xd4c4a8),  // Light dusty tan
+          new THREE.Color(0xc4b488),  // Darker tan
+        ];
+    }
 
     for (let i = 0; i < count; i++) {
       // Start at ground level
       positions[i * 3] = position.x;
       positions[i * 3 + 1] = position.y - 0.5;
       positions[i * 3 + 2] = position.z;
+
+      // Assign random color from surface palette
+      const color = dustColors[Math.floor(Math.random() * dustColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
 
       // Spread outward along ground
       const angle = Math.random() * Math.PI * 2;
@@ -265,12 +310,13 @@ export class ParticleManager {
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-      color: 0xccbb99, // Dusty tan color
       size: 0.2,
       transparent: true,
       opacity: 0.7,
+      vertexColors: true,
       blending: THREE.NormalBlending,
       depthWrite: false
     });

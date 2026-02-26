@@ -792,7 +792,13 @@ export class Game {
 
     this.sizeManager.onSizeChange = (size, config) => {
       // Update camera for new player size
-      this.cameraController?.setTargetDistance(8 * config.scale);
+      // Distance multipliers: small=0.6x (closer), normal=1.0x, large=1.4x (wider)
+      const sizeDistanceMultipliers: Record<string, number> = {
+        small: 0.6,
+        normal: 1.0,
+        large: 1.4
+      };
+      this.cameraController?.setSizeDistanceMultiplier(sizeDistanceMultipliers[size]);
       this.cameraController?.setHeightOffset(2 * config.scale);
 
       // Update player controller multipliers and ground check
@@ -856,14 +862,14 @@ export class Game {
           this.targetSquash.set(0.8, 1.3, 0.8);
         }
       },
-      onLand: (fallSpeed) => {
+      onLand: (fallSpeed, surface) => {
         audioManager.playLand();
         if (this.playerBody) {
           const pos = this.playerBody.translation();
           this.tempPosCache.set(pos.x, pos.y, pos.z);
           const intensity = Math.min(fallSpeed / 15, 1.5);
           if (intensity > 0.2) {
-            this.particleManager.createLandingDust(this.tempPosCache, intensity);
+            this.particleManager.createLandingDust(this.tempPosCache, intensity, surface);
           }
         }
         // Start landing squash animation timer
