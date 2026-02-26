@@ -318,10 +318,10 @@ class AreaGate {
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `src/quests/QuestManager.ts` | Create | Quest state machine |
-| `src/world/AreaGate.ts` | Create | Blocking barriers that unlock |
-| `src/npcs/NPCController.ts` | Modify | Integrate quest dialogue |
-| `src/Game.ts` | Modify | Initialize QuestManager |
+| `src/quests/QuestManager.ts` | ~~Create~~ ✅ | Quest state machine |
+| `src/world/AreaGate.ts` | ~~Create~~ ✅ | Blocking barriers that unlock |
+| `src/npcs/NPCController.ts` | ~~Modify~~ ✅ | Integrate quest dialogue |
+| `src/Game.ts` | ~~Modify~~ ✅ | Initialize QuestManager |
 
 ---
 

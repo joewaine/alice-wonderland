@@ -24,6 +24,8 @@ import { assetLoader } from './engine/AssetLoader';
 import { applyCelShaderToObject, updateCelShaderLightDirection } from './shaders/CelShaderMaterial';
 import { addOutlinesToObject } from './shaders/OutlineEffect';
 import { AnimationStateManager } from './animation/AnimationStateManager';
+import { QuestManager } from './quests/QuestManager';
+import { AreaGate } from './world/AreaGate';
 
 export class Game {
   // Three.js core
@@ -102,6 +104,10 @@ export class Game {
   // Pre-allocated vectors to avoid per-frame GC pressure
   private playerPosCache: THREE.Vector3 = new THREE.Vector3();
   private tempPosCache: THREE.Vector3 = new THREE.Vector3();
+
+  // Quest system
+  private questManager: QuestManager | null = null;
+  private areaGates: AreaGate[] = [];
 
   constructor() {
     // Create renderer - BasicShadowMap for hard cel-shaded shadows
@@ -268,6 +274,9 @@ export class Game {
       const npcs = this.sceneManager.getNPCs();
       this.npcController.setNPCs(npcs);
 
+      // Initialize quest system if level has quests
+      await this.initializeQuestSystem();
+
       // Wire up air currents for player physics
       const airCurrentZones = this.sceneManager.getAirCurrentZones();
       this.playerController?.setAirCurrentZones(airCurrentZones);
@@ -307,6 +316,105 @@ export class Game {
       }
     } finally {
       this.isLoadingChapter = false;
+    }
+  }
+
+  /**
+   * Initialize quest system for levels with quests
+   */
+  private async initializeQuestSystem(): Promise<void> {
+    if (!this.sceneManager || !this.world) return;
+
+    // Clean up existing quest system
+    this.cleanupQuestSystem();
+
+    const quests = this.sceneManager.getQuests();
+    const areas = this.sceneManager.getAreas();
+    const npcData = this.sceneManager.getNPCData();
+
+    // Skip if no quests
+    if (quests.length === 0) {
+      this.questManager = null;
+      return;
+    }
+
+    // Create QuestManager
+    const chapterNumber = this.sceneManager.getCurrentChapterNumber();
+    this.questManager = new QuestManager(chapterNumber);
+    this.questManager.initialize(quests, npcData);
+
+    // Connect to NPCController
+    this.npcController.setQuestManager(this.questManager);
+
+    // Set up area gates for locked areas
+    for (const area of areas) {
+      if (area.locked_by_quest) {
+        // Create a gate if area is locked and not yet unlocked
+        if (!this.questManager.isAreaUnlocked(area.id)) {
+          // Position gate at area entrance (center of bounds min edge)
+          const gatePos = new THREE.Vector3(
+            (area.bounds.min.x + area.bounds.max.x) / 2,
+            (area.bounds.min.y + area.bounds.max.y) / 2,
+            area.bounds.min.z  // Gate at the "entrance" z
+          );
+          const gateSize = new THREE.Vector3(
+            area.bounds.max.x - area.bounds.min.x,
+            area.bounds.max.y - area.bounds.min.y,
+            2  // Gate thickness
+          );
+
+          const gate = new AreaGate(this.world, this.scene, {
+            position: gatePos,
+            size: gateSize,
+            areaId: area.id,
+            visible: true,
+            color: 0x2D5A27  // Hedge green
+          });
+
+          this.areaGates.push(gate);
+        }
+      }
+    }
+
+    // Wire up callbacks
+    this.questManager.callbacks.onAreaUnlocked = (areaId) => {
+      // Find and unlock the corresponding gate
+      const gate = this.areaGates.find(g => g.getAreaId() === areaId);
+      if (gate) {
+        gate.unlock();
+        audioManager.playGateUnlock();
+      }
+    };
+
+    this.questManager.callbacks.onQuestStarted = (quest) => {
+      // Show quest started notification
+      console.log(`Quest started: ${quest.name}`);
+      audioManager.playCollect();  // Use collect sound for quest start
+    };
+
+    this.questManager.callbacks.onQuestCompleted = (quest) => {
+      // Show quest completed notification
+      console.log(`Quest completed: ${quest.name}`);
+      audioManager.playKeyCollect();  // Use key fanfare for quest complete
+    };
+
+    console.log(`QuestManager initialized with ${quests.length} quests and ${this.areaGates.length} area gates`);
+  }
+
+  /**
+   * Clean up quest system
+   */
+  private cleanupQuestSystem(): void {
+    // Clean up area gates
+    for (const gate of this.areaGates) {
+      gate.cleanup();
+    }
+    this.areaGates = [];
+
+    // Clean up quest manager
+    if (this.questManager) {
+      this.questManager.cleanup();
+      this.questManager = null;
     }
   }
 
@@ -707,6 +815,20 @@ export class Game {
     // Update NPC interactions
     const isInteractPressed = this.input.isKeyDown('e');
     this.npcController.update(this.playerPosCache, isInteractPressed, dt);
+
+    // Update area gates (unlock animations)
+    for (const gate of this.areaGates) {
+      gate.update(dt);
+    }
+
+    // Update quest position tracking
+    if (this.questManager) {
+      this.questManager.notifyReachedPosition(
+        this.playerPosCache.x,
+        this.playerPosCache.y,
+        this.playerPosCache.z
+      );
+    }
   }
 
   /**

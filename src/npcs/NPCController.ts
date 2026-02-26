@@ -3,11 +3,13 @@
  *
  * Detects when player is near an NPC and presses E to interact.
  * Shows dialogue and cycles through dialogue lines.
+ * Integrates with QuestManager for quest-aware dialogue.
  */
 
 import * as THREE from 'three';
 import type { NPCObject } from '../world/LevelBuilder';
 import { DialogueUI } from './DialogueUI';
+import type { QuestManager } from '../quests/QuestManager';
 
 export class NPCController {
   private npcs: NPCObject[] = [];
@@ -15,6 +17,13 @@ export class NPCController {
   private currentNPC: NPCObject | null = null;
   private interactDistance: number = 3;
   private wasInteractPressed: boolean = false;
+
+  // Quest system integration
+  private questManager: QuestManager | null = null;
+  private currentDialogue: string[] = [];  // Quest-aware dialogue for current NPC
+
+  // Callbacks
+  public onDialogueComplete: ((npcName: string) => void) | null = null;
 
   // Interaction prompt
   private promptElement: HTMLDivElement;
@@ -30,7 +39,8 @@ export class NPCController {
   // Skeletal animation tracking
   private animatedNPCs: Set<NPCObject> = new Set();
 
-  constructor() {
+  constructor(questManager?: QuestManager) {
+    this.questManager = questManager || null;
     this.dialogueUI = new DialogueUI();
 
     // Create interaction prompt
@@ -258,10 +268,17 @@ export class NPCController {
     this.currentNPC = npc;
     npc.dialogueIndex = 0;
 
+    // Get quest-aware dialogue if QuestManager is available
+    if (this.questManager) {
+      this.currentDialogue = this.questManager.getDialogueForNPC(npc.name, npc.dialogue);
+    } else {
+      this.currentDialogue = npc.dialogue;
+    }
+
     // Trigger talk animation if available
     this.playNPCAnimation(npc, 'talk');
 
-    const line = npc.dialogue[0] || 'Hello there!';
+    const line = this.currentDialogue[0] || 'Hello there!';
     this.dialogueUI.show(npc.name, line, npc.modelId);
   }
 
@@ -307,16 +324,43 @@ export class NPCController {
 
     this.currentNPC.dialogueIndex++;
 
-    if (this.currentNPC.dialogueIndex >= this.currentNPC.dialogue.length) {
-      // End of dialogue - return to idle animation
+    if (this.currentNPC.dialogueIndex >= this.currentDialogue.length) {
+      // End of dialogue - handle quest integration
+      this.completeDialogue(this.currentNPC);
+
+      // Return to idle animation
       this.stopNPCTalkAnimation(this.currentNPC);
       this.dialogueUI.hide();
       this.currentNPC = null;
+      this.currentDialogue = [];
     } else {
       // Show next line
-      const line = this.currentNPC.dialogue[this.currentNPC.dialogueIndex];
+      const line = this.currentDialogue[this.currentNPC.dialogueIndex];
       this.dialogueUI.show(this.currentNPC.name, line, this.currentNPC.modelId);
     }
+  }
+
+  /**
+   * Handle dialogue completion - quest integration
+   */
+  private completeDialogue(npc: NPCObject): void {
+    if (!this.questManager) {
+      this.onDialogueComplete?.(npc.name);
+      return;
+    }
+
+    // Notify QuestManager that player talked to this NPC
+    // This may complete "talk_to_npc" requirements
+    this.questManager.notifyTalkedToNPC(npc.name);
+
+    // Check if this NPC has an available quest to auto-start
+    const availableQuest = this.questManager.getAvailableQuestFrom(npc.name);
+    if (availableQuest) {
+      this.questManager.startQuest(availableQuest.id);
+      console.log(`NPCController: Auto-started quest "${availableQuest.name}"`);
+    }
+
+    this.onDialogueComplete?.(npc.name);
   }
 
   /**
@@ -324,6 +368,20 @@ export class NPCController {
    */
   isInDialogue(): boolean {
     return this.dialogueUI.getIsVisible();
+  }
+
+  /**
+   * Set QuestManager for quest-aware dialogue
+   */
+  setQuestManager(questManager: QuestManager): void {
+    this.questManager = questManager;
+  }
+
+  /**
+   * Get current QuestManager
+   */
+  getQuestManager(): QuestManager | null {
+    return this.questManager;
   }
 
   /**

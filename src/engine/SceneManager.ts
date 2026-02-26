@@ -497,6 +497,34 @@ export class SceneManager {
   }
 
   /**
+   * Get quests for current level (for QuestManager)
+   */
+  getQuests(): import('../data/LevelData').Quest[] {
+    return this.currentLevelData?.quests || [];
+  }
+
+  /**
+   * Get areas for current level (for QuestManager)
+   */
+  getAreas(): import('../data/LevelData').Area[] {
+    return this.currentLevelData?.areas || [];
+  }
+
+  /**
+   * Get raw NPC data for current level (for QuestManager)
+   */
+  getNPCData(): import('../data/LevelData').NPC[] {
+    return this.currentLevelData?.npcs || [];
+  }
+
+  /**
+   * Get current chapter number
+   */
+  getCurrentChapterNumber(): number {
+    return this.currentLevelData?.chapter_number || 1;
+  }
+
+  /**
    * Get collected star IDs
    */
   getCollectedStarIds(): string[] {
