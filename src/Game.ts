@@ -141,6 +141,11 @@ export class Game {
   // Hitstop effect (freeze frames on ground pound impact)
   private hitstopRemaining: number = 0;
 
+  // Slow motion effect (for water entry, etc.)
+  private timeScale: number = 1.0;
+  private timeScaleTarget: number = 1.0;
+  private timeScaleRemaining: number = 0;
+
   // Bounce pad detection
   private prevVerticalVelocity: number = 0;
   private bouncePadCooldown: number = 0;
@@ -928,6 +933,15 @@ export class Game {
       onWaterEnter: (position) => {
         // High intensity splash when entering water
         this.particleManager.createWaterSplash(position, 1.5);
+
+        // Brief slow motion effect for impactful water entry
+        this.timeScale = 0.3;
+        this.timeScaleTarget = 1.0;
+        this.timeScaleRemaining = 0.15;
+
+        // Camera effects: slight FOV dip and subtle shake
+        this.cameraController?.kickFOV(56, 0.25);
+        this.cameraController?.shake(0.15);
       },
       onSwimmingSplash: (position) => {
         // Low intensity splash while swimming
@@ -1124,11 +1138,22 @@ export class Game {
       return;
     }
 
-    // Update systems
-    this.updatePlayer(dt);
+    // Slow motion effect - gradually restore time scale
+    let scaledDt = dt;
+    if (this.timeScaleRemaining > 0) {
+      this.timeScaleRemaining -= dt;
+      if (this.timeScaleRemaining <= 0) {
+        // Snap back to normal time
+        this.timeScale = this.timeScaleTarget;
+      }
+      scaledDt = dt * this.timeScale;
+    }
+
+    // Update systems (scaledDt for gameplay, dt for UI-related timing)
+    this.updatePlayer(scaledDt);
     this.updatePickups(dt);
-    this.updateLevel(dt);
-    this.updateParticles(dt);
+    this.updateLevel(scaledDt);
+    this.updateParticles(scaledDt);
     this.updatePhysics();
 
     // Render
