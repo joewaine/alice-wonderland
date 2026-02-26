@@ -884,6 +884,9 @@ export class Game {
         if (fallSpeed >= 15) {
           // Hard landing
           this.cameraController?.dip(0.6);
+          // Camera shake for high falls - scales from 0.1 at fallSpeed 15 to 0.3 at fallSpeed 25+
+          const shakeIntensity = Math.min(0.3, 0.1 + (fallSpeed - 15) * 0.02);
+          this.cameraController?.shake(shakeIntensity);
         } else if (fallSpeed >= 8) {
           // Medium landing
           this.cameraController?.dip(0.3);
@@ -1478,6 +1481,9 @@ export class Game {
     const pos = this.playerBody.translation();
     this.playerPosCache.set(pos.x, pos.y, pos.z);
     this.particleManager.update(dt, this.playerPosCache);
+
+    // Spawn ambient dust motes around player for atmosphere
+    this.particleManager.createAmbientDust(this.playerPosCache);
 
     // Update foliage wind animation
     this.foliageAnimator.update(dt);

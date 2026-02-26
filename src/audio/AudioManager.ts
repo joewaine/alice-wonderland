@@ -628,6 +628,33 @@ export class AudioManager {
   }
 
   /**
+   * Play UI hover sound (soft, subtle tick)
+   * Very short duration for responsive feedback
+   */
+  playUIHover(): void {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.audioContext || !this.masterGain) return;
+
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    // High frequency tick sound
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1200, this.audioContext.currentTime);
+
+    // Very short, subtle tick
+    gain.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.05);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.audioContext.currentTime + 0.05);
+  }
+
+  /**
    * Play gate proximity chime (soft magical arpeggio)
    * Played once when player enters range of an unlocked gate
    */
