@@ -677,6 +677,160 @@ export class ParticleManager {
     });
   }
 
+  // Speed boost trail throttling
+  private lastSpeedBoostTrailTime: number = 0;
+  private speedBoostTrailInterval: number = 0.05;  // 50ms between trail spawns
+
+  /**
+   * Speed boost trail - directional particles streaming behind player
+   * Gold/yellow particles matching speed boost pad colors
+   * @param position - Player position
+   * @param direction - Boost direction (particles stream opposite)
+   */
+  createSpeedBoostTrail(position: THREE.Vector3, direction: THREE.Vector3): void {
+    const now = performance.now() / 1000;
+    if (now - this.lastSpeedBoostTrailTime < this.speedBoostTrailInterval) return;
+    this.lastSpeedBoostTrailTime = now;
+
+    const count = 7;  // 6-8 particles per call
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Speed boost color palette (gold/yellow)
+    const trailColors = [
+      new THREE.Color(0xFFD700),  // Gold
+      new THREE.Color(0xFFAA33),  // Orange-gold
+    ];
+
+    // Normalize direction for positioning
+    const dir = direction.clone().normalize();
+
+    for (let i = 0; i < count; i++) {
+      // Position particles behind player (opposite of boost direction)
+      // Spread slightly for visual interest
+      const offset = (Math.random() * 0.5 + 0.3);  // Slight offset behind
+      const spread = (Math.random() - 0.5) * 0.4;  // Lateral spread
+
+      // Perpendicular vector for spread
+      const perpX = -dir.z;
+      const perpZ = dir.x;
+
+      positions[i * 3] = position.x - dir.x * offset + perpX * spread;
+      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 2] = position.z - dir.z * offset + perpZ * spread;
+
+      // Assign alternating gold colors
+      const color = trailColors[i % 2];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Particles drift backward (opposite of boost direction) with slight spread
+      const driftSpeed = Math.random() * 2 + 1;
+      velocities[i * 3] = -dir.x * driftSpeed + (Math.random() - 0.5) * 0.5;
+      velocities[i * 3 + 1] = Math.random() * 0.3;  // Slight upward float
+      velocities[i * 3 + 2] = -dir.z * driftSpeed + (Math.random() - 0.5) * 0.5;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.12,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.175,  // Short lifetime (0.15-0.2s range)
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Trail particles float, don't fall
+    });
+  }
+
+  /**
+   * NPC proximity glow - subtle sparkles when player can talk to NPC
+   * Call periodically (every 0.5s) when player is within talk range
+   */
+  createNPCProximityGlow(position: THREE.Vector3): void {
+    const count = 4;  // 3-4 small sparkle particles
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Soft white/gold color palette
+    const glowColors = [
+      new THREE.Color(0xFFFFDD),  // Soft white
+      new THREE.Color(0xFFEEBB),  // Soft gold
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start around NPC position with slight random offset
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * 0.5 + 0.3;
+      positions[i * 3] = position.x + Math.cos(angle) * radius;
+      positions[i * 3 + 1] = position.y + Math.random() * 0.5 + 0.5;  // Mid-body height
+      positions[i * 3 + 2] = position.z + Math.sin(angle) * radius;
+
+      // Assign alternating colors
+      const color = glowColors[i % 2];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Gentle upward float with slight horizontal drift
+      velocities[i * 3] = (Math.random() - 0.5) * 0.3;
+      velocities[i * 3 + 1] = Math.random() * 0.8 + 0.4;  // Upward
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.1,
+      transparent: true,
+      opacity: 0.6,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.3,  // Short lifetime (0.3s)
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Sparkles float, don't fall
+    });
+  }
+
   /**
    * Gate unlock effect
    */

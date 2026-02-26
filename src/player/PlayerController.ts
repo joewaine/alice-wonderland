@@ -23,6 +23,7 @@ export interface PlayerControllerCallbacks {
   onLongJump?: () => void;
   onFootstep?: () => void;
   onSpeedBoost?: () => void;
+  onSpeedBoostActive?: (position: THREE.Vector3, direction: THREE.Vector3) => void;
   onWaterEnter?: (position: THREE.Vector3, surfaceY: number) => void;
   onSwimmingSplash?: (position: THREE.Vector3, surfaceY: number) => void;
   onWallSlide?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
@@ -148,6 +149,7 @@ export class PlayerController {
   private playerPosCache: THREE.Vector3 = new THREE.Vector3();
   private callbackPosCache: THREE.Vector3 = new THREE.Vector3();
   private wallNormalCache: THREE.Vector3 = new THREE.Vector3();
+  private boostDirCache: THREE.Vector3 = new THREE.Vector3();
   private velocityCache: RAPIER.Vector3 | null = null;
   private groundCheckRay: RAPIER.Ray | null = null;
   private groundCheckDir: RAPIER.Vector3 | null = null;
@@ -438,13 +440,21 @@ export class PlayerController {
    * Check for speed boost zones and apply boost
    */
   private checkSpeedBoosts(): void {
-    if (this.speedBoostZones.length === 0 || this.boostCooldown > 0) return;
+    if (this.speedBoostZones.length === 0) return;
 
     const pos = this.playerBody.translation();
     this.playerPosCache.set(pos.x, pos.y, pos.z);
 
     for (const zone of this.speedBoostZones) {
       if (zone.bounds.containsPoint(this.playerPosCache)) {
+        // Emit trail particles while in boost zone (throttled in ParticleManager)
+        this.callbackPosCache.set(pos.x, pos.y, pos.z);
+        this.boostDirCache.copy(zone.direction);
+        this.callbacks.onSpeedBoostActive?.(this.callbackPosCache, this.boostDirCache);
+
+        // Only apply boost force if cooldown has elapsed
+        if (this.boostCooldown > 0) break;
+
         // Apply boost in the zone's direction
         this.momentum.x += zone.direction.x * zone.force;
         this.momentum.z += zone.direction.z * zone.force;
@@ -461,7 +471,7 @@ export class PlayerController {
         // Set cooldown to prevent repeated boosts
         this.boostCooldown = 0.5;
 
-        // Notify callback for visual effects
+        // Notify callback for FOV kick on initial boost
         this.callbacks.onSpeedBoost?.();
         break;
       }
