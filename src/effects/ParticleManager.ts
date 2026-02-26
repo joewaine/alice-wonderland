@@ -831,6 +831,82 @@ export class ParticleManager {
     });
   }
 
+  // Magnet trail throttling
+  private lastMagnetTrailTime: number = 0;
+  private magnetTrailInterval: number = 0.08;  // 80ms between trail spawns
+
+  /**
+   * Subtle sparkle trail for collectible magnet effect
+   * Small particles that drift behind the collectible as it moves toward player
+   */
+  createMagnetTrail(position: THREE.Vector3, direction: THREE.Vector3): void {
+    const now = performance.now() / 1000;
+    if (now - this.lastMagnetTrailTime < this.magnetTrailInterval) return;
+    this.lastMagnetTrailTime = now;
+
+    const count = 3;  // Small number of particles
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Sparkle color palette (gold/yellow to match collectibles)
+    const sparkleColors = [
+      new THREE.Color(0xFFD700),  // Gold
+      new THREE.Color(0xFFEE88),  // Light gold
+      new THREE.Color(0xFFFFAA),  // Pale yellow
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start slightly behind the collectible (opposite of direction)
+      const offset = (Math.random() * 0.3 + 0.1);
+      positions[i * 3] = position.x - direction.x * offset + (Math.random() - 0.5) * 0.2;
+      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.2;
+      positions[i * 3 + 2] = position.z - direction.z * offset + (Math.random() - 0.5) * 0.2;
+
+      // Assign random sparkle color
+      const color = sparkleColors[Math.floor(Math.random() * sparkleColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Particles drift backward (opposite of movement) with slight spread
+      const driftSpeed = Math.random() * 0.5 + 0.3;
+      velocities[i * 3] = -direction.x * driftSpeed + (Math.random() - 0.5) * 0.3;
+      velocities[i * 3 + 1] = Math.random() * 0.4;  // Slight upward float
+      velocities[i * 3 + 2] = -direction.z * driftSpeed + (Math.random() - 0.5) * 0.3;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.08,
+      transparent: true,
+      opacity: 0.8,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.25,  // Short lifetime
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Trail particles float, don't fall
+    });
+  }
+
   /**
    * Gate unlock effect
    */

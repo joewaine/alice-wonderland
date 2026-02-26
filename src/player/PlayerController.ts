@@ -14,6 +14,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { InputManager } from '../engine/InputManager';
 import { AnimationStateManager } from '../animation/AnimationStateManager';
 import type { AnimationState } from '../animation/AnimationStateManager';
+import type { SurfaceType } from '../audio/AudioManager';
 
 export interface PlayerControllerCallbacks {
   onJump?: (isDoubleJump: boolean) => void;
@@ -21,7 +22,7 @@ export interface PlayerControllerCallbacks {
   onGroundPound?: () => void;
   onGroundPoundLand?: (position: THREE.Vector3) => void;
   onLongJump?: () => void;
-  onFootstep?: () => void;
+  onFootstep?: (surface: SurfaceType) => void;
   onSpeedBoost?: () => void;
   onSpeedBoostActive?: (position: THREE.Vector3, direction: THREE.Vector3) => void;
   onWaterEnter?: (position: THREE.Vector3, surfaceY: number) => void;
@@ -121,6 +122,9 @@ export class PlayerController {
   private footstepTimer: number = 0;
   private readonly FOOTSTEP_INTERVAL = 0.3;
 
+  // Current surface type for footstep sounds
+  private currentSurface: SurfaceType = 'grass';
+
   // Camera yaw for world-relative movement
   private cameraYaw: number = 0;
 
@@ -201,6 +205,20 @@ export class PlayerController {
    */
   setGroundCheckDistance(distance: number): void {
     this.groundCheckDistance = distance;
+  }
+
+  /**
+   * Set current surface type for footstep sounds
+   */
+  setCurrentSurface(surface: SurfaceType): void {
+    this.currentSurface = surface;
+  }
+
+  /**
+   * Get current surface type
+   */
+  getCurrentSurface(): SurfaceType {
+    return this.currentSurface;
   }
 
   /**
@@ -364,7 +382,7 @@ export class PlayerController {
     if (this.isGrounded && inputLength > 0) {
       this.footstepTimer += dt;
       if (this.footstepTimer >= this.FOOTSTEP_INTERVAL) {
-        this.callbacks.onFootstep?.();
+        this.callbacks.onFootstep?.(this.currentSurface);
         this.footstepTimer = 0;
       }
     } else {

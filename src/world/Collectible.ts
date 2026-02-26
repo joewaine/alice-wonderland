@@ -30,8 +30,22 @@ export class CollectibleManager {
   private glowDistance: number = 4; // Distance at which glow starts
   private pulseTime: number = 0;
 
+  // Magnet attraction settings
+  private magnetDistance: number = 3.5; // Distance at which magnet effect starts
+  private magnetSpeedMin: number = 2; // Base drift speed
+  private magnetSpeedMax: number = 8; // Max drift speed when very close
+
   // Cached mesh references for performance (avoid traverse every frame)
   private meshCache: Map<CollectibleObject, THREE.Mesh[]> = new Map();
+
+  // Track spawn positions (never changes, used for reset)
+  private spawnPositions: Map<CollectibleObject, THREE.Vector3> = new Map();
+
+  // Track current base positions for magnet effect (drifts toward player)
+  private currentPositions: Map<CollectibleObject, THREE.Vector3> = new Map();
+
+  // Callback for magnet trail particles
+  public onMagnetDrift: ((position: THREE.Vector3, towardPlayer: THREE.Vector3) => void) | null = null;
 
   // Callback when something is collected
   public onCollect: ((type: string, state: CollectionState, position: THREE.Vector3) => void) | null = null;
@@ -43,6 +57,8 @@ export class CollectibleManager {
   setCollectibles(collectibles: CollectibleObject[]): void {
     this.collectibles = collectibles;
     this.meshCache.clear();
+    this.spawnPositions.clear();
+    this.currentPositions.clear();
 
     // Cache mesh references for each collectible
     for (const collectible of collectibles) {
@@ -53,6 +69,10 @@ export class CollectibleManager {
         }
       });
       this.meshCache.set(collectible, meshes);
+
+      // Store spawn position (never changes) and current position (can drift)
+      this.spawnPositions.set(collectible, collectible.position.clone());
+      this.currentPositions.set(collectible, collectible.position.clone());
     }
 
     // Count totals
@@ -73,20 +93,52 @@ export class CollectibleManager {
     for (const collectible of this.collectibles) {
       if (collectible.collected) continue;
 
-      // Bobbing and rotation animation
-      collectible.mesh.rotation.y += dt * 2;
-      collectible.mesh.position.y = collectible.position.y + Math.sin(Date.now() * 0.003) * 0.1;
+      // Get the current base position (can drift toward player)
+      const currentPos = this.currentPositions.get(collectible);
+      if (!currentPos) continue;
 
-      // Check distance to player
-      const distance = collectible.mesh.position.distanceTo(playerPosition);
-      const pickupRadius = 1.0 + playerRadius;
+      // Check distance to player from current base position
+      const distance = currentPos.distanceTo(playerPosition);
+      const pickupRadius = 1.5 + playerRadius;
+
+      // Magnet attraction effect - only for stars and cards, not key
+      if (collectible.type !== 'key' && distance < this.magnetDistance && distance > pickupRadius) {
+        // Calculate drift speed - faster as player gets closer
+        const proximity = 1 - (distance / this.magnetDistance);
+        const driftSpeed = this.magnetSpeedMin + (this.magnetSpeedMax - this.magnetSpeedMin) * proximity * proximity;
+
+        // Direction toward player
+        const toPlayer = new THREE.Vector3()
+          .subVectors(playerPosition, currentPos)
+          .normalize();
+
+        // Move the current position toward player (this is the "drifting" base position)
+        currentPos.addScaledVector(toPlayer, driftSpeed * dt);
+
+        // Emit magnet trail particles occasionally
+        if (this.onMagnetDrift && Math.random() < 0.3) {
+          this.onMagnetDrift(currentPos.clone(), toPlayer);
+        }
+      }
+
+      // Bobbing and rotation animation (relative to current base position)
+      collectible.mesh.rotation.y += dt * 2;
+      collectible.mesh.position.x = currentPos.x;
+      collectible.mesh.position.y = currentPos.y + Math.sin(Date.now() * 0.003) * 0.1;
+      collectible.mesh.position.z = currentPos.z;
+
+      // Update collectible.position to match drifted position for collection detection
+      collectible.position.copy(currentPos);
+
+      // Re-check distance after potential drift for glow and collection
+      const currentDistance = collectible.mesh.position.distanceTo(playerPosition);
 
       // Hover glow effect based on distance
       const cachedMeshes = this.meshCache.get(collectible) || [];
 
-      if (distance < this.glowDistance) {
+      if (currentDistance < this.glowDistance) {
         // Calculate glow intensity (stronger when closer)
-        const proximity = 1 - (distance / this.glowDistance);
+        const proximity = 1 - (currentDistance / this.glowDistance);
         const pulse = 0.5 + 0.5 * Math.sin(this.pulseTime);
         const intensity = proximity * (0.6 + pulse * 0.4);
 
@@ -112,7 +164,7 @@ export class CollectibleManager {
         collectible.mesh.scale.setScalar(1);
       }
 
-      if (distance < pickupRadius) {
+      if (currentDistance < pickupRadius) {
         this.collect(collectible);
       }
     }
@@ -181,6 +233,16 @@ export class CollectibleManager {
     for (const collectible of this.collectibles) {
       collectible.collected = false;
       collectible.mesh.visible = true;
+
+      // Reset position to original spawn point (undo magnet drift)
+      const spawnPos = this.spawnPositions.get(collectible);
+      const currentPos = this.currentPositions.get(collectible);
+      if (spawnPos && currentPos) {
+        // Restore current position to spawn position
+        currentPos.copy(spawnPos);
+        collectible.position.copy(spawnPos);
+        collectible.mesh.position.copy(spawnPos);
+      }
     }
   }
 }

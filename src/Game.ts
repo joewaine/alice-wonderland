@@ -7,6 +7,9 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { InputManager } from './engine/InputManager';
 import { SceneManager } from './engine/SceneManager';
 import { SizeManager } from './player/SizeManager';
@@ -35,6 +38,9 @@ export class Game {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
+
+  // Post-processing
+  private composer: EffectComposer;
 
   // Rapier physics
   private world: RAPIER.World | null = null;
@@ -136,6 +142,7 @@ export class Game {
     document.body.appendChild(this.renderer.domElement);
 
     // Create scene with Queen's Garden golden hour atmosphere
+    // (Initialize scene first so we can set up post-processing)
     this.scene = new THREE.Scene();
 
     // Golden hour sky (warm and inviting)
@@ -153,6 +160,23 @@ export class Game {
       0.1,
       1000
     );
+
+    // Setup post-processing pipeline for bloom effect
+    this.composer = new EffectComposer(this.renderer);
+
+    // RenderPass - renders the scene normally
+    const renderPass = new RenderPass(this.scene, this.camera);
+    this.composer.addPass(renderPass);
+
+    // UnrealBloomPass - BotW-style soft glow on bright/emissive areas only
+    // Settings from style_bible.json: intensity 0.3, threshold 0.85
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.3,   // strength (intensity)
+      0.4,   // radius
+      0.85   // threshold (only bright areas bloom)
+    );
+    this.composer.addPass(bloomPass);
 
     // Input manager
     this.input = new InputManager();
@@ -244,6 +268,11 @@ export class Game {
     this.sceneManager.onGateUnlock = (position) => {
       this.particleManager.createGateUnlockEffect(position);
       audioManager.playGateUnlock();
+    };
+
+    // Handle collectible magnet drift particle effects
+    this.sceneManager.onCollectibleMagnetDrift = (position, direction) => {
+      this.particleManager.createMagnetTrail(position, direction);
     };
 
     // Setup menu callbacks
@@ -769,8 +798,8 @@ export class Game {
         // Track for wonder star challenges
         this.sceneManager?.trackLongJump();
       },
-      onFootstep: () => {
-        audioManager.playFootstep();
+      onFootstep: (surface) => {
+        audioManager.playFootstep(surface);
       },
       onSpeedBoost: () => {
         // FOV kick for speed effect - kick to 68 degrees, return over 0.4s
@@ -949,7 +978,7 @@ export class Game {
 
     // Check if paused
     if (this.mainMenu.getIsPaused()) {
-      this.renderer.render(this.scene, this.camera);
+      this.composer.render();
       return;
     }
 
@@ -961,7 +990,7 @@ export class Game {
     if (this.hitstopRemaining > 0) {
       this.hitstopRemaining -= dt;
       // Still render during hitstop (frozen frame)
-      this.renderer.render(this.scene, this.camera);
+      this.composer.render();
       this.updateStats(dt);
       this.input.resetMouseDelta();
       return;
@@ -975,7 +1004,7 @@ export class Game {
     this.updatePhysics();
 
     // Render
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
 
     // Update performance stats overlay
     this.updateStats(dt);
@@ -1067,6 +1096,14 @@ export class Game {
             horizontalSpeed / 10
           );
         }
+
+        // Detect surface type for footstep sounds
+        if (this.sceneManager) {
+          const pos = this.playerBody.translation();
+          this.tempPosCache.set(pos.x, pos.y, pos.z);
+          const surfaceType = this.sceneManager.getSurfaceTypeAt(this.tempPosCache);
+          this.playerController.setCurrentSurface(surfaceType);
+        }
       }
     }
 
@@ -1153,6 +1190,7 @@ export class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.composer.setSize(window.innerWidth, window.innerHeight);
   }
 
   /**

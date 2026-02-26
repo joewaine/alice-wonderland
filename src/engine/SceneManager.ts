@@ -40,6 +40,7 @@ export class SceneManager {
   public onCollectiblePickup: ((type: string, position: THREE.Vector3) => void) | null = null;
   public onGateUnlock: ((position: THREE.Vector3) => void) | null = null;
   public onWonderStarCollected: ((star: WonderStar, collected: number, total: number) => void) | null = null;
+  public onCollectibleMagnetDrift: ((position: THREE.Vector3, direction: THREE.Vector3) => void) | null = null;
 
   constructor(scene: THREE.Scene, world: RAPIER.World, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
@@ -67,6 +68,13 @@ export class SceneManager {
         if (this.onGateUnlock) {
           this.onGateUnlock(this.currentLevel?.gatePosition || new THREE.Vector3());
         }
+      }
+    };
+
+    // Wire up magnet drift for particle effects
+    this.collectibleManager.onMagnetDrift = (position, direction) => {
+      if (this.onCollectibleMagnetDrift) {
+        this.onCollectibleMagnetDrift(position, direction);
       }
     };
 
@@ -506,6 +514,52 @@ export class SceneManager {
    */
   getPlatformMeshes(): THREE.Mesh[] {
     return this.currentLevel?.platforms || [];
+  }
+
+  /**
+   * Detect surface type at a position (for footstep sounds)
+   * Checks which platform the player is standing on
+   */
+  getSurfaceTypeAt(position: THREE.Vector3): 'grass' | 'stone' | 'wood' | 'default' {
+    if (!this.currentLevel) return 'grass';
+
+    // Check each platform to see if player is on top of it
+    for (const platform of this.currentLevel.platforms) {
+      // Get bounding box
+      if (!platform.geometry?.boundingBox) {
+        platform.geometry?.computeBoundingBox();
+      }
+
+      if (platform.geometry?.boundingBox) {
+        // Transform bounding box to world space using cached Box3
+        this.boundsCache.copy(platform.geometry.boundingBox);
+
+        // For groups (garden assets), use the group's position
+        if (platform instanceof THREE.Group) {
+          this.boundsCache.translate(platform.position);
+        } else {
+          // Apply mesh's world transform
+          this.boundsCache.applyMatrix4(platform.matrixWorld);
+        }
+
+        // Expand slightly above the platform surface
+        const checkBounds = this.boundsCache.clone();
+        checkBounds.max.y += 1.5; // Check above platform
+        checkBounds.min.y = checkBounds.max.y - 2; // Only check near the top
+
+        if (checkBounds.containsPoint(position)) {
+          // Return surface type from userData
+          const surfaceType = platform.userData?.surfaceType;
+          if (surfaceType === 'grass' || surfaceType === 'stone' || surfaceType === 'wood') {
+            return surfaceType;
+          }
+          return 'grass'; // Default for garden
+        }
+      }
+    }
+
+    // Default to grass for garden setting
+    return 'grass';
   }
 
   /**
