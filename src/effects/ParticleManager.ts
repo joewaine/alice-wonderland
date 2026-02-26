@@ -1708,6 +1708,90 @@ export class ParticleManager {
     });
   }
 
+  // Crumble particle throttling
+  private lastCrumbleTime: number = 0;
+  private crumbleInterval: number = 0.1;  // 100ms between crumble spawns
+
+  /**
+   * Crumble particle effect for breakable platforms
+   * Small brown/gray rubble particles that fall from the platform
+   * @param position - Platform center position
+   * @param intensity - 0-1 how close to breaking (affects particle count and speed)
+   */
+  createCrumbleParticles(position: THREE.Vector3, intensity: number = 0.5): void {
+    const now = performance.now() / 1000;
+    // Throttle based on intensity - more particles allowed at higher intensity
+    const adjustedInterval = this.crumbleInterval * (1.5 - intensity);
+    if (now - this.lastCrumbleTime < adjustedInterval) return;
+    this.lastCrumbleTime = now;
+
+    // Scale particle count with intensity (3-8 particles)
+    const count = Math.floor(3 + intensity * 5);
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Rubble color palette (brown/gray stones)
+    const rubbleColors = [
+      new THREE.Color(0x8B7355),  // Brown
+      new THREE.Color(0x696969),  // Dim gray
+      new THREE.Color(0xA0826D),  // Tan brown
+      new THREE.Color(0x808080),  // Gray
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start around platform surface with random spread
+      positions[i * 3] = position.x + (Math.random() - 0.5) * 2;
+      positions[i * 3 + 1] = position.y + Math.random() * 0.2;  // Near top surface
+      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 2;
+
+      // Assign random rubble color
+      const color = rubbleColors[Math.floor(Math.random() * rubbleColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Particles fall downward with slight outward spread
+      // Higher intensity = faster falling, more spread
+      const spreadSpeed = (Math.random() * 0.5 + 0.2) * (1 + intensity);
+      const angle = Math.random() * Math.PI * 2;
+
+      velocities[i * 3] = Math.cos(angle) * spreadSpeed;
+      velocities[i * 3 + 1] = -Math.random() * (1 + intensity * 2);  // Downward
+      velocities[i * 3 + 2] = Math.sin(angle) * spreadSpeed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.08 + intensity * 0.04,  // Slightly larger at high intensity
+      transparent: true,
+      opacity: 0.9,
+      vertexColors: true,
+      blending: THREE.NormalBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.4 + intensity * 0.2,  // Longer life at high intensity
+      isLooping: false,
+      elapsed: 0
+      // Note: gravity is applied by default (no noGravity flag)
+    });
+  }
+
   /**
    * Gate unlock effect
    */
