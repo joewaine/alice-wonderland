@@ -1154,6 +1154,75 @@ export class ParticleManager {
   }
 
   /**
+   * Bounce pad effect - ring of particles expanding outward at ground level
+   * Cyan/white colors for spring/bouncy feel
+   */
+  createBouncePadEffect(position: THREE.Vector3): void {
+    const count = 18;  // 15-20 particles in a ring
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Spring/bouncy color palette (cyan to white)
+    const bounceColors = [
+      new THREE.Color(0x00FFFF),  // Cyan
+      new THREE.Color(0x88FFFF),  // Light cyan
+      new THREE.Color(0xFFFFFF),  // White
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Start at bounce point (at ground level)
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y - 0.3;  // Slightly below player feet
+      positions[i * 3 + 2] = position.z;
+
+      // Assign random bounce color
+      const color = bounceColors[Math.floor(Math.random() * bounceColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Expand outward in a ring with slight upward motion
+      const angle = (i / count) * Math.PI * 2;
+      const speed = 5 + Math.random() * 2;  // Fast outward expansion
+
+      velocities[i * 3] = Math.cos(angle) * speed;
+      velocities[i * 3 + 1] = Math.random() * 2 + 1;  // Slight upward motion
+      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.25,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.25,  // Quick effect (0.25s)
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Ring stays at ground level
+    });
+  }
+
+  /**
    * Gate unlock effect
    */
   createGateUnlockEffect(position: THREE.Vector3): void {

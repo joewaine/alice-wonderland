@@ -516,6 +516,13 @@ export class SceneManager {
   }
 
   /**
+   * Get current level's bouncy platforms
+   */
+  getBouncyPlatforms() {
+    return this.currentLevel?.bouncyPlatforms || [];
+  }
+
+  /**
    * Get current level's platform meshes (for foliage animation)
    */
   getPlatformMeshes(): THREE.Mesh[] {
