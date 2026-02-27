@@ -4,6 +4,7 @@
  * Handles player physics including:
  * - Momentum/acceleration (no instant velocity changes)
  * - Double jump
+ * - Triple jump (consecutive grounded jumps while running)
  * - Ground pound
  * - Long jump
  * - Coyote time and jump buffering
@@ -19,6 +20,7 @@ import type { SurfaceType } from '../audio/AudioManager';
 export interface PlayerControllerCallbacks {
   onJumpAnticipation?: (isDoubleJump: boolean) => void;
   onJump?: (isDoubleJump: boolean) => void;
+  onTripleJump?: () => void;
   onLand?: (fallSpeed: number, surface: SurfaceType) => void;
   onGroundPound?: () => void;
   onGroundPoundLand?: (position: THREE.Vector3) => void;
@@ -79,6 +81,11 @@ export class PlayerController {
   // Long jump state
   private isLongJumping: boolean = false;
 
+  // Triple jump state (consecutive grounded jumps while running fast)
+  private consecutiveGroundJumps: number = 0;
+  private lastGroundJumpLandingTime: number = 0;
+  private isTripleJumping: boolean = false;
+
   // Landing lockout state (prevents instant re-jump after hard landings)
   private landingLockout: number = 0;
 
@@ -136,6 +143,11 @@ export class PlayerController {
   private readonly LONG_JUMP_VERTICAL = 10;
   private readonly LONG_JUMP_HORIZONTAL_BOOST = 8;
   private readonly LONG_JUMP_SPEED_THRESHOLD = 5;
+
+  // Tuning constants - triple jump
+  private readonly TRIPLE_JUMP_FORCE = 22;           // Highest jump in the game
+  private readonly TRIPLE_JUMP_WINDOW = 500;          // ms window to chain jumps
+  private readonly TRIPLE_JUMP_SPEED_THRESHOLD = 6;   // Must be running
 
   // Tuning constants - ground pound
   private readonly GROUND_POUND_FORCE = -30;
@@ -359,6 +371,13 @@ export class PlayerController {
       this.callbacks.onLand?.(fallSpeed, this.currentSurface);
       // Trigger land animation
       this.animationManager?.setState('land');
+
+      // Track landing time for triple jump chain
+      this.lastGroundJumpLandingTime = now;
+      if (this.isTripleJumping) {
+        this.isTripleJumping = false;
+        this.consecutiveGroundJumps = 0;
+      }
 
       // Apply landing lockout for hard landings to prevent instant re-jump
       if (fallSpeed > this.HARD_LANDING_THRESHOLD) {
@@ -861,6 +880,18 @@ export class PlayerController {
       return;
     }
 
+    // Triple jump: 3rd consecutive grounded jump within timing window while running
+    if (wantsToJump && this.jumpCount === 0 && (this.isGrounded || canCoyoteJump) && !this.pendingJump) {
+      const withinWindow = (now - this.lastGroundJumpLandingTime) < this.TRIPLE_JUMP_WINDOW;
+      const runningFast = currentSpeed > this.TRIPLE_JUMP_SPEED_THRESHOLD;
+
+      if (withinWindow && runningFast && this.consecutiveGroundJumps >= 2) {
+        this.performTripleJump();
+        this.jumpBufferTime = 0;
+        return;
+      }
+    }
+
     // Normal jump or double jump
     if (wantsToJump && this.jumpCount < 2 && !this.pendingJump) {
       // First jump requires being grounded or coyote time
@@ -876,6 +907,15 @@ export class PlayerController {
         this.performJump(force * this.jumpMultiplier, isDoubleJump);
         this.jumpCount++;
       } else {
+        // Track consecutive grounded jumps for triple jump chain
+        const withinWindow = (now - this.lastGroundJumpLandingTime) < this.TRIPLE_JUMP_WINDOW;
+        const runningFast = currentSpeed > this.TRIPLE_JUMP_SPEED_THRESHOLD;
+        if (withinWindow && runningFast) {
+          this.consecutiveGroundJumps++;
+        } else {
+          this.consecutiveGroundJumps = 1;
+        }
+
         // Queue the jump with anticipation
         this.pendingJump = true;
         this.pendingJumpIsDouble = false;
@@ -965,6 +1005,23 @@ export class PlayerController {
     this.jumpCount = 1;
 
     this.callbacks.onWallJump?.(this.callbackPosCache, this.wallSlideNormal);
+  }
+
+  /**
+   * Perform a triple jump (highest jump, reward for chaining grounded jumps)
+   */
+  private performTripleJump(): void {
+    // Apply highest vertical force
+    this.velocityCache!.x = this.momentum.x;
+    this.velocityCache!.y = this.TRIPLE_JUMP_FORCE * this.jumpMultiplier;
+    this.velocityCache!.z = this.momentum.z;
+    this.playerBody.setLinvel(this.velocityCache!, true);
+
+    this.isTripleJumping = true;
+    this.consecutiveGroundJumps = 0;
+    // Prevent double jump after triple jump - it's already the highest
+    this.jumpCount = 2;
+    this.callbacks.onTripleJump?.();
   }
 
   /**
@@ -1081,10 +1138,10 @@ export class PlayerController {
   }
 
   /**
-   * Get current momentum for external use
+   * Get current momentum for external use (read-only reference, do not mutate)
    */
   getMomentum(): THREE.Vector3 {
-    return this.momentum.clone();
+    return this.momentum;
   }
 
   /**
@@ -1099,6 +1156,13 @@ export class PlayerController {
    */
   getIsLongJumping(): boolean {
     return this.isLongJumping;
+  }
+
+  /**
+   * Check if currently triple jumping
+   */
+  getIsTripleJumping(): boolean {
+    return this.isTripleJumping;
   }
 
   /**
@@ -1155,6 +1219,8 @@ export class PlayerController {
     this.jumpCount = 0;
     this.isGroundPounding = false;
     this.isLongJumping = false;
+    this.isTripleJumping = false;
+    this.consecutiveGroundJumps = 0;
     this.isWallSliding = false;
     this.isLedgeGrabbing = false;
     this.isCrouching = false;

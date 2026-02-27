@@ -49,6 +49,9 @@ export class CollectibleManager {
   // Track current base positions for magnet effect (drifts toward player)
   private currentPositions: Map<CollectibleObject, THREE.Vector3> = new Map();
 
+  // Pre-allocated vector for magnet direction calculation
+  private toPlayerCache: THREE.Vector3 = new THREE.Vector3();
+
   // Callback for magnet trail particles
   public onMagnetDrift: ((position: THREE.Vector3, towardPlayer: THREE.Vector3) => void) | null = null;
 
@@ -113,16 +116,14 @@ export class CollectibleManager {
         const driftSpeed = this.magnetSpeedMin + (this.magnetSpeedMax - this.magnetSpeedMin) * proximity * proximity;
 
         // Direction toward player
-        const toPlayer = new THREE.Vector3()
-          .subVectors(playerPosition, currentPos)
-          .normalize();
+        this.toPlayerCache.subVectors(playerPosition, currentPos).normalize();
 
         // Move the current position toward player (this is the "drifting" base position)
-        currentPos.addScaledVector(toPlayer, driftSpeed * dt);
+        currentPos.addScaledVector(this.toPlayerCache, driftSpeed * dt);
 
         // Emit magnet trail particles occasionally
         if (this.onMagnetDrift && Math.random() < 0.3) {
-          this.onMagnetDrift(currentPos.clone(), toPlayer);
+          this.onMagnetDrift(currentPos.clone(), this.toPlayerCache);
         }
       }
 

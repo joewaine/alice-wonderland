@@ -114,21 +114,25 @@ export class QuestNotification {
       transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
     `;
 
-    notification.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-size:24px;">${color.icon}</span>
-        <div>
-          <div style="color:white;font-family:monospace;font-size:12px;text-transform:uppercase;letter-spacing:1px;opacity:0.8;">
-            ${config.title}
-          </div>
-          ${config.message ? `
-            <div style="color:white;font-family:sans-serif;font-size:14px;font-weight:bold;margin-top:2px;">
-              ${config.message}
-            </div>
-          ` : ''}
-        </div>
-      </div>
-    `;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;';
+    const iconSpan = document.createElement('span');
+    iconSpan.style.fontSize = '24px';
+    iconSpan.textContent = color.icon;
+    row.appendChild(iconSpan);
+    const textCol = document.createElement('div');
+    const titleDiv = document.createElement('div');
+    titleDiv.style.cssText = 'color:white;font-family:monospace;font-size:12px;text-transform:uppercase;letter-spacing:1px;opacity:0.8;';
+    titleDiv.textContent = config.title;
+    textCol.appendChild(titleDiv);
+    if (config.message) {
+      const msgDiv = document.createElement('div');
+      msgDiv.style.cssText = 'color:white;font-family:sans-serif;font-size:14px;font-weight:bold;margin-top:2px;';
+      msgDiv.textContent = config.message;
+      textCol.appendChild(msgDiv);
+    }
+    row.appendChild(textCol);
+    notification.appendChild(row);
 
     return notification;
   }
