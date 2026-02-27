@@ -150,10 +150,6 @@ export class Game {
   private prevVerticalVelocity: number = 0;
   private bouncePadCooldown: number = 0;
 
-  // Long jump trail spawning
-  private longJumpTrailTimer: number = 0;
-  private readonly LONG_JUMP_TRAIL_INTERVAL: number = 0.05; // seconds between trail spawns
-
   constructor() {
     // Create renderer - BasicShadowMap for hard cel-shaded shadows
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -845,58 +841,6 @@ export class Game {
         }
         // Light landing (fallSpeed < 8): no dip
       },
-      onGroundPound: () => {
-        // Strong squash and screen shake
-        this.targetSquash.set(1.5, 0.5, 1.5);
-        audioManager.playLand(); // Use land sound for now
-      },
-      onGroundPoundLand: (position) => {
-        // Screen shake for impact
-        this.cameraController?.shake(0.4);
-
-        // Hitstop freeze effect (50ms / 3 frames at 60fps)
-        this.hitstopRemaining = 0.05;
-
-        // Expanding ring shockwave effect
-        this.particleManager.createGroundPoundShockwave(position);
-
-        // Check for breakable platforms
-        if (this.sceneManager && this.sizeManager) {
-          const currentSize = this.sizeManager.getCurrentSize();
-          const broke = this.sceneManager.tryBreakPlatform(position, currentSize);
-          if (broke) {
-            // Extra shake and particles for breaking
-            this.cameraController?.shake(0.3);  // Additional shake for breaking
-            this.particleManager.createLandingDust(position, 2.0);
-            audioManager.playLand();
-          }
-        }
-      },
-      onTripleJump: () => {
-        audioManager.playJump(true); // High-pitched like double jump
-        // Tall, narrow stretch for the highest jump
-        this.targetSquash.set(0.6, 1.6, 0.6);
-        // Gold spiral burst effect
-        if (this.playerBody) {
-          const pos = this.playerBody.translation();
-          this.tempPosCache.set(pos.x, pos.y, pos.z);
-          this.particleManager.createTripleJumpSpiral(this.tempPosCache);
-          this.particleManager.createDoubleJumpRing(this.tempPosCache);
-        }
-        // Camera kick for dramatic effect
-        this.cameraController?.kickFOV(70, 0.5);
-      },
-      onLongJump: () => {
-        audioManager.playJump();
-        this.targetSquash.set(0.6, 1.2, 1.4); // Stretch forward
-        // Motion trail particles for visual flair
-        if (this.playerBody && this.playerController) {
-          const pos = this.playerBody.translation();
-          this.tempPosCache.set(pos.x, pos.y, pos.z);
-          const momentum = this.playerController.getMomentum();
-          this.particleManager.createLongJumpTrail(this.tempPosCache, momentum);
-        }
-      },
       onFootstep: (surface) => {
         audioManager.playFootstep(surface);
       },
@@ -933,29 +877,6 @@ export class Game {
       onSwimmingSplash: (position) => {
         // Low intensity splash while swimming
         this.particleManager.createWaterSplash(position, 0.4);
-      },
-      onWallSlide: (position, wallNormal) => {
-        // Dust/spark particles when sliding along walls
-        this.particleManager.createWallSlideParticles(position, wallNormal);
-      },
-      onWallJump: (position, wallNormal) => {
-        // Spark burst when wall jumping
-        this.particleManager.createWallJumpSpark(position, wallNormal);
-        audioManager.playJump();
-      },
-      onLedgeGrab: (position) => {
-        // Shimmer particles when grabbing a ledge
-        this.particleManager.createLedgeGrabShimmer(position);
-      },
-      onCrouch: (isCrouching) => {
-        // Visual squash when crouching on ground
-        if (isCrouching) {
-          // Squash: Y compressed (0.7), XZ wider (1.15)
-          this.targetSquash.set(1.15, 0.7, 1.15);
-        } else {
-          // Return to normal
-          this.targetSquash.set(1, 1, 1);
-        }
       },
     });
 
@@ -1265,20 +1186,6 @@ export class Game {
         }
       }
       this.prevVerticalVelocity = vel.y;
-
-      // Long jump trail particles: spawn continuously while long jumping
-      if (this.playerController.getIsLongJumping()) {
-        this.longJumpTrailTimer += dt;
-        if (this.longJumpTrailTimer >= this.LONG_JUMP_TRAIL_INTERVAL) {
-          this.longJumpTrailTimer = 0;
-          const playerPos = this.playerBody.translation();
-          this.tempPosCache.set(playerPos.x, playerPos.y, playerPos.z);
-          const momentum = this.playerController.getMomentum();
-          this.particleManager.createLongJumpTrail(this.tempPosCache, momentum);
-        }
-      } else {
-        this.longJumpTrailTimer = 0;
-      }
 
       // Speed-based vignette effect: intensifies at high speeds
       this.updateSpeedVignette(vel.x, vel.z, dt);

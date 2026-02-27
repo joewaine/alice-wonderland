@@ -1,12 +1,10 @@
 /**
- * PlayerController - Momentum-based movement with N64-style moveset
+ * PlayerController - Modern 3rd-person movement
  *
  * Handles player physics including:
  * - Momentum/acceleration (no instant velocity changes)
- * - Double jump
- * - Triple jump (consecutive grounded jumps while running)
- * - Ground pound
- * - Long jump
+ * - Jump + double jump
+ * - Swimming
  * - Coyote time and jump buffering
  */
 
@@ -20,21 +18,13 @@ import type { SurfaceType } from '../audio/AudioManager';
 export interface PlayerControllerCallbacks {
   onJumpAnticipation?: (isDoubleJump: boolean) => void;
   onJump?: (isDoubleJump: boolean) => void;
-  onTripleJump?: () => void;
   onLand?: (fallSpeed: number, surface: SurfaceType) => void;
-  onGroundPound?: () => void;
-  onGroundPoundLand?: (position: THREE.Vector3) => void;
-  onLongJump?: () => void;
   onFootstep?: (surface: SurfaceType) => void;
   onSpeedBoost?: () => void;
   onSpeedBoostActive?: (position: THREE.Vector3, direction: THREE.Vector3) => void;
   onWaterEnter?: (position: THREE.Vector3, surfaceY: number) => void;
   onWaterExit?: (position: THREE.Vector3, surfaceY: number) => void;
   onSwimmingSplash?: (position: THREE.Vector3, surfaceY: number) => void;
-  onWallSlide?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
-  onWallJump?: (position: THREE.Vector3, wallNormal: THREE.Vector3) => void;
-  onLedgeGrab?: (position: THREE.Vector3) => void;
-  onCrouch?: (isCrouching: boolean) => void;
 }
 
 export interface AirCurrentZoneRef {
@@ -72,20 +62,6 @@ export class PlayerController {
   private jumpBufferTime: number = 0;
   private wasJumpPressed: boolean = false;
 
-  // Ground pound state
-  private isGroundPounding: boolean = false;
-  private groundPoundLockout: number = 0;
-  private groundPoundWindupTimer: number = 0;
-  private readonly GROUND_POUND_WINDUP_DURATION: number = 0.08; // Brief hover at apex before dive
-
-  // Long jump state
-  private isLongJumping: boolean = false;
-
-  // Triple jump state (consecutive grounded jumps while running fast)
-  private consecutiveGroundJumps: number = 0;
-  private lastGroundJumpLandingTime: number = 0;
-  private isTripleJumping: boolean = false;
-
   // Landing lockout state (prevents instant re-jump after hard landings)
   private landingLockout: number = 0;
 
@@ -104,31 +80,6 @@ export class PlayerController {
   private swimmingSplashTimer: number = 0;
   private readonly SWIMMING_SPLASH_INTERVAL: number = 0.4; // Seconds between swim splashes
 
-  // Wall slide state
-  private isWallSliding: boolean = false;
-  private wallSlideNormal: THREE.Vector3 = new THREE.Vector3();
-  private wallSlideTimer: number = 0;
-  private readonly WALL_SLIDE_PARTICLE_INTERVAL: number = 0.1; // Seconds between wall slide particles
-  private readonly WALL_CHECK_DISTANCE: number = 0.6; // Raycast distance for wall detection
-  private readonly WALL_SLIDE_GRAVITY_SCALE: number = 0.4; // Reduced gravity when wall sliding
-
-  // Wall jump tuning
-  private readonly WALL_JUMP_VERTICAL: number = 12;
-  private readonly WALL_JUMP_HORIZONTAL: number = 8;
-
-  // Ledge grab state
-  private isLedgeGrabbing: boolean = false;
-  private wasLedgeGrabbing: boolean = false;
-  private ledgeGrabPosition: THREE.Vector3 = new THREE.Vector3();
-  private readonly LEDGE_CHECK_HEIGHT: number = 1.0; // Height above player to check for ledge
-
-  // Crouch state (for visual squash callback)
-  private isCrouching: boolean = false;
-  private wasCrouching: boolean = false;
-  private readonly LEDGE_CHECK_DEPTH: number = 0.8; // Distance forward to check for ledge
-  private ledgeCheckRay: RAPIER.Ray | null = null;
-  private ledgeCheckDir: RAPIER.Vector3 | null = null;
-
   // Tuning constants - movement (snappy, responsive feel)
   private readonly GROUND_ACCEL = 1.8;      // Fast acceleration
   private readonly AIR_ACCEL = 0.6;         // Good air control
@@ -140,18 +91,6 @@ export class PlayerController {
   // Tuning constants - jumping
   private readonly JUMP_FORCE = 14;
   private readonly DOUBLE_JUMP_FORCE = 12;
-  private readonly LONG_JUMP_VERTICAL = 10;
-  private readonly LONG_JUMP_HORIZONTAL_BOOST = 8;
-  private readonly LONG_JUMP_SPEED_THRESHOLD = 5;
-
-  // Tuning constants - triple jump
-  private readonly TRIPLE_JUMP_FORCE = 22;           // Highest jump in the game
-  private readonly TRIPLE_JUMP_WINDOW = 500;          // ms window to chain jumps
-  private readonly TRIPLE_JUMP_SPEED_THRESHOLD = 6;   // Must be running
-
-  // Tuning constants - ground pound
-  private readonly GROUND_POUND_FORCE = -30;
-  private readonly GROUND_POUND_LOCKOUT = 0.2; // seconds after landing
 
   // Tuning constants - landing lockout
   private readonly HARD_LANDING_THRESHOLD = 10; // fall speed that triggers lockout
@@ -197,13 +136,10 @@ export class PlayerController {
   // Pre-allocated objects to avoid per-frame allocations
   private playerPosCache: THREE.Vector3 = new THREE.Vector3();
   private callbackPosCache: THREE.Vector3 = new THREE.Vector3();
-  private wallNormalCache: THREE.Vector3 = new THREE.Vector3();
   private boostDirCache: THREE.Vector3 = new THREE.Vector3();
   private velocityCache: RAPIER.Vector3 | null = null;
   private groundCheckRay: RAPIER.Ray | null = null;
   private groundCheckDir: RAPIER.Vector3 | null = null;
-  private wallCheckRay: RAPIER.Ray | null = null;
-  private wallCheckDir: RAPIER.Vector3 | null = null;
 
   constructor(world: RAPIER.World, playerBody: RAPIER.RigidBody) {
     this.world = world;
@@ -215,16 +151,6 @@ export class PlayerController {
     this.groundCheckRay = new RAPIER.Ray(
       new RAPIER.Vector3(0, 0, 0),
       this.groundCheckDir
-    );
-    this.wallCheckDir = new RAPIER.Vector3(1, 0, 0);
-    this.wallCheckRay = new RAPIER.Ray(
-      new RAPIER.Vector3(0, 0, 0),
-      this.wallCheckDir
-    );
-    this.ledgeCheckDir = new RAPIER.Vector3(0, -1, 0);
-    this.ledgeCheckRay = new RAPIER.Ray(
-      new RAPIER.Vector3(0, 0, 0),
-      this.ledgeCheckDir
     );
   }
 
@@ -329,24 +255,9 @@ export class PlayerController {
     if (this.isGrounded) {
       this.lastGroundedTime = now;
       this.jumpCount = 0;
-      this.isLongJumping = false;
-
-      // End ground pound on landing
-      if (this.isGroundPounding) {
-        this.isGroundPounding = false;
-        this.groundPoundLockout = this.GROUND_POUND_LOCKOUT;
-
-        // Callback for breaking platforms (use cached vector)
-        const pos = this.playerBody.translation();
-        this.callbackPosCache.set(pos.x, pos.y, pos.z);
-        this.callbacks.onGroundPoundLand?.(this.callbackPosCache);
-      }
     }
 
     // Decrement lockout timers
-    if (this.groundPoundLockout > 0) {
-      this.groundPoundLockout -= dt;
-    }
     if (this.landingLockout > 0) {
       this.landingLockout -= dt;
     }
@@ -371,13 +282,6 @@ export class PlayerController {
       this.callbacks.onLand?.(fallSpeed, this.currentSurface);
       // Trigger land animation
       this.animationManager?.setState('land');
-
-      // Track landing time for triple jump chain
-      this.lastGroundJumpLandingTime = now;
-      if (this.isTripleJumping) {
-        this.isTripleJumping = false;
-        this.consecutiveGroundJumps = 0;
-      }
 
       // Apply landing lockout for hard landings to prevent instant re-jump
       if (fallSpeed > this.HARD_LANDING_THRESHOLD) {
@@ -413,41 +317,6 @@ export class PlayerController {
       return;
     }
 
-    // Handle ground pound (crouch in air, not in water)
-    const isCrouchingInput = input.isKeyDown('shift') || input.isKeyDown('control');
-    if (isCrouchingInput && !this.isGrounded && !this.isGroundPounding && this.groundPoundLockout <= 0) {
-      this.startGroundPound();
-    }
-
-    // Track crouch state for visual squash (only when grounded)
-    this.wasCrouching = this.isCrouching;
-    this.isCrouching = isCrouchingInput && this.isGrounded;
-    if (this.isCrouching !== this.wasCrouching) {
-      this.callbacks.onCrouch?.(this.isCrouching);
-    }
-
-    // Skip normal movement during ground pound
-    if (this.isGroundPounding) {
-      // Process windup timer (hover at apex before diving)
-      if (this.groundPoundWindupTimer > 0) {
-        this.groundPoundWindupTimer -= dt;
-        // Keep player frozen during windup
-        this.velocityCache!.x = 0;
-        this.velocityCache!.y = 0;
-        this.velocityCache!.z = 0;
-        this.playerBody.setLinvel(this.velocityCache!, true);
-
-        // Execute dive when windup completes
-        if (this.groundPoundWindupTimer <= 0) {
-          this.executeGroundPoundDive();
-        }
-        return;
-      }
-      // But still apply air currents even during ground pound (slows the slam)
-      this.applyAirCurrents();
-      return;
-    }
-
     // Apply momentum-based movement
     this.applyMovement(worldX, worldZ);
 
@@ -456,17 +325,11 @@ export class PlayerController {
       this.applyAirCurrents();
     }
 
-    // Check for wall slide (only when falling and not grounded)
-    this.checkWallSlide(dt);
-
-    // Check for ledge grab (when wall sliding near a ledge)
-    this.checkLedgeGrab();
-
     // Check for speed boosts
     this.checkSpeedBoosts();
 
     // Handle jumping
-    this.handleJump(input, isCrouchingInput, now);
+    this.handleJump(input, now);
 
     // Handle footsteps - interval scales with movement speed
     if (this.isGrounded && inputLength > 0) {
@@ -587,138 +450,6 @@ export class PlayerController {
     }
   }
 
-  /**
-   * Check for wall slide and emit particles
-   * Wall slide occurs when: not grounded, falling (negative y velocity), and touching a wall
-   */
-  private checkWallSlide(dt: number): void {
-    // Only check when airborne and falling
-    if (this.isGrounded || this.isGroundPounding || this.inWater) {
-      this.isWallSliding = false;
-      this.wallSlideTimer = 0;
-      return;
-    }
-
-    const vel = this.playerBody.linvel();
-
-    // Must be falling (not rising from a jump)
-    if (vel.y > 0) {
-      this.isWallSliding = false;
-      this.wallSlideTimer = 0;
-      return;
-    }
-
-    // Check for wall contact
-    const wallNormal = this.checkWallContact();
-    if (wallNormal === null) {
-      this.isWallSliding = false;
-      this.wallSlideTimer = 0;
-      return;
-    }
-
-    // We're wall sliding!
-    this.isWallSliding = true;
-    this.wallSlideNormal.copy(wallNormal);
-
-    // Apply reduced gravity (slow the descent)
-    const reducedGravityVel = vel.y * this.WALL_SLIDE_GRAVITY_SCALE;
-    if (vel.y < reducedGravityVel) {
-      // Cap the fall speed when wall sliding
-      this.velocityCache!.x = vel.x;
-      this.velocityCache!.y = Math.max(vel.y, -5);  // Max fall speed when wall sliding
-      this.velocityCache!.z = vel.z;
-      this.playerBody.setLinvel(this.velocityCache!, true);
-    }
-
-    // Emit wall slide particles on a throttled interval
-    this.wallSlideTimer += dt;
-    if (this.wallSlideTimer >= this.WALL_SLIDE_PARTICLE_INTERVAL) {
-      this.wallSlideTimer = 0;
-
-      // Get position for particle spawn (at wall contact point)
-      const pos = this.playerBody.translation();
-      this.callbackPosCache.set(
-        pos.x - wallNormal.x * 0.5,  // Offset toward wall
-        pos.y,
-        pos.z - wallNormal.z * 0.5
-      );
-
-      this.callbacks.onWallSlide?.(this.callbackPosCache, this.wallSlideNormal);
-    }
-  }
-
-  /**
-   * Check for ledge grab opportunity
-   * Ledge grab occurs when: not grounded, touching wall, and there's a ledge above
-   */
-  private checkLedgeGrab(): void {
-    // Store previous state for grab detection
-    this.wasLedgeGrabbing = this.isLedgeGrabbing;
-
-    // Only check when wall sliding (already touching a wall and falling)
-    if (!this.isWallSliding || this.isGrounded || this.isGroundPounding || this.inWater) {
-      this.isLedgeGrabbing = false;
-      return;
-    }
-
-    const pos = this.playerBody.translation();
-
-    // Check if there's empty space at head level (where we'd grab)
-    // Then check if there's solid ground just above that (the ledge surface)
-    const checkHeight = pos.y + this.LEDGE_CHECK_HEIGHT;
-
-    // Raycast forward at ledge height to see if there's open space
-    const forwardX = -this.wallSlideNormal.x;
-    const forwardZ = -this.wallSlideNormal.z;
-
-    this.ledgeCheckRay!.origin.x = pos.x + forwardX * 0.3;
-    this.ledgeCheckRay!.origin.y = checkHeight;
-    this.ledgeCheckRay!.origin.z = pos.z + forwardZ * 0.3;
-    this.ledgeCheckDir!.x = forwardX;
-    this.ledgeCheckDir!.y = 0;
-    this.ledgeCheckDir!.z = forwardZ;
-    this.ledgeCheckRay!.dir = this.ledgeCheckDir!;
-
-    const forwardHit = this.world.castRay(this.ledgeCheckRay!, this.LEDGE_CHECK_DEPTH, true);
-
-    // If there's no obstruction at head level, check for ground above
-    if (forwardHit === null) {
-      // Raycast down from above the ledge to find the surface
-      this.ledgeCheckRay!.origin.x = pos.x + forwardX * this.LEDGE_CHECK_DEPTH;
-      this.ledgeCheckRay!.origin.y = checkHeight + 0.5;
-      this.ledgeCheckRay!.origin.z = pos.z + forwardZ * this.LEDGE_CHECK_DEPTH;
-      this.ledgeCheckDir!.x = 0;
-      this.ledgeCheckDir!.y = -1;
-      this.ledgeCheckDir!.z = 0;
-      this.ledgeCheckRay!.dir = this.ledgeCheckDir!;
-
-      const downHit = this.world.castRay(this.ledgeCheckRay!, 1.0, true);
-
-      if (downHit !== null) {
-        // Found a ledge! Trigger grab
-        if (!this.wasLedgeGrabbing) {
-          // Just started grabbing - emit shimmer particles
-          const grabY = checkHeight + 0.5 - downHit.timeOfImpact;
-          this.ledgeGrabPosition.set(
-            pos.x + forwardX * (this.LEDGE_CHECK_DEPTH * 0.5),
-            grabY,
-            pos.z + forwardZ * (this.LEDGE_CHECK_DEPTH * 0.5)
-          );
-          this.callbacks.onLedgeGrab?.(this.ledgeGrabPosition);
-        }
-        this.isLedgeGrabbing = true;
-
-        // Hold position while grabbing (freeze velocity)
-        this.velocityCache!.x = 0;
-        this.velocityCache!.y = 0;
-        this.velocityCache!.z = 0;
-        this.playerBody.setLinvel(this.velocityCache!, true);
-        return;
-      }
-    }
-
-    this.isLedgeGrabbing = false;
-  }
 
   /**
    * Check if player is in a water zone
@@ -844,7 +575,7 @@ export class PlayerController {
   /**
    * Handle jump input with coyote time and buffering
    */
-  private handleJump(input: InputManager, isCrouching: boolean, now: number): void {
+  private handleJump(input: InputManager, now: number): void {
     const jumpPressed = input.jump;
     const justPressed = jumpPressed && !this.wasJumpPressed;
     this.wasJumpPressed = jumpPressed;
@@ -864,34 +595,6 @@ export class PlayerController {
       return;
     }
 
-    // Long jump: crouch + jump while running fast
-    const currentSpeed = Math.sqrt(this.momentum.x ** 2 + this.momentum.z ** 2);
-    if (wantsToJump && isCrouching && (this.isGrounded || canCoyoteJump) &&
-        currentSpeed > this.LONG_JUMP_SPEED_THRESHOLD && this.jumpCount === 0) {
-      this.performLongJump();
-      this.jumpBufferTime = 0;
-      return;
-    }
-
-    // Wall jump: jump while wall sliding
-    if (wantsToJump && this.isWallSliding) {
-      this.performWallJump();
-      this.jumpBufferTime = 0;
-      return;
-    }
-
-    // Triple jump: 3rd consecutive grounded jump within timing window while running
-    if (wantsToJump && this.jumpCount === 0 && (this.isGrounded || canCoyoteJump) && !this.pendingJump) {
-      const withinWindow = (now - this.lastGroundJumpLandingTime) < this.TRIPLE_JUMP_WINDOW;
-      const runningFast = currentSpeed > this.TRIPLE_JUMP_SPEED_THRESHOLD;
-
-      if (withinWindow && runningFast && this.consecutiveGroundJumps >= 2) {
-        this.performTripleJump();
-        this.jumpBufferTime = 0;
-        return;
-      }
-    }
-
     // Normal jump or double jump
     if (wantsToJump && this.jumpCount < 2 && !this.pendingJump) {
       // First jump requires being grounded or coyote time
@@ -907,15 +610,6 @@ export class PlayerController {
         this.performJump(force * this.jumpMultiplier, isDoubleJump);
         this.jumpCount++;
       } else {
-        // Track consecutive grounded jumps for triple jump chain
-        const withinWindow = (now - this.lastGroundJumpLandingTime) < this.TRIPLE_JUMP_WINDOW;
-        const runningFast = currentSpeed > this.TRIPLE_JUMP_SPEED_THRESHOLD;
-        if (withinWindow && runningFast) {
-          this.consecutiveGroundJumps++;
-        } else {
-          this.consecutiveGroundJumps = 1;
-        }
-
         // Queue the jump with anticipation
         this.pendingJump = true;
         this.pendingJumpIsDouble = false;
@@ -949,115 +643,6 @@ export class PlayerController {
   }
 
   /**
-   * Perform a long jump (horizontal boost + lower vertical)
-   */
-  private performLongJump(): void {
-    // Get movement direction from current momentum
-    const speed = Math.sqrt(this.momentum.x ** 2 + this.momentum.z ** 2);
-    if (speed > 0) {
-      const dirX = this.momentum.x / speed;
-      const dirZ = this.momentum.z / speed;
-
-      // Boost horizontal momentum
-      const boost = this.LONG_JUMP_HORIZONTAL_BOOST * this.speedMultiplier;
-      this.momentum.x += dirX * boost;
-      this.momentum.z += dirZ * boost;
-    }
-
-    // Apply lower vertical jump (reuse cached velocity)
-    this.velocityCache!.x = this.momentum.x;
-    this.velocityCache!.y = this.LONG_JUMP_VERTICAL * this.jumpMultiplier;
-    this.velocityCache!.z = this.momentum.z;
-    this.playerBody.setLinvel(this.velocityCache!, true);
-
-    this.isLongJumping = true;
-    this.jumpCount++;
-    this.callbacks.onLongJump?.();
-  }
-
-  /**
-   * Perform a wall jump (kick off wall)
-   */
-  private performWallJump(): void {
-    // Jump away from wall using stored wall normal
-    const horizontalBoost = this.WALL_JUMP_HORIZONTAL * this.speedMultiplier;
-    this.momentum.x = this.wallSlideNormal.x * horizontalBoost;
-    this.momentum.z = this.wallSlideNormal.z * horizontalBoost;
-
-    // Apply vertical jump
-    this.velocityCache!.x = this.momentum.x;
-    this.velocityCache!.y = this.WALL_JUMP_VERTICAL * this.jumpMultiplier;
-    this.velocityCache!.z = this.momentum.z;
-    this.playerBody.setLinvel(this.velocityCache!, true);
-
-    // Get position for particle spawn (at wall contact point)
-    const pos = this.playerBody.translation();
-    this.callbackPosCache.set(
-      pos.x - this.wallSlideNormal.x * 0.5,  // Offset toward wall
-      pos.y,
-      pos.z - this.wallSlideNormal.z * 0.5
-    );
-
-    // End wall slide state
-    this.isWallSliding = false;
-
-    // Reset jump count (allows double jump after wall jump)
-    this.jumpCount = 1;
-
-    this.callbacks.onWallJump?.(this.callbackPosCache, this.wallSlideNormal);
-  }
-
-  /**
-   * Perform a triple jump (highest jump, reward for chaining grounded jumps)
-   */
-  private performTripleJump(): void {
-    // Apply highest vertical force
-    this.velocityCache!.x = this.momentum.x;
-    this.velocityCache!.y = this.TRIPLE_JUMP_FORCE * this.jumpMultiplier;
-    this.velocityCache!.z = this.momentum.z;
-    this.playerBody.setLinvel(this.velocityCache!, true);
-
-    this.isTripleJumping = true;
-    this.consecutiveGroundJumps = 0;
-    // Prevent double jump after triple jump - it's already the highest
-    this.jumpCount = 2;
-    this.callbacks.onTripleJump?.();
-  }
-
-  /**
-   * Start ground pound (enters windup phase first for anticipation)
-   */
-  private startGroundPound(): void {
-    this.isGroundPounding = true;
-    this.groundPoundWindupTimer = this.GROUND_POUND_WINDUP_DURATION;
-
-    // Kill horizontal momentum
-    this.momentum.set(0, 0, 0);
-
-    // Freeze velocity during windup (hover at apex)
-    this.velocityCache!.x = 0;
-    this.velocityCache!.y = 0;
-    this.velocityCache!.z = 0;
-    this.playerBody.setLinvel(this.velocityCache!, true);
-
-    // Trigger ground pound animation (highest priority)
-    this.animationManager?.setState('groundPound');
-
-    this.callbacks.onGroundPound?.();
-  }
-
-  /**
-   * Execute ground pound dive (after windup completes)
-   */
-  private executeGroundPoundDive(): void {
-    // Apply strong downward force (reuse cached velocity)
-    this.velocityCache!.x = 0;
-    this.velocityCache!.y = this.GROUND_POUND_FORCE;
-    this.velocityCache!.z = 0;
-    this.playerBody.setLinvel(this.velocityCache!, true);
-  }
-
-  /**
    * Check if player is grounded using raycast (reuses pre-allocated ray)
    */
   private checkGrounded(): boolean {
@@ -1069,41 +654,6 @@ export class PlayerController {
 
     const hit = this.world.castRay(this.groundCheckRay!, this.groundCheckDistance, true);
     return hit !== null;
-  }
-
-  /**
-   * Check for wall contact using horizontal raycasts
-   * Returns wall normal if touching a wall, null otherwise
-   */
-  private checkWallContact(): THREE.Vector3 | null {
-    const pos = this.playerBody.translation();
-
-    // Check 4 cardinal directions for wall contact
-    const directions = [
-      { x: 1, z: 0 },   // Right
-      { x: -1, z: 0 },  // Left
-      { x: 0, z: 1 },   // Forward
-      { x: 0, z: -1 },  // Back
-    ];
-
-    for (const dir of directions) {
-      this.wallCheckRay!.origin.x = pos.x;
-      this.wallCheckRay!.origin.y = pos.y;
-      this.wallCheckRay!.origin.z = pos.z;
-      this.wallCheckDir!.x = dir.x;
-      this.wallCheckDir!.z = dir.z;
-      this.wallCheckRay!.dir = this.wallCheckDir!;
-
-      const hit = this.world.castRay(this.wallCheckRay!, this.WALL_CHECK_DISTANCE, true);
-      if (hit !== null) {
-        // Return the opposite of the raycast direction as the wall normal
-        // (the normal points away from the wall)
-        this.wallNormalCache.set(-dir.x, 0, -dir.z);
-        return this.wallNormalCache;
-      }
-    }
-
-    return null;
   }
 
   /**
@@ -1145,27 +695,6 @@ export class PlayerController {
   }
 
   /**
-   * Check if currently ground pounding
-   */
-  getIsGroundPounding(): boolean {
-    return this.isGroundPounding;
-  }
-
-  /**
-   * Check if currently long jumping
-   */
-  getIsLongJumping(): boolean {
-    return this.isLongJumping;
-  }
-
-  /**
-   * Check if currently triple jumping
-   */
-  getIsTripleJumping(): boolean {
-    return this.isTripleJumping;
-  }
-
-  /**
    * Check if grounded
    */
   getIsGrounded(): boolean {
@@ -1191,43 +720,12 @@ export class PlayerController {
   }
 
   /**
-   * Check if wall sliding
-   */
-  getIsWallSliding(): boolean {
-    return this.isWallSliding;
-  }
-
-  /**
-   * Check if ledge grabbing
-   */
-  getIsLedgeGrabbing(): boolean {
-    return this.isLedgeGrabbing;
-  }
-
-  /**
-   * Check if crouching
-   */
-  getIsCrouching(): boolean {
-    return this.isCrouching;
-  }
-
-  /**
    * Reset state (for respawning)
    */
   reset(): void {
     this.momentum.set(0, 0, 0);
     this.jumpCount = 0;
-    this.isGroundPounding = false;
-    this.isLongJumping = false;
-    this.isTripleJumping = false;
-    this.consecutiveGroundJumps = 0;
-    this.isWallSliding = false;
-    this.isLedgeGrabbing = false;
-    this.isCrouching = false;
-    this.wasCrouching = false;
-    this.groundPoundLockout = 0;
     this.landingLockout = 0;
-    this.wallSlideTimer = 0;
     this.animationManager?.setState('idle');
   }
 
@@ -1236,12 +734,6 @@ export class PlayerController {
    */
   private updateAnimationState(): void {
     if (!this.animationManager) return;
-
-    // Ground pound has highest priority
-    if (this.isGroundPounding) {
-      this.animationManager.setState('groundPound');
-      return;
-    }
 
     // In water - could add swim animation here
     if (this.inWater) {
