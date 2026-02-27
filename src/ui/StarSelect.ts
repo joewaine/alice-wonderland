@@ -8,6 +8,7 @@
  */
 
 import type { WonderStar } from '../data/LevelData';
+import { getChallengeColor } from '../constants/colors';
 
 export interface StarSelectCallbacks {
   onStarSelected: (starId: string) => void;
@@ -280,14 +281,7 @@ export class StarSelect {
    * Get color for challenge type
    */
   private getChallengeTypeColor(type: string): string {
-    switch (type) {
-      case 'exploration': return '#00ff00';
-      case 'race': return '#ff4444';
-      case 'puzzle': return '#4488ff';
-      case 'collection': return '#ff44ff';
-      case 'skill': return '#ffaa00';
-      default: return '#ffffff';
-    }
+    return getChallengeColor(type);
   }
 
   /**

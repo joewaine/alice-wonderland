@@ -1085,6 +1085,13 @@ export class LevelBuilder {
   }
 
   /**
+   * Remove a physics rigid body from the world
+   */
+  removeRigidBody(body: RAPIER.RigidBody): void {
+    this.world.removeRigidBody(body);
+  }
+
+  /**
    * Clean up all created objects
    */
   cleanup(): void {
