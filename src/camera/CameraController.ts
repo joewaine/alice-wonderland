@@ -1,24 +1,21 @@
 /**
- * CameraController - N64-style third-person camera
+ * CameraController - Modern third-person follow camera
  *
  * Features:
- * - Manual orbit rotation (arrow keys and right-click drag)
- * - Wall collision avoidance (camera pushes closer when blocked)
+ * - Automatic follow behind player's movement direction
+ * - Optional manual look-around (right-click drag), returns to follow
+ * - Soft wall fade-through (transparent walls instead of camera pull-in)
  * - Contextual zoom (adjusts based on environment)
- * - Smooth transitions between positions
+ * - Smooth damped transitions
  */
 
 import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d-compat';
-import { InputManager } from '../engine/InputManager';
 
 interface CameraConfig {
   // Target distance from player
   targetDistance: number;
   // Height offset above player
   heightOffset: number;
-  // Rotation sensitivity
-  rotationSpeed: number;
   // Mouse sensitivity (for right-click drag)
   mouseSensitivity: number;
   // Pitch limits (radians)
@@ -26,7 +23,7 @@ interface CameraConfig {
   maxPitch: number;
   // Smooth follow speed
   followLerp: number;
-  // Distance lerp when adjusting for walls
+  // Distance lerp for smooth transitions
   distanceLerp: number;
 }
 
@@ -38,29 +35,38 @@ interface CameraZone {
 
 export class CameraController {
   private camera: THREE.PerspectiveCamera;
-  private world: RAPIER.World;
+  private scene: THREE.Scene;
 
   // Current rotation state
   private yaw: number = 0;
-  private pitch: number = 0.3;
+  private pitch: number = 0.35;
 
-  // Current vs target distance (for smooth wall avoidance)
-  private currentDistance: number = 8;
-  private targetDistance: number = 8;
+  // Auto-follow: camera orbits to stay behind player's facing direction
+  private playerFacingYaw: number | null = null;
+  private readonly AUTO_FOLLOW_SPEED = 5;
+
+  // Manual look state (right-click drag overrides auto-follow)
+  private manualLookActive: boolean = false;
+  private manualLookTimer: number = 0;
+  private readonly RETURN_TO_FOLLOW_DELAY = 0.3;
+  private readonly RETURN_TO_FOLLOW_SPEED = 2.0;
+
+  // Current vs target distance
+  private currentDistance: number = 7;
+  private targetDistance: number = 7;
 
   // Height offset
-  private heightOffset: number = 2;
-  private targetHeightOffset: number = 2;
+  private heightOffset: number = 2.0;
+  private targetHeightOffset: number = 2.0;
 
   // Configuration
   private config: CameraConfig = {
-    targetDistance: 8,
-    heightOffset: 2,
-    rotationSpeed: 2.5,
+    targetDistance: 7,
+    heightOffset: 2.0,
     mouseSensitivity: 0.003,
     minPitch: 0.1,
     maxPitch: 1.2,
-    followLerp: 8,
+    followLerp: 5,
     distanceLerp: 5,
   };
 
@@ -72,12 +78,11 @@ export class CameraController {
   private lastMouseX: number = 0;
   private lastMouseY: number = 0;
 
-  // Raycast state for collision avoidance
-  private ray: RAPIER.Ray;
-  private rayDirection: THREE.Vector3 = new THREE.Vector3();
-
-  // Collision group filter (ignore player collider)
-  private collisionGroups: number;
+  // Wall fade-through state
+  private raycaster: THREE.Raycaster = new THREE.Raycaster();
+  private playerMesh: THREE.Object3D | null = null;
+  private fadedMeshes: Map<THREE.Mesh, { opacity: number; transparent: boolean; isShader: boolean }> = new Map();
+  private readonly WALL_FADE_ALPHA = 0.15;
 
   // Canvas reference for event listener cleanup
   private canvas: HTMLElement;
@@ -85,18 +90,19 @@ export class CameraController {
   // Pre-allocated vectors to avoid per-frame allocations
   private idealPosCache: THREE.Vector3 = new THREE.Vector3();
   private lookAtCache: THREE.Vector3 = new THREE.Vector3();
+  private rayDirCache: THREE.Vector3 = new THREE.Vector3();
 
   // Speed-based look-ahead state
   private lookAheadOffset: THREE.Vector3 = new THREE.Vector3();
-  private readonly LOOK_AHEAD_MAX_DISTANCE = 2.5;    // Max units ahead of player to look
-  private readonly LOOK_AHEAD_SPEED_THRESHOLD = 0.8; // Start look-ahead at 80% max speed
-  private readonly LOOK_AHEAD_LERP_SPEED = 4;        // How fast look-ahead catches up
-  private readonly MAX_PLAYER_SPEED = 16;            // Expected max player speed (for ratio calc)
+  private readonly LOOK_AHEAD_MAX_DISTANCE = 2.5;
+  private readonly LOOK_AHEAD_SPEED_THRESHOLD = 0.8;
+  private readonly LOOK_AHEAD_LERP_SPEED = 4;
+  private readonly MAX_PLAYER_SPEED = 16;
 
   // Screen shake state
   private shakeIntensity: number = 0;
   private shakeOffset: THREE.Vector3 = new THREE.Vector3();
-  private readonly SHAKE_DECAY = 0.88;  // How quickly shake fades
+  private readonly SHAKE_DECAY = 0.88;
 
   // FOV kick state
   private baseFOV: number = 60;
@@ -108,33 +114,33 @@ export class CameraController {
   // Underwater wobble state
   private underwaterWobbleEnabled: boolean = false;
   private wobbleTime: number = 0;
-  private readonly WOBBLE_ROLL_FREQUENCY: number = 0.7;    // Hz - slow roll oscillation
-  private readonly WOBBLE_SWAY_FREQUENCY: number = 0.5;   // Hz - even slower sway
-  private readonly WOBBLE_ROLL_AMPLITUDE: number = 0.04;   // ~2.3 degrees in radians
-  private readonly WOBBLE_SWAY_AMPLITUDE: number = 0.1;    // Units of position sway
+  private readonly WOBBLE_ROLL_FREQUENCY: number = 0.7;
+  private readonly WOBBLE_SWAY_FREQUENCY: number = 0.5;
+  private readonly WOBBLE_ROLL_AMPLITUDE: number = 0.04;
+  private readonly WOBBLE_SWAY_AMPLITUDE: number = 0.1;
 
-  // Dialogue focus state - subtle camera pull-in during NPC conversations
+  // Dialogue focus state
   private dialogueFocusEnabled: boolean = false;
-  private dialogueFocusLerp: number = 0;  // 0 = normal, 1 = full dialogue focus
-  private readonly DIALOGUE_DISTANCE_MULT = 0.85;   // Pull camera in to 85% of normal distance
-  private readonly DIALOGUE_PITCH_REDUCTION = 0.06; // Lower camera angle slightly (radians)
-  private readonly DIALOGUE_FOCUS_SPEED = 3;        // Lerp speed for smooth transition
+  private dialogueFocusLerp: number = 0;
+  private readonly DIALOGUE_DISTANCE_MULT = 0.85;
+  private readonly DIALOGUE_PITCH_REDUCTION = 0.06;
+  private readonly DIALOGUE_FOCUS_SPEED = 3;
 
-  // Size-based distance adjustment - camera pulls in when small, out when large
-  private sizeDistanceMultiplier: number = 1.0;       // Current multiplier (smoothly interpolated)
-  private targetSizeDistanceMultiplier: number = 1.0; // Target multiplier based on size
-  private readonly SIZE_DISTANCE_LERP_SPEED = 4;      // ~0.5s transition (1/0.25 = 4 for smooth lerp)
+  // Size-based distance adjustment
+  private sizeDistanceMultiplier: number = 1.0;
+  private targetSizeDistanceMultiplier: number = 1.0;
+  private readonly SIZE_DISTANCE_LERP_SPEED = 4;
 
-  // Landing dip state - brief vertical dip on landing impact
-  private dipOffset: number = 0;           // Current dip amount (units)
-  private dipVelocity: number = 0;         // Recovery velocity
-  private readonly DIP_RECOVERY_SPEED = 40; // Spring-like recovery (units/s²)
+  // Landing dip state
+  private dipOffset: number = 0;
+  private dipVelocity: number = 0;
+  private readonly DIP_RECOVERY_SPEED = 40;
 
   // Bound event handlers (stored for removal in dispose)
   private handleMouseDown = (e: MouseEvent): void => {
     if (e.button === 2) {
-      // Right click
       this.isDragging = true;
+      this.manualLookActive = true;
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
       e.preventDefault();
@@ -144,6 +150,7 @@ export class CameraController {
   private handleMouseUp = (e: MouseEvent): void => {
     if (e.button === 2) {
       this.isDragging = false;
+      this.manualLookTimer = this.RETURN_TO_FOLLOW_DELAY;
     }
   };
 
@@ -160,7 +167,10 @@ export class CameraController {
   };
 
   private handleMouseLeave = (): void => {
-    this.isDragging = false;
+    if (this.isDragging) {
+      this.isDragging = false;
+      this.manualLookTimer = this.RETURN_TO_FOLLOW_DELAY;
+    }
   };
 
   private handleContextMenu = (e: Event): void => {
@@ -169,21 +179,12 @@ export class CameraController {
 
   constructor(
     camera: THREE.PerspectiveCamera,
-    world: RAPIER.World,
+    scene: THREE.Scene,
     renderer: THREE.WebGLRenderer
   ) {
     this.camera = camera;
-    this.world = world;
+    this.scene = scene;
     this.canvas = renderer.domElement;
-
-    // Initialize ray for collision detection
-    this.ray = new RAPIER.Ray(
-      new RAPIER.Vector3(0, 0, 0),
-      new RAPIER.Vector3(0, 0, 1)
-    );
-
-    // Default collision groups - interact with everything
-    this.collisionGroups = 0xffffffff;
 
     // Store the camera's initial FOV as base
     this.baseFOV = camera.fov;
@@ -194,9 +195,6 @@ export class CameraController {
     this.setupMouseEvents();
   }
 
-  /**
-   * Setup mouse event listeners for right-click drag rotation
-   */
   private setupMouseEvents(): void {
     this.canvas.addEventListener('mousedown', this.handleMouseDown);
     this.canvas.addEventListener('mouseup', this.handleMouseUp);
@@ -205,41 +203,26 @@ export class CameraController {
     this.canvas.addEventListener('contextmenu', this.handleContextMenu);
   }
 
-  // Dead zone threshold for mouse input (in pixels)
-  // Prevents small accidental movements from causing camera drift
   private readonly MOUSE_DEAD_ZONE = 0.5;
 
   /**
    * Rotate camera by delta amounts
    */
   rotate(deltaX: number, deltaY: number): void {
-    // Apply dead zone to prevent drift from small accidental inputs
     if (Math.abs(deltaX) < this.MOUSE_DEAD_ZONE) deltaX = 0;
     if (Math.abs(deltaY) < this.MOUSE_DEAD_ZONE) deltaY = 0;
-
-    // Skip if both deltas are within dead zone
     if (deltaX === 0 && deltaY === 0) return;
 
     this.yaw += deltaX * this.config.mouseSensitivity;
     this.pitch += deltaY * this.config.mouseSensitivity;
-
-    // Clamp pitch
     this.pitch = Math.max(this.config.minPitch, Math.min(this.config.maxPitch, this.pitch));
   }
 
   /**
-   * Update camera from keyboard input
+   * Set the player mesh (excluded from wall fade raycasts)
    */
-  private updateFromInput(dt: number, input: InputManager): void {
-    const rotSpeed = this.config.rotationSpeed * dt;
-
-    if (input.lookLeft) this.yaw += rotSpeed;
-    if (input.lookRight) this.yaw -= rotSpeed;
-    if (input.lookUp) this.pitch -= rotSpeed * 0.5;
-    if (input.lookDown) this.pitch += rotSpeed * 0.5;
-
-    // Clamp pitch
-    this.pitch = Math.max(this.config.minPitch, Math.min(this.config.maxPitch, this.pitch));
+  setPlayerMesh(mesh: THREE.Object3D): void {
+    this.playerMesh = mesh;
   }
 
   /**
@@ -259,7 +242,6 @@ export class CameraController {
       this.targetDistance = foundZone.targetDistance;
       this.targetHeightOffset = foundZone.heightOffset;
     } else {
-      // Default outdoor values
       this.targetDistance = this.config.targetDistance;
       this.targetHeightOffset = this.config.heightOffset;
     }
@@ -267,10 +249,6 @@ export class CameraController {
 
   /**
    * Calculate ideal camera position based on yaw/pitch
-   * Uses pre-allocated vector to avoid per-frame allocations
-   * @param playerPos - Player position to orbit around
-   * @param distance - Distance from player
-   * @param pitchOverride - Optional pitch override (used for dialogue focus)
    */
   private getIdealPosition(playerPos: THREE.Vector3, distance: number, pitchOverride?: number): THREE.Vector3 {
     const pitch = pitchOverride ?? this.pitch;
@@ -282,58 +260,137 @@ export class CameraController {
   }
 
   /**
-   * Check for walls between camera and player using raycast
+   * Fade meshes between camera and player to transparent.
+   * Restores meshes that are no longer occluding.
    */
-  private checkWallCollision(playerPos: THREE.Vector3): number {
-    // Start ray from player, pointing toward ideal camera position
-    const idealPos = this.getIdealPosition(playerPos, this.targetDistance);
+  private updateWallFade(playerPos: THREE.Vector3): void {
+    this.rayDirCache.subVectors(this.camera.position, playerPos).normalize();
+    const distance = this.camera.position.distanceTo(playerPos);
 
-    // Direction from player to ideal camera position
-    this.rayDirection.subVectors(idealPos, playerPos).normalize();
+    this.raycaster.set(playerPos, this.rayDirCache);
+    this.raycaster.near = 0.5;
+    this.raycaster.far = distance - 0.5;
 
-    // Setup ray
-    this.ray.origin.x = playerPos.x;
-    this.ray.origin.y = playerPos.y + this.heightOffset * 0.5;
-    this.ray.origin.z = playerPos.z;
+    const intersections = this.raycaster.intersectObjects(this.scene.children, true);
 
-    this.ray.dir.x = this.rayDirection.x;
-    this.ray.dir.y = this.rayDirection.y;
-    this.ray.dir.z = this.rayDirection.z;
+    const shouldFade = new Set<THREE.Mesh>();
 
-    // Cast ray
-    const hit = this.world.castRay(
-      this.ray,
-      this.targetDistance,
-      false, // Don't include sensors
-      this.collisionGroups
-    );
+    for (const intersection of intersections) {
+      const obj = intersection.object;
+      if (!(obj instanceof THREE.Mesh)) continue;
 
-    if (hit) {
-      // Wall hit - camera should be closer
-      const hitDistance = hit.timeOfImpact;
-      // Pull camera in front of the wall with a small buffer
-      return Math.max(1.5, hitDistance * 0.85);
+      // Skip player mesh and its children
+      if (this.playerMesh && (obj === this.playerMesh || this.isChildOf(obj, this.playerMesh))) continue;
+
+      // Skip small objects (collectibles, particles)
+      if (obj.geometry.boundingSphere) {
+        if (obj.geometry.boundingSphere.radius < 0.3) continue;
+      }
+
+      shouldFade.add(obj);
+
+      if (!this.fadedMeshes.has(obj)) {
+        const mat = obj.material;
+        if (Array.isArray(mat)) continue; // Skip multi-material meshes
+
+        if (mat instanceof THREE.ShaderMaterial && mat.uniforms.uOpacity) {
+          this.fadedMeshes.set(obj, {
+            opacity: mat.uniforms.uOpacity.value,
+            transparent: mat.transparent,
+            isShader: true,
+          });
+          mat.transparent = true;
+          mat.uniforms.uOpacity.value = this.WALL_FADE_ALPHA;
+        } else if ('opacity' in mat) {
+          this.fadedMeshes.set(obj, {
+            opacity: (mat as THREE.MeshStandardMaterial).opacity,
+            transparent: mat.transparent,
+            isShader: false,
+          });
+          mat.transparent = true;
+          (mat as THREE.MeshStandardMaterial).opacity = this.WALL_FADE_ALPHA;
+        }
+      }
     }
 
-    // No obstruction - use target distance
-    return this.targetDistance;
+    // Restore meshes no longer between camera and player
+    for (const [mesh, original] of this.fadedMeshes) {
+      if (!shouldFade.has(mesh)) {
+        const mat = mesh.material;
+        if (!Array.isArray(mat)) {
+          if (original.isShader && mat instanceof THREE.ShaderMaterial && mat.uniforms.uOpacity) {
+            mat.uniforms.uOpacity.value = original.opacity;
+            mat.transparent = original.transparent;
+          } else if (!original.isShader && 'opacity' in mat) {
+            (mat as THREE.MeshStandardMaterial).opacity = original.opacity;
+            mat.transparent = original.transparent;
+          }
+        }
+        this.fadedMeshes.delete(mesh);
+      }
+    }
+  }
+
+  /**
+   * Check if obj is a descendant of parent
+   */
+  private isChildOf(obj: THREE.Object3D, parent: THREE.Object3D): boolean {
+    let current = obj.parent;
+    while (current) {
+      if (current === parent) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
+  /**
+   * Restore all faded meshes to original opacity
+   */
+  private restoreAllFadedMeshes(): void {
+    for (const [mesh, original] of this.fadedMeshes) {
+      const mat = mesh.material;
+      if (Array.isArray(mat)) continue;
+      if (original.isShader && mat instanceof THREE.ShaderMaterial && mat.uniforms.uOpacity) {
+        mat.uniforms.uOpacity.value = original.opacity;
+        mat.transparent = original.transparent;
+      } else if (!original.isShader && 'opacity' in mat) {
+        (mat as THREE.MeshStandardMaterial).opacity = original.opacity;
+        mat.transparent = original.transparent;
+      }
+    }
+    this.fadedMeshes.clear();
   }
 
   /**
    * Main update - call each frame
-   * @param dt - Delta time in seconds
-   * @param playerPos - Player world position
-   * @param input - Input manager for camera controls
-   * @param playerVelocity - Optional player velocity for look-ahead effect
    */
-  update(dt: number, playerPos: THREE.Vector3, input: InputManager, playerVelocity?: THREE.Vector3): void {
-    // Update from keyboard input
-    this.updateFromInput(dt, input);
+  update(dt: number, playerPos: THREE.Vector3, playerVelocity?: THREE.Vector3): void {
+    // Handle manual look return timer
+    if (this.manualLookTimer > 0) {
+      this.manualLookTimer -= dt;
+      if (this.manualLookTimer <= 0) {
+        this.manualLookActive = false;
+      }
+    }
+
+    // Auto-orbit to stay behind player when moving (disabled during right-click drag)
+    if (this.playerFacingYaw !== null && !this.isDragging) {
+      const behindYaw = this.playerFacingYaw - Math.PI;
+      let diff = behindYaw - this.yaw;
+      if (diff > Math.PI) diff -= Math.PI * 2;
+      if (diff < -Math.PI) diff += Math.PI * 2;
+
+      // Use gentler speed when returning from manual look
+      const speed = this.manualLookActive
+        ? this.RETURN_TO_FOLLOW_SPEED
+        : this.AUTO_FOLLOW_SPEED;
+      this.yaw += diff * Math.min(1, speed * dt);
+    }
 
     // Check for camera zones
     this.updateZone(playerPos);
 
-    // Update dialogue focus lerp (smooth transition in/out)
+    // Update dialogue focus lerp
     const targetFocusLerp = this.dialogueFocusEnabled ? 1 : 0;
     this.dialogueFocusLerp = THREE.MathUtils.lerp(
       this.dialogueFocusLerp,
@@ -348,25 +405,20 @@ export class CameraController {
       Math.min(1, this.SIZE_DISTANCE_LERP_SPEED * dt)
     );
 
-    // Check wall collision and adjust distance
-    let desiredDistance = this.checkWallCollision(playerPos) * this.sizeDistanceMultiplier;
+    // Calculate desired distance (no wall pull-in — walls fade instead)
+    let desiredDistance = this.targetDistance * this.sizeDistanceMultiplier;
 
-    // Apply dialogue focus distance reduction (subtle pull-in)
+    // Apply dialogue focus distance reduction
     if (this.dialogueFocusLerp > 0.001) {
       const focusMult = THREE.MathUtils.lerp(1, this.DIALOGUE_DISTANCE_MULT, this.dialogueFocusLerp);
       desiredDistance *= focusMult;
     }
 
-    // Smoothly interpolate current distance
-    // Quick pull-in when hitting walls, slower pull-out when clear
-    const lerpSpeed = desiredDistance < this.currentDistance
-      ? this.config.distanceLerp * 3  // Fast pull-in
-      : this.config.distanceLerp;      // Normal pull-out
-
+    // Smooth distance interpolation
     this.currentDistance = THREE.MathUtils.lerp(
       this.currentDistance,
       desiredDistance,
-      Math.min(1, lerpSpeed * dt)
+      Math.min(1, this.config.distanceLerp * dt)
     );
 
     // Smoothly interpolate height offset
@@ -381,18 +433,14 @@ export class CameraController {
       const horizontalSpeed = Math.sqrt(playerVelocity.x ** 2 + playerVelocity.z ** 2);
       const speedRatio = horizontalSpeed / this.MAX_PLAYER_SPEED;
 
-      // Only apply look-ahead above the threshold
       if (speedRatio > this.LOOK_AHEAD_SPEED_THRESHOLD) {
-        // Calculate look-ahead amount (scales from 0 at threshold to max at full speed)
         const lookAheadStrength = (speedRatio - this.LOOK_AHEAD_SPEED_THRESHOLD)
           / (1 - this.LOOK_AHEAD_SPEED_THRESHOLD);
         const lookAheadDist = lookAheadStrength * this.LOOK_AHEAD_MAX_DISTANCE;
 
-        // Get normalized velocity direction (horizontal only)
         const targetX = (playerVelocity.x / horizontalSpeed) * lookAheadDist;
         const targetZ = (playerVelocity.z / horizontalSpeed) * lookAheadDist;
 
-        // Smoothly lerp toward target look-ahead
         this.lookAheadOffset.x = THREE.MathUtils.lerp(
           this.lookAheadOffset.x, targetX, Math.min(1, this.LOOK_AHEAD_LERP_SPEED * dt)
         );
@@ -400,7 +448,6 @@ export class CameraController {
           this.lookAheadOffset.z, targetZ, Math.min(1, this.LOOK_AHEAD_LERP_SPEED * dt)
         );
       } else {
-        // Below threshold - smoothly return to zero
         this.lookAheadOffset.x = THREE.MathUtils.lerp(
           this.lookAheadOffset.x, 0, Math.min(1, this.LOOK_AHEAD_LERP_SPEED * dt)
         );
@@ -410,12 +457,12 @@ export class CameraController {
       }
     }
 
-    // Calculate dialogue-adjusted pitch (slightly lower angle to frame conversation)
+    // Dialogue-adjusted pitch
     const dialoguePitch = this.dialogueFocusLerp > 0.001
       ? this.pitch - (this.DIALOGUE_PITCH_REDUCTION * this.dialogueFocusLerp)
       : undefined;
 
-    // Calculate final camera position (uses pre-allocated vector)
+    // Calculate final camera position
     const camPos = this.getIdealPosition(playerPos, this.currentDistance, dialoguePitch);
 
     // Apply position with smoothing
@@ -423,11 +470,9 @@ export class CameraController {
 
     // Apply landing dip offset
     if (Math.abs(this.dipOffset) > 0.001 || Math.abs(this.dipVelocity) > 0.001) {
-      // Spring-back recovery
       this.dipVelocity += this.DIP_RECOVERY_SPEED * dt;
       this.dipOffset += this.dipVelocity * dt;
 
-      // Clamp when recovered
       if (this.dipOffset > 0) {
         this.dipOffset = 0;
         this.dipVelocity = 0;
@@ -438,42 +483,35 @@ export class CameraController {
 
     // Apply screen shake if active
     if (this.shakeIntensity > 0.001) {
-      // Random offset based on intensity
       this.shakeOffset.set(
         (Math.random() - 0.5) * this.shakeIntensity * 0.8,
         (Math.random() - 0.5) * this.shakeIntensity * 0.5,
         (Math.random() - 0.5) * this.shakeIntensity * 0.8
       );
       this.camera.position.add(this.shakeOffset);
-
-      // Decay shake intensity
       this.shakeIntensity *= this.SHAKE_DECAY;
     }
 
     // Update FOV kick effect
     if (this.currentFOV !== this.baseFOV || this.targetFOV !== this.baseFOV) {
-      // First, lerp quickly toward target FOV (the kick)
       if (Math.abs(this.currentFOV - this.targetFOV) > 0.1) {
         this.currentFOV = THREE.MathUtils.lerp(this.currentFOV, this.targetFOV, 0.3);
       } else {
         this.currentFOV = this.targetFOV;
       }
 
-      // Then, after kick timer, return to base
       this.fovKickTimer += dt;
       if (this.fovKickTimer >= this.fovKickDuration * 0.3) {
-        // Start returning to base FOV
         this.targetFOV = this.baseFOV;
       }
 
-      // Apply FOV to camera
       if (Math.abs(this.camera.fov - this.currentFOV) > 0.01) {
         this.camera.fov = this.currentFOV;
         this.camera.updateProjectionMatrix();
       }
     }
 
-    // Look at player (slightly above center) with look-ahead offset - uses pre-allocated vector
+    // Look at player with look-ahead offset
     this.lookAtCache.set(
       playerPos.x + this.lookAheadOffset.x,
       playerPos.y + this.heightOffset * 0.5,
@@ -481,27 +519,32 @@ export class CameraController {
     );
     this.camera.lookAt(this.lookAtCache);
 
-    // Apply underwater wobble effect after lookAt (so roll is applied correctly)
+    // Apply underwater wobble effect after lookAt
     if (this.underwaterWobbleEnabled) {
       this.wobbleTime += dt;
 
-      // Sinusoidal roll oscillation (gentle tilt left/right)
       const rollAngle = Math.sin(this.wobbleTime * Math.PI * 2 * this.WOBBLE_ROLL_FREQUENCY)
                         * this.WOBBLE_ROLL_AMPLITUDE;
-
-      // Sinusoidal position sway (gentle drift left/right and up/down)
       const swayX = Math.sin(this.wobbleTime * Math.PI * 2 * this.WOBBLE_SWAY_FREQUENCY)
                     * this.WOBBLE_SWAY_AMPLITUDE;
       const swayY = Math.cos(this.wobbleTime * Math.PI * 2 * this.WOBBLE_SWAY_FREQUENCY * 0.7)
                     * this.WOBBLE_SWAY_AMPLITUDE * 0.5;
 
-      // Apply roll to camera (rotate around the forward axis)
       this.camera.rotateZ(rollAngle);
-
-      // Apply position sway
       this.camera.position.x += swayX;
       this.camera.position.y += swayY;
     }
+
+    // Wall fade-through (after camera position is finalized)
+    this.updateWallFade(playerPos);
+  }
+
+  /**
+   * Set the player's facing angle so the camera auto-orbits behind them.
+   * Pass null when player is stationary to let the camera hold position.
+   */
+  setPlayerFacing(angle: number | null): void {
+    this.playerFacingYaw = angle;
   }
 
   /**
@@ -516,8 +559,9 @@ export class CameraController {
    */
   reset(): void {
     this.yaw = 0;
-    this.pitch = 0.3;
+    this.pitch = 0.35;
     this.currentDistance = this.config.targetDistance;
+    this.restoreAllFadedMeshes();
   }
 
   /**
@@ -536,8 +580,6 @@ export class CameraController {
 
   /**
    * Set size-based distance multiplier (called when player size changes)
-   * Small: 0.6x (closer view), Normal: 1.0x, Large: 1.4x (wider view)
-   * Transition is smooth over ~0.5 seconds
    */
   setSizeDistanceMultiplier(multiplier: number): void {
     this.targetSizeDistanceMultiplier = multiplier;
@@ -566,17 +608,13 @@ export class CameraController {
 
   /**
    * Trigger screen shake effect
-   * @param intensity - Shake strength (0.1 = subtle, 0.5 = strong, 1.0 = intense)
    */
   shake(intensity: number): void {
-    // Add to existing shake if already shaking, capped at max
     this.shakeIntensity = Math.min(1.0, this.shakeIntensity + intensity);
   }
 
   /**
    * Kick the FOV for speed/impact effects
-   * @param targetFOV - FOV to kick to (e.g., 68 for speed boost)
-   * @param duration - Time to return to base FOV (seconds)
    */
   kickFOV(targetFOV: number, duration: number): void {
     this.targetFOV = targetFOV;
@@ -586,13 +624,10 @@ export class CameraController {
 
   /**
    * Enable/disable underwater wobble effect
-   * Adds gentle sinusoidal camera roll and position sway for underwater feel
-   * @param enabled - Whether to enable the wobble effect
    */
   setUnderwaterWobble(enabled: boolean): void {
     if (this.underwaterWobbleEnabled !== enabled) {
       this.underwaterWobbleEnabled = enabled;
-      // Reset wobble time when enabling to start from a neutral position
       if (enabled) {
         this.wobbleTime = 0;
       }
@@ -601,9 +636,6 @@ export class CameraController {
 
   /**
    * Enable/disable dialogue focus mode
-   * Subtly pulls camera closer and lowers angle to frame NPC conversations
-   * Transition is smooth - call this when dialogue starts/ends
-   * @param enabled - Whether to enable dialogue focus
    */
   setDialogueFocus(enabled: boolean): void {
     this.dialogueFocusEnabled = enabled;
@@ -611,21 +643,18 @@ export class CameraController {
 
   /**
    * Trigger a landing dip effect
-   * Briefly lowers the camera to emphasize landing impact
-   * @param intensity - Dip strength (0.3 = light, 0.6 = hard landing)
    */
   dip(intensity: number): void {
-    // Dip down by intensity * 0.3 units
     const dipAmount = -intensity * 0.3;
     this.dipOffset = dipAmount;
-    this.dipVelocity = 0;  // Start from rest, spring back naturally
+    this.dipVelocity = 0;
   }
 
   /**
    * Dispose of the camera controller and remove event listeners
-   * Call this when destroying the controller to prevent memory leaks
    */
   dispose(): void {
+    this.restoreAllFadedMeshes();
     this.canvas.removeEventListener('mousedown', this.handleMouseDown);
     this.canvas.removeEventListener('mouseup', this.handleMouseUp);
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);

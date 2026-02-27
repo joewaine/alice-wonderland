@@ -889,7 +889,10 @@ export class Game {
     }
 
     // Camera controller
-    this.cameraController = new CameraController(this.camera, this.world, this.renderer);
+    this.cameraController = new CameraController(this.camera, this.scene, this.renderer);
+    if (this.playerMesh) {
+      this.cameraController.setPlayerMesh(this.playerMesh);
+    }
     this.camera.position.set(0, 5, 10);
   }
 
@@ -1322,7 +1325,7 @@ export class Game {
         this.cameraController.setPlayerFacing(hSpeed > 0.5 ? this.playerFacingAngle : null);
       }
 
-      this.cameraController.update(dt, this.playerPosCache, this.input, this.playerVelocityCache);
+      this.cameraController.update(dt, this.playerPosCache, this.playerVelocityCache);
 
       // Enable underwater wobble when player is below water surface
       const isUnderwater = this.playerController?.isUnderwater() ?? false;
