@@ -19,6 +19,9 @@ dist-ssr
 inspo/
 BotW 4k jpg.7z
 
+# Draco decoder files (copied from node_modules/three)
+public/draco/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
