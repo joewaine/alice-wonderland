@@ -15,6 +15,10 @@ dist
 dist-ssr
 *.local
 
+# Inspiration images and large archives
+inspo/
+BotW 4k jpg.7z
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
