@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import type { WonderStar as WonderStarData } from '../data/LevelData';
 import { createCelShaderMaterial } from '../shaders/CelShaderMaterial';
+import { getChallengeColor } from '../constants/colors';
 
 export interface WonderStarObject {
   data: WonderStarData;
@@ -357,15 +358,8 @@ export class WonderStarManager {
   /**
    * Get color for challenge type
    */
-  private getChallengeTypeColor(type: string): number {
-    switch (type) {
-      case 'exploration': return 0x00ff00;  // Green
-      case 'race': return 0xff0000;         // Red
-      case 'puzzle': return 0x0088ff;       // Blue
-      case 'collection': return 0xff00ff;   // Magenta
-      case 'skill': return 0xffaa00;        // Orange
-      default: return 0xffffff;
-    }
+  private getChallengeTypeColor(type: string): string {
+    return getChallengeColor(type);
   }
 
   /**

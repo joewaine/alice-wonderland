@@ -712,7 +712,7 @@ export class SceneManager {
         (platform.mesh.material as THREE.Material).dispose();
 
         // Remove physics body
-        this.levelBuilder['world'].removeRigidBody(platform.body);
+        this.levelBuilder.removeRigidBody(platform.body);
 
         console.log('Platform broken!');
         return true;
