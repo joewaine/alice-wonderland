@@ -600,8 +600,8 @@ export class Game {
    * Warm, dramatic late-afternoon lighting with BotW cel-shaded style
    */
   private setupLighting(): void {
-    // Warm ambient - golden hour glow
-    const ambient = new THREE.AmbientLight(0xFFF8E0, 0.35);
+    // Warm ambient - golden hour glow (slightly brighter to compensate for no bloom)
+    const ambient = new THREE.AmbientLight(0xFFF8E0, 0.4);
     this.scene.add(ambient);
 
     // Golden sun at low angle for dramatic shadows
