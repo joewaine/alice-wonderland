@@ -391,6 +391,99 @@
         "My children are hiding in the rose bushes."
       ],
       "appears_after_quest": "quest_find_flamingos"
+    },
+    {
+      "name": "The Eaglet",
+      "model_id": "eaglet",
+      "position": { "x": 10, "y": 1, "z": -8 },
+      "dialogue": [
+        "Speak English! I don't know the meaning of half those long words!",
+        "We had a Caucus Race earlier. Everyone won!",
+        "The Dodo said so, and he should know.",
+        "I'm still drying off from that dreadful pool of tears..."
+      ]
+    },
+    {
+      "name": "The Duck",
+      "model_id": "duck",
+      "position": { "x": -10, "y": 1, "z": 8 },
+      "dialogue": [
+        "*quack* I know what 'it' means well enough when I find a thing.",
+        "It's generally a frog or a worm, you know.",
+        "The question is, what did the archbishop find?",
+        "I rather enjoyed the Caucus Race, myself."
+      ]
+    },
+    {
+      "name": "Pat",
+      "model_id": "pat",
+      "position": { "x": -45, "y": 1, "z": -3 },
+      "dialogue": [
+        "Sure, I'm not going down THERE, no sir!",
+        "The master sent me to help with the tea party.",
+        "I'd rather serve tea than climb down chimneys!",
+        "Bill went down the chimney instead. Poor Bill..."
+      ],
+      "appears_after_quest": "quest_find_paint"
+    },
+    {
+      "name": "The Puppy",
+      "model_id": "puppy",
+      "position": { "x": 40, "y": 1, "z": -5 },
+      "dialogue": [
+        "*bark bark bark!*",
+        "*wags tail excitedly*",
+        "*stretches out a paw toward you*",
+        "*chases its own tail in circles*"
+      ],
+      "appears_after_quest": "quest_find_flamingos"
+    },
+    {
+      "name": "The Caterpillar",
+      "model_id": "caterpillar",
+      "position": { "x": -6, "y": 9, "z": -42 },
+      "dialogue": [
+        "Who... are... YOU?",
+        "Keep your temper.",
+        "One side will make you grow taller, the other side will make you shorter.",
+        "One side of WHAT? The MUSHROOM, of course!"
+      ],
+      "appears_after_quest": "quest_gazebo_paint"
+    },
+    {
+      "name": "The Duchess",
+      "model_id": "duchess",
+      "position": { "x": 8, "y": 1, "z": 3 },
+      "dialogue": [
+        "If everybody minded their own business, the world would go round a deal faster!",
+        "Be what you would seem to be!",
+        "Tut, tut, child! Everything's got a moral, if only you can find it.",
+        "The Queen invited me to the croquet match. How delightful!"
+      ]
+    },
+    {
+      "name": "The Gryphon",
+      "model_id": "gryphon",
+      "position": { "x": 50, "y": 1, "z": -5 },
+      "dialogue": [
+        "It's all his fancy, THAT. He hasn't got no sorrow, you know.",
+        "Come on! They're dreadfully fond of beheading people here!",
+        "The Mock Turtle is always weeping. Don't mind him.",
+        "We used to go to school in the sea, you know. Lessons every day!"
+      ],
+      "appears_after_quest": "quest_find_flamingos"
+    },
+    {
+      "name": "The Mock Turtle",
+      "model_id": "mock_turtle",
+      "position": { "x": 53, "y": 1, "z": 8 },
+      "dialogue": [
+        "*sobs deeply* Once... I was a real Turtle...",
+        "We went to school in the sea. The master was an old Turtle — we called him Tortoise.",
+        "Reeling and Writhing, of course, to begin with. And then the different branches of Arithmetic...",
+        "Will you, won't you, will you, won't you, join the dance?"
+      ],
+      "appears_after_quest": "quest_find_flamingos"
     }
   ],
   "spawn_point": { "x": 0, "y": 2, "z": 10 },
@@ -559,63 +652,6 @@
         "unlock_area": "croquet_lawn",
         "spawn_npc": "Flamingo Fred"
       }
-    }
-  ],
-  "wonder_stars": [
-    {
-      "id": "qg_star_1",
-      "name": "Garden Explorer",
-      "position": { "x": 0, "y": 3, "z": 0 },
-      "challenge_type": "exploration",
-      "requirements": {
-        "reach_position": { "x": 0, "y": 9, "z": -40 },
-        "reach_radius": 5
-      },
-      "hint": "Reach the gazebo at the top of the garden",
-      "spawn_near": { "x": 0, "y": 2, "z": 10 }
-    },
-    {
-      "id": "qg_star_2",
-      "name": "Tea Party Guest",
-      "position": { "x": -40, "y": 3, "z": 3 },
-      "challenge_type": "exploration",
-      "requirements": {
-        "reach_position": { "x": -40, "y": 1, "z": 0 },
-        "reach_radius": 5
-      },
-      "hint": "Join the Mad Tea Party",
-      "spawn_near": { "x": 0, "y": 2, "z": 10 }
-    },
-    {
-      "id": "qg_star_3",
-      "name": "Croquet Champion",
-      "position": { "x": 45, "y": 3, "z": 0 },
-      "challenge_type": "skill",
-      "requirements": {
-        "perform_ground_pounds": 3
-      },
-      "hint": "Perform 3 ground pounds on the croquet lawn",
-      "spawn_near": { "x": 40, "y": 2, "z": 0 }
-    },
-    {
-      "id": "qg_star_4",
-      "name": "Card Collector",
-      "position": { "x": -8, "y": 3, "z": -8 },
-      "challenge_type": "collection",
-      "requirements": {
-        "collect_cards": 4
-      },
-      "hint": "Collect all 4 Hearts cards hidden in the garden"
-    },
-    {
-      "id": "qg_star_5",
-      "name": "Stargazer",
-      "position": { "x": 10, "y": 3, "z": 10 },
-      "challenge_type": "collection",
-      "requirements": {
-        "collect_stars": 5
-      },
-      "hint": "Find all 5 stars scattered throughout the garden"
     }
   ]
 }

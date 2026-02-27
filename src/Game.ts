@@ -20,7 +20,6 @@ import { NPCController } from './npcs/NPCController';
 import { ParticleManager } from './effects/ParticleManager';
 import { MainMenu } from './ui/MainMenu';
 import { LoadingScreen } from './ui/LoadingScreen';
-import { StarSelect } from './ui/StarSelect';
 import { audioManager } from './audio/AudioManager';
 import { musicManager } from './audio/MusicManager';
 import { assetLoader } from './engine/AssetLoader';
@@ -59,6 +58,7 @@ export class Game {
   // Player
   private playerBody: RAPIER.RigidBody | null = null;
   private playerMesh: THREE.Object3D | null = null;
+  private playerFacingAngle: number = 0; // Current facing direction (radians)
   private sizeManager: SizeManager | null = null;
   private playerController: PlayerController | null = null;
 
@@ -77,7 +77,6 @@ export class Game {
   // Menu system
   private mainMenu: MainMenu;
   private loadingScreen: LoadingScreen;
-  private starSelect: StarSelect;
 
   // Current player config (used by SizeManager callback)
   private baseSpeed: number = 14;
@@ -227,9 +226,6 @@ export class Game {
     // Loading screen
     this.loadingScreen = new LoadingScreen();
 
-    // Star select UI
-    this.starSelect = new StarSelect();
-
     // Quest notification UI
     this.questNotification = new QuestNotification();
 
@@ -294,13 +290,11 @@ export class Game {
 
     // Handle collectible particle effects
     this.sceneManager.onCollectiblePickup = (type, position) => {
-      const color = type === 'key' ? 0xffd700 : type === 'star' ? 0xffff00 : 0xff6b6b;
+      const color = type === 'key' ? 0xffd700 : 0xff6b6b;
       this.particleManager.createCollectBurst(position, color);
 
-      // Create trail particles arcing toward UI counter (stars and cards only)
-      if (type === 'star') {
-        this.particleManager.createCollectTrail(position, 0xffd700);  // Gold
-      } else if (type === 'card') {
+      // Create trail particles arcing toward UI counter (cards only)
+      if (type === 'card') {
         this.particleManager.createCollectTrail(position, 0xff6b6b);  // Red
       }
 
@@ -437,12 +431,6 @@ export class Game {
       // Add size pickups for the level
       this.setupSizePickups();
 
-      // Show star select UI if there are wonder stars
-      const wonderStars = this.sceneManager.getWonderStars();
-      if (wonderStars.length > 0) {
-        this.showStarSelect();
-      }
-
       // Sync cel-shader lighting after level loads
       this.syncCelShaderLighting();
 
@@ -570,43 +558,6 @@ export class Game {
       this.questManager.cleanup();
       this.questManager = null;
     }
-  }
-
-  /**
-   * Show star select UI
-   */
-  private showStarSelect(): void {
-    if (!this.sceneManager) return;
-
-    const stars = this.sceneManager.getWonderStars();
-    const collectedIds = this.sceneManager.getCollectedStarIds();
-
-    // Pause game while selecting
-    this.isRunning = false;
-
-    this.starSelect.show(stars, collectedIds, {
-      onStarSelected: (starId) => {
-        this.sceneManager?.setActiveWonderStar(starId);
-
-        // Spawn at star-specific location if specified
-        const spawnPoint = this.sceneManager?.getActiveStarSpawn();
-        if (spawnPoint) {
-          this.spawnPlayerAt(spawnPoint);
-        }
-
-        // Resume game
-        this.isRunning = true;
-        this.lastTime = performance.now();
-        this.gameLoop();
-      },
-      onClose: () => {
-        // No star selected, just play normally
-        this.sceneManager?.setActiveWonderStar(null);
-        this.isRunning = true;
-        this.lastTime = performance.now();
-        this.gameLoop();
-      }
-    });
   }
 
   /**
@@ -898,8 +849,6 @@ export class Game {
         // Strong squash and screen shake
         this.targetSquash.set(1.5, 0.5, 1.5);
         audioManager.playLand(); // Use land sound for now
-        // Track for wonder star challenges
-        this.sceneManager?.trackGroundPound();
       },
       onGroundPoundLand: (position) => {
         // Screen shake for impact
@@ -920,8 +869,6 @@ export class Game {
             this.cameraController?.shake(0.3);  // Additional shake for breaking
             this.particleManager.createLandingDust(position, 2.0);
             audioManager.playLand();
-            // Track for wonder star challenges
-            this.sceneManager.trackPlatformBreak();
           }
         }
       },
@@ -949,8 +896,6 @@ export class Game {
           const momentum = this.playerController.getMomentum();
           this.particleManager.createLongJumpTrail(this.tempPosCache, momentum);
         }
-        // Track for wonder star challenges
-        this.sceneManager?.trackLongJump();
       },
       onFootstep: (surface) => {
         audioManager.playFootstep(surface);
@@ -1431,6 +1376,22 @@ export class Game {
     if (this.playerMesh) {
       this.playerMesh.position.set(pos.x, pos.y, pos.z);
 
+      // Rotate Alice to face movement direction
+      if (this.playerController) {
+        const momentum = this.playerController.getMomentum();
+        const hSpeed = momentum.x * momentum.x + momentum.z * momentum.z;
+        if (hSpeed > 0.5) {
+          // Target angle from momentum direction
+          const targetAngle = Math.atan2(momentum.x, momentum.z);
+          // Smooth rotation lerp (handle wrapping around PI/-PI)
+          let diff = targetAngle - this.playerFacingAngle;
+          if (diff > Math.PI) diff -= Math.PI * 2;
+          if (diff < -Math.PI) diff += Math.PI * 2;
+          this.playerFacingAngle += diff * Math.min(1, 12 * dt);
+        }
+        this.playerMesh.rotation.y = this.playerFacingAngle;
+      }
+
       // Apply squash/stretch (combine with size scale)
       const sizeScale = this.sizeManager?.config.scale || 1;
       this.playerMesh.scale.set(
@@ -1448,6 +1409,10 @@ export class Game {
       if (this.playerController) {
         const momentum = this.playerController.getMomentum();
         this.playerVelocityCache.copy(momentum);
+
+        // Tell camera to orbit behind Alice when moving
+        const hSpeed = momentum.x * momentum.x + momentum.z * momentum.z;
+        this.cameraController.setPlayerFacing(hSpeed > 0.5 ? this.playerFacingAngle : null);
       }
 
       this.cameraController.update(dt, this.playerPosCache, this.input, this.playerVelocityCache);
