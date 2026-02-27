@@ -21,14 +21,14 @@ interface ParticleSystem {
   activeCount?: number;  // Actual particle count for pooled systems (avoids iterating full buffer)
 }
 
-// Max particles any single burst effect uses (triple jump spiral = 35)
-const POOL_MAX_PARTICLES = 35;
+// Max particles any single burst effect uses
+const POOL_MAX_PARTICLES = 20;
 const POOL_INITIAL_SIZE = 20;
 
 export class ParticleManager {
   private scene: THREE.Scene;
   private systems: ParticleSystem[] = [];
-  private static readonly MAX_SYSTEMS = 80;
+  private static readonly MAX_SYSTEMS = 40;
 
   // Object pool for burst particle systems
   private pool: ParticleSystem[] = [];
@@ -171,7 +171,7 @@ export class ParticleManager {
   /**
    * Create ambient floating particles (spores, sparkles, dust)
    */
-  createAmbientParticles(color: number = 0xffffff, count: number = 200): void {
+  createAmbientParticles(color: number = 0xffffff, count: number = 70): void {
     // Clean up existing
     if (this.ambientParticles) {
       this.scene.remove(this.ambientParticles);
@@ -634,331 +634,6 @@ export class ParticleManager {
       maxLife: 0.5,  // Short lifetime (0.4-0.6s range)
       isLooping: false,
       elapsed: 0
-    });
-  }
-
-  /**
-   * Triple jump spiral burst - gold/rainbow upward spiral
-   * Bigger and more dramatic than double jump to reward the chain
-   */
-  createTripleJumpSpiral(position: THREE.Vector3): void {
-    const count = 35;
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Gold/rainbow palette for the highest jump
-    const spiralColors = [
-      new THREE.Color(0xFFD700),  // Gold
-      new THREE.Color(0xFFA500),  // Orange
-      new THREE.Color(0xFFFF00),  // Yellow
-      new THREE.Color(0xFFFFFF),  // White
-    ];
-
-    for (let i = 0; i < count; i++) {
-      positions[i * 3] = position.x;
-      positions[i * 3 + 1] = position.y;
-      positions[i * 3 + 2] = position.z;
-
-      const color = spiralColors[Math.floor(Math.random() * spiralColors.length)];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Tight spiral pattern - two full rotations upward
-      const t = i / count;
-      const angle = t * Math.PI * 4; // Two full spirals
-      const radius = 0.8 + t * 1.5;  // Expanding outward
-      const upSpeed = 4 + t * 6;     // Accelerating upward
-
-      velocities[i * 3] = Math.cos(angle) * radius;
-      velocities[i * 3 + 1] = upSpeed;
-      velocities[i * 3 + 2] = Math.sin(angle) * radius;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.25,
-      transparent: true,
-      opacity: 1,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.7,
-      isLooping: false,
-      elapsed: 0
-    });
-  }
-
-  /**
-   * Long jump motion trail - line of particles behind player
-   * Cyan/white particles that fade quickly for speed effect
-   */
-  createLongJumpTrail(position: THREE.Vector3, direction: THREE.Vector3): void {
-    const count = 10;  // 8-12 particles in a line
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Trail color palette (cyan to white, matching double-jump)
-    const trailColors = [
-      new THREE.Color(0x88CCFF),  // Light cyan
-      new THREE.Color(0xAADDFF),  // Pale cyan
-    ];
-
-    // Normalize direction for positioning
-    const dir = direction.clone().normalize();
-
-    for (let i = 0; i < count; i++) {
-      // Position particles in a line behind the player
-      // Offset increases for particles further back in the trail
-      const offset = (i / count) * 1.5;  // Spread over 1.5 units behind player
-      positions[i * 3] = position.x - dir.x * offset + (Math.random() - 0.5) * 0.2;
-      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.3;
-      positions[i * 3 + 2] = position.z - dir.z * offset + (Math.random() - 0.5) * 0.2;
-
-      // Assign alternating cyan colors
-      const color = trailColors[i % 2];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Slight outward drift from the trail line
-      const perpX = -dir.z;  // Perpendicular to movement direction
-      const perpZ = dir.x;
-      const drift = (Math.random() - 0.5) * 2;
-
-      velocities[i * 3] = perpX * drift;
-      velocities[i * 3 + 1] = Math.random() * 0.5;  // Slight upward float
-      velocities[i * 3 + 2] = perpZ * drift;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.15,
-      transparent: true,
-      opacity: 1,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.25,  // Short lifetime (0.2-0.3s range)
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Trail particles float, don't fall
-    });
-  }
-
-  /**
-   * Wall slide dust/sparks - small particles when sliding along walls
-   * Stone/dust colors that drift slightly away from wall
-   */
-  createWallSlideParticles(position: THREE.Vector3, wallNormal: THREE.Vector3): void {
-    const count = 4;
-    const system = this.acquireSystem(count, {
-      size: 0.08,
-      blending: THREE.NormalBlending,
-      vertexColors: true,
-      maxLife: 0.2
-    });
-    (system.points.material as THREE.PointsMaterial).opacity = 0.6;
-
-    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
-    const colors = (system.points.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
-
-    const dustColors = [new THREE.Color(0xD2B48C), new THREE.Color(0xC4A882)];
-
-    for (let i = 0; i < count; i++) {
-      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.2;
-      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.4;
-      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.2;
-
-      const color = dustColors[i % 2];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      const driftSpeed = Math.random() * 1.5 + 0.5;
-      system.velocities[i * 3] = wallNormal.x * driftSpeed + (Math.random() - 0.5) * 0.5;
-      system.velocities[i * 3 + 1] = Math.random() * 0.3 - 0.1;
-      system.velocities[i * 3 + 2] = wallNormal.z * driftSpeed + (Math.random() - 0.5) * 0.5;
-
-      system.lifetimes[i] = 1.0;
-    }
-
-    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    (system.points.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
-    this.systems.push(system);
-  }
-
-  /**
-   * Wall jump spark burst - impactful visual feedback for wall kicks
-   * White/yellow sparks that shoot away from wall
-   */
-  createWallJumpSpark(position: THREE.Vector3, wallNormal: THREE.Vector3): void {
-    const count = 12;
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Spark color palette (white to yellow/gold)
-    const sparkColors = [
-      new THREE.Color(0xFFFFFF),  // White
-      new THREE.Color(0xFFFACD),  // Lemon chiffon
-      new THREE.Color(0xFFD700),  // Gold
-    ];
-
-    for (let i = 0; i < count; i++) {
-      // Start at wall contact point
-      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.2;
-      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.3;
-      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.2;
-
-      // Assign random spark color
-      const color = sparkColors[Math.floor(Math.random() * sparkColors.length)];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Particles shoot away from wall with spread
-      const baseSpeed = Math.random() * 4 + 3;  // Fast-moving sparks
-      const spreadAngle = (Math.random() - 0.5) * Math.PI * 0.5;  // Spread in a cone
-
-      // Calculate spread direction perpendicular to wall normal
-      const perpX = -wallNormal.z;
-      const perpZ = wallNormal.x;
-
-      velocities[i * 3] = wallNormal.x * baseSpeed + perpX * Math.sin(spreadAngle) * 2;
-      velocities[i * 3 + 1] = (Math.random() - 0.3) * 3;  // Slight upward bias
-      velocities[i * 3 + 2] = wallNormal.z * baseSpeed + perpZ * Math.sin(spreadAngle) * 2;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.1,
-      transparent: true,
-      opacity: 1,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.4,  // 0.4 second duration
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Sparks float, don't fall
-    });
-  }
-
-  /**
-   * Ground pound shockwave - expanding ring of particles
-   */
-  createGroundPoundShockwave(position: THREE.Vector3): void {
-    const count = 36;  // Ring of particles
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Gold/orange color palette
-    const shockwaveColors = [
-      new THREE.Color(0xFFAA33),  // Gold
-      new THREE.Color(0xFFCC66),  // Light gold
-    ];
-
-    for (let i = 0; i < count; i++) {
-      // Start at impact point (at ground level)
-      positions[i * 3] = position.x;
-      positions[i * 3 + 1] = position.y - 0.5;  // Ground level
-      positions[i * 3 + 2] = position.z;
-
-      // Assign alternating gold colors
-      const color = shockwaveColors[i % 2];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Expand outward in a ring (no Y velocity)
-      const angle = (i / count) * Math.PI * 2;
-      const speed = 8 + Math.random() * 2;  // Fast outward expansion
-
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = 0;  // No vertical movement
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.35,
-      transparent: true,
-      opacity: 1,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.35,  // Short lifetime (0.3-0.4s)
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Shockwave stays at ground level
     });
   }
 
@@ -1670,72 +1345,6 @@ export class ParticleManager {
   }
 
   /**
-   * Ledge grab shimmer - soft golden sparkles at grab point
-   * Delicate, floating particles for visual feedback
-   */
-  createLedgeGrabShimmer(position: THREE.Vector3): void {
-    const count = 8;
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Soft golden sparkle palette
-    const shimmerColors = [
-      new THREE.Color(0xFFD700),  // Gold
-      new THREE.Color(0xFFFACD),  // Lemon chiffon
-      new THREE.Color(0xFFF8DC),  // Cornsilk
-    ];
-
-    for (let i = 0; i < count; i++) {
-      // Start at grab point with slight random offset
-      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
-      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.2;
-      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
-
-      // Assign random shimmer color
-      const color = shimmerColors[Math.floor(Math.random() * shimmerColors.length)];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Gentle upward float with slight spread
-      velocities[i * 3] = (Math.random() - 0.5) * 0.3;
-      velocities[i * 3 + 1] = Math.random() * 0.8 + 0.3;  // Upward bias
-      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.08,
-      transparent: true,
-      opacity: 0.8,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.5,  // 0.5 second duration
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Shimmer floats gently upward
-    });
-  }
-
-  /**
    * Bounce pad effect - ring of particles expanding outward at ground level
    * Cyan/white colors for spring/bouncy feel
    */
@@ -2161,7 +1770,7 @@ export class ParticleManager {
    * Create rose petal emitter for Queen's Garden
    * Pink/red petals that drift slowly with wind simulation
    */
-  createRosePetals(bounds: THREE.Box3, count: number = 80): void {
+  createRosePetals(bounds: THREE.Box3, count: number = 35): void {
     // Clean up existing
     if (this.rosePetals) {
       this.scene.remove(this.rosePetals.points);

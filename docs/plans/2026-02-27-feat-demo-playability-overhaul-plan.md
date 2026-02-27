@@ -201,23 +201,23 @@ Remove/reduce systems that cost GPU/CPU without proportional visual value.
 
 **Files to modify:**
 
-- [ ] `src/Game.ts` — **Remove bloom post-processing:**
+- [x] `src/Game.ts` — **Remove bloom post-processing:**
   - Remove `UnrealBloomPass` import and creation (~lines 194-208)
   - Replace `EffectComposer` render with direct `renderer.render(scene, camera)` — or keep composer with just RenderPass if other passes may be added later
   - This saves a full-screen GPU pass every frame
 
-- [ ] `src/effects/ParticleManager.ts` — **Reduce particle counts:**
+- [x] `src/effects/ParticleManager.ts` — **Reduce particle counts:**
   - Ambient particles: 200 → 60-80 (still atmospheric, less GPU)
   - Rose petals: 80 → 30-40
   - Reduce `POOL_MAX_PARTICLES` from 35 to 20
   - Reduce `MAX_SYSTEMS` from 80 to 40
 
-- [ ] `src/effects/FoliageAnimator.ts` — **Simplify wind:**
+- [x] `src/effects/FoliageAnimator.ts` — **Simplify wind:**
   - Option A: Remove entirely (simplest, small visual loss)
   - Option B: Update every 2nd or 3rd frame instead of every frame (halves cost, barely visible difference)
   - Recommend Option B — skip frames with `this.frameCount++ % 2 === 0` guard in `update()`
 
-- [ ] `src/engine/SceneManager.ts` — **Remove duplicate wind system:**
+- [x] `src/engine/SceneManager.ts` — **Remove duplicate wind system:**
   - Delete `collectFoliageMeshes()` (~line 414) and `updateWindAnimation()` (~line 447)
   - Remove wind update call from `SceneManager.update()` (~line 535)
   - FoliageAnimator in Game.ts is the newer, cleaner version — no need for both

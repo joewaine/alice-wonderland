@@ -31,9 +31,6 @@ export class SceneManager {
   private expandedBoundsCache: THREE.Box3 = new THREE.Box3();
   private platformCenterCache: THREE.Vector3 = new THREE.Vector3();
 
-  // Wind animation state
-  private windTime: number = 0;
-  private foliageMeshes: THREE.Object3D[] = [];
 
   // Breakable platform stress tracking (maps platform index to stress time)
   private breakablePlatformStress: Map<number, number> = new Map();
@@ -115,9 +112,6 @@ export class SceneManager {
 
     // Load skybox
     await this.loadSkybox();
-
-    // Collect foliage meshes for wind animation
-    this.collectFoliageMeshes();
 
     // Show welcome title
     this.hud.showChapterTitle(
@@ -413,60 +407,6 @@ export class SceneManager {
   }
 
   /**
-   * Collect foliage meshes for wind animation
-   */
-  private collectFoliageMeshes(): void {
-    this.foliageMeshes = [];
-    if (!this.currentLevel) return;
-
-    // Traverse all level objects to find foliage (hedges, roses, topiaries)
-    this.scene.traverse((object) => {
-      // Look for objects that are likely foliage based on their material colors
-      if (object instanceof THREE.Mesh) {
-        const material = object.material as THREE.ShaderMaterial;
-        if (material.uniforms?.color) {
-          const color = material.uniforms.color.value as THREE.Color;
-          // Green colors (hedges, topiaries) - check if predominantly green
-          if (color.g > 0.3 && color.g > color.r && color.g > color.b * 0.8) {
-            this.foliageMeshes.push(object);
-          }
-        }
-      }
-      // Also include Groups that contain foliage (rose bushes, topiaries)
-      if (object.name && (
-        object.name.includes('hedge') ||
-        object.name.includes('rose') ||
-        object.name.includes('topiary')
-      )) {
-        this.foliageMeshes.push(object);
-      }
-    });
-
-    console.log(`Found ${this.foliageMeshes.length} foliage objects for wind animation`);
-  }
-
-  /**
-   * Update wind animation on foliage
-   */
-  private updateWindAnimation(dt: number): void {
-    this.windTime += dt;
-
-    for (let i = 0; i < this.foliageMeshes.length; i++) {
-      const mesh = this.foliageMeshes[i];
-
-      // Create gentle swaying motion using sin waves
-      // Use mesh position as seed for variation
-      const seed = mesh.position.x * 0.1 + mesh.position.z * 0.15;
-      const swayX = Math.sin(this.windTime * 1.2 + seed) * 0.015;
-      const swayZ = Math.sin(this.windTime * 0.9 + seed + 1.5) * 0.012;
-
-      // Apply rotation-based sway (more natural than position shift)
-      mesh.rotation.x = swayX;
-      mesh.rotation.z = swayZ;
-    }
-  }
-
-  /**
    * Fetch level data from JSON file
    */
   private async fetchLevelData(): Promise<LevelData | null> {
@@ -528,9 +468,6 @@ export class SceneManager {
 
     // Update bouncy platforms
     this.updateBouncyPlatforms(dt, playerPosition);
-
-    // Animate foliage wind
-    this.updateWindAnimation(dt);
 
     // Update breakable platforms (crumble warning effect)
     this.updateBreakablePlatforms(dt, playerPosition);
