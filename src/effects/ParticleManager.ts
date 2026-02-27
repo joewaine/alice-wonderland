@@ -22,6 +22,7 @@ interface ParticleSystem {
 export class ParticleManager {
   private scene: THREE.Scene;
   private systems: ParticleSystem[] = [];
+  private static readonly MAX_SYSTEMS = 80;
 
   // Ambient particles
   private ambientParticles: THREE.Points | null = null;
@@ -32,6 +33,11 @@ export class ParticleManager {
     velocities: Float32Array;
     bounds: THREE.Box3;
   } | null = null;
+
+  // Pre-allocated vectors for updateRosePetals to avoid per-frame GC pressure
+  private readonly defaultWindDirection: THREE.Vector3 = new THREE.Vector3(0.3, 0, 0.1);
+  private readonly roseSizeCache: THREE.Vector3 = new THREE.Vector3();
+  private readonly roseCenterCache: THREE.Vector3 = new THREE.Vector3();
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -608,6 +614,75 @@ export class ParticleManager {
       velocities,
       lifetimes,
       maxLife: 0.5,  // Short lifetime (0.4-0.6s range)
+      isLooping: false,
+      elapsed: 0
+    });
+  }
+
+  /**
+   * Triple jump spiral burst - gold/rainbow upward spiral
+   * Bigger and more dramatic than double jump to reward the chain
+   */
+  createTripleJumpSpiral(position: THREE.Vector3): void {
+    const count = 35;
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Gold/rainbow palette for the highest jump
+    const spiralColors = [
+      new THREE.Color(0xFFD700),  // Gold
+      new THREE.Color(0xFFA500),  // Orange
+      new THREE.Color(0xFFFF00),  // Yellow
+      new THREE.Color(0xFFFFFF),  // White
+    ];
+
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y;
+      positions[i * 3 + 2] = position.z;
+
+      const color = spiralColors[Math.floor(Math.random() * spiralColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Tight spiral pattern - two full rotations upward
+      const t = i / count;
+      const angle = t * Math.PI * 4; // Two full spirals
+      const radius = 0.8 + t * 1.5;  // Expanding outward
+      const upSpeed = 4 + t * 6;     // Accelerating upward
+
+      velocities[i * 3] = Math.cos(angle) * radius;
+      velocities[i * 3 + 1] = upSpeed;
+      velocities[i * 3 + 2] = Math.sin(angle) * radius;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.25,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 0.7,
       isLooping: false,
       elapsed: 0
     });
@@ -2012,6 +2087,14 @@ export class ParticleManager {
     // Update rose petals
     this.updateRosePetals(dt);
 
+    // Evict oldest systems if over cap
+    while (this.systems.length > ParticleManager.MAX_SYSTEMS) {
+      const oldest = this.systems.shift()!;
+      this.scene.remove(oldest.points);
+      oldest.points.geometry.dispose();
+      (oldest.points.material as THREE.Material).dispose();
+    }
+
     // Update burst systems
     const toRemove: number[] = [];
 
@@ -2146,8 +2229,9 @@ export class ParticleManager {
   /**
    * Update rose petals with wind simulation
    */
-  private updateRosePetals(dt: number, windDirection: THREE.Vector3 = new THREE.Vector3(0.3, 0, 0.1)): void {
+  private updateRosePetals(dt: number, windDirection?: THREE.Vector3): void {
     if (!this.rosePetals) return;
+    const wind = windDirection ?? this.defaultWindDirection;
 
     const positions = this.rosePetals.points.geometry.attributes.position;
     const arr = positions.array as Float32Array;
@@ -2155,18 +2239,18 @@ export class ParticleManager {
     const bounds = this.rosePetals.bounds;
     const velocities = this.rosePetals.velocities;
 
-    const size = new THREE.Vector3();
-    bounds.getSize(size);
-    const center = new THREE.Vector3();
-    bounds.getCenter(center);
+    bounds.getSize(this.roseSizeCache);
+    bounds.getCenter(this.roseCenterCache);
+    const size = this.roseSizeCache;
+    const center = this.roseCenterCache;
 
     for (let i = 0; i < count; i++) {
       // Add wind influence with slight turbulence
       const turbulence = Math.sin(arr[i * 3] * 0.5 + arr[i * 3 + 1] * 0.3) * 0.1;
 
       // Update velocity with wind
-      velocities[i * 3] += windDirection.x * dt + turbulence * dt;
-      velocities[i * 3 + 2] += windDirection.z * dt + turbulence * dt;
+      velocities[i * 3] += wind.x * dt + turbulence * dt;
+      velocities[i * 3 + 2] += wind.z * dt + turbulence * dt;
 
       // Apply velocity
       arr[i * 3] += velocities[i * 3] * dt;

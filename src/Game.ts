@@ -119,6 +119,7 @@ export class Game {
   private playerPosCache: THREE.Vector3 = new THREE.Vector3();
   private tempPosCache: THREE.Vector3 = new THREE.Vector3();
   private playerVelocityCache: THREE.Vector3 = new THREE.Vector3();
+  private boundsCache: THREE.Box3 = new THREE.Box3();
 
   // Quest system
   private questManager: QuestManager | null = null;
@@ -924,6 +925,20 @@ export class Game {
           }
         }
       },
+      onTripleJump: () => {
+        audioManager.playJump(true); // High-pitched like double jump
+        // Tall, narrow stretch for the highest jump
+        this.targetSquash.set(0.6, 1.6, 0.6);
+        // Gold spiral burst effect
+        if (this.playerBody) {
+          const pos = this.playerBody.translation();
+          this.tempPosCache.set(pos.x, pos.y, pos.z);
+          this.particleManager.createTripleJumpSpiral(this.tempPosCache);
+          this.particleManager.createDoubleJumpRing(this.tempPosCache);
+        }
+        // Camera kick for dramatic effect
+        this.cameraController?.kickFOV(70, 0.5);
+      },
       onLongJump: () => {
         audioManager.playJump();
         this.targetSquash.set(0.6, 1.2, 1.4); // Stretch forward
@@ -1287,13 +1302,13 @@ export class Game {
 
         for (const platform of this.sceneManager.getBouncyPlatforms()) {
           const mesh = platform.mesh;
-          const bounds = new THREE.Box3().setFromObject(mesh);
+          this.boundsCache.setFromObject(mesh);
           // Expand bounds slightly for detection
-          bounds.expandByScalar(0.5);
+          this.boundsCache.expandByScalar(0.5);
 
-          if (this.tempPosCache.x >= bounds.min.x && this.tempPosCache.x <= bounds.max.x &&
-              this.tempPosCache.z >= bounds.min.z && this.tempPosCache.z <= bounds.max.z &&
-              this.tempPosCache.y >= bounds.max.y - 1 && this.tempPosCache.y <= bounds.max.y + 2) {
+          if (this.tempPosCache.x >= this.boundsCache.min.x && this.tempPosCache.x <= this.boundsCache.max.x &&
+              this.tempPosCache.z >= this.boundsCache.min.z && this.tempPosCache.z <= this.boundsCache.max.z &&
+              this.tempPosCache.y >= this.boundsCache.max.y - 1 && this.tempPosCache.y <= this.boundsCache.max.y + 2) {
             // Player bounced off this platform - create particle effect and sound
             this.particleManager.createBouncePadEffect(this.tempPosCache);
             audioManager.playBounce();
@@ -1323,11 +1338,12 @@ export class Game {
       // Speed-based vignette effect: intensifies at high speeds
       this.updateSpeedVignette(vel.x, vel.z, dt);
 
+      // Compute horizontal speed once for breathing + footstep + dust checks
+      const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+
       // Return to normal squash when grounded and not jumping
       // Apply subtle breathing animation when idle
       if (this.playerController.getIsGrounded() && !this.input.jump) {
-        // Reuse velocity from bounce detection above
-        const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
         const hasInput = this.input.forward || this.input.backward ||
                          this.input.left || this.input.right;
 
@@ -1356,12 +1372,11 @@ export class Game {
 
       // Footstep dust particles when walking on ground
       if (this.playerController.getIsGrounded()) {
-        // Reuse velocity from bounce detection above
-        const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
         if (horizontalSpeed > 2) {  // Only when moving at decent speed
           const pos = this.playerBody.translation();
+          this.tempPosCache.set(pos.x, pos.y, pos.z);
           this.particleManager.createFootstepDust(
-            new THREE.Vector3(pos.x, pos.y, pos.z),
+            this.tempPosCache,
             horizontalSpeed / 10
           );
         }
@@ -1373,8 +1388,9 @@ export class Game {
           // Position slightly behind player based on velocity direction
           const behindX = pos.x - (vel.x / horizontalSpeed) * 0.3;
           const behindZ = pos.z - (vel.z / horizontalSpeed) * 0.3;
+          this.tempPosCache.set(behindX, pos.y, behindZ);
           this.particleManager.createRunDustPuff(
-            new THREE.Vector3(behindX, pos.y, behindZ)
+            this.tempPosCache
           );
         }
 

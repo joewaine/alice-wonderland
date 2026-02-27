@@ -161,10 +161,16 @@ export class HUD {
    * Show chapter title with fade
    */
   showChapterTitle(title: string, subtitle?: string): void {
-    this.chapterTitle.innerHTML = `
-      <div>${title}</div>
-      ${subtitle ? `<div style="font-size: 16px; margin-top: 5px; font-weight: normal">${subtitle}</div>` : ''}
-    `;
+    this.chapterTitle.textContent = '';
+    const titleDiv = document.createElement('div');
+    titleDiv.textContent = title;
+    this.chapterTitle.appendChild(titleDiv);
+    if (subtitle) {
+      const subtitleDiv = document.createElement('div');
+      subtitleDiv.style.cssText = 'font-size: 16px; margin-top: 5px; font-weight: normal';
+      subtitleDiv.textContent = subtitle;
+      this.chapterTitle.appendChild(subtitleDiv);
+    }
     this.chapterTitle.style.opacity = '1';
 
     // Fade out after 3 seconds

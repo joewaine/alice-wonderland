@@ -30,6 +30,8 @@ export class SceneManager {
 
   // Pre-allocated objects to avoid per-frame GC pressure
   private boundsCache: THREE.Box3 = new THREE.Box3();
+  private expandedBoundsCache: THREE.Box3 = new THREE.Box3();
+  private platformCenterCache: THREE.Vector3 = new THREE.Vector3();
 
   // Wind animation state
   private windTime: number = 0;
@@ -522,11 +524,11 @@ export class SceneManager {
       if (platform.broken) continue;
 
       // Check if player is on top of this breakable platform
-      const expandedBounds = platform.bounds.clone();
-      expandedBounds.max.y += 1.5;  // Check above platform surface
-      expandedBounds.min.y = platform.bounds.max.y - 0.2;  // Only top surface
+      this.expandedBoundsCache.copy(platform.bounds);
+      this.expandedBoundsCache.max.y += 1.5;  // Check above platform surface
+      this.expandedBoundsCache.min.y = platform.bounds.max.y - 0.2;  // Only top surface
 
-      const isOnPlatform = expandedBounds.containsPoint(playerPosition);
+      const isOnPlatform = this.expandedBoundsCache.containsPoint(playerPosition);
 
       if (isOnPlatform) {
         // Accumulate stress time
@@ -538,12 +540,11 @@ export class SceneManager {
         const intensity = Math.min(newStress / breakTime, 1);
 
         // Emit crumble particles - position at platform center top
-        const platformCenter = new THREE.Vector3();
-        platform.bounds.getCenter(platformCenter);
-        platformCenter.y = platform.bounds.max.y;
+        platform.bounds.getCenter(this.platformCenterCache);
+        this.platformCenterCache.y = platform.bounds.max.y;
 
         if (this.onBreakablePlatformStress) {
-          this.onBreakablePlatformStress(platformCenter, intensity);
+          this.onBreakablePlatformStress(this.platformCenterCache, intensity);
         }
 
         // Visual feedback: shake the platform mesh slightly
@@ -658,11 +659,11 @@ export class SceneManager {
         }
 
         // Expand slightly above the platform surface
-        const checkBounds = this.boundsCache.clone();
-        checkBounds.max.y += 1.5; // Check above platform
-        checkBounds.min.y = checkBounds.max.y - 2; // Only check near the top
+        this.expandedBoundsCache.copy(this.boundsCache);
+        this.expandedBoundsCache.max.y += 1.5; // Check above platform
+        this.expandedBoundsCache.min.y = this.expandedBoundsCache.max.y - 2; // Only check near the top
 
-        if (checkBounds.containsPoint(position)) {
+        if (this.expandedBoundsCache.containsPoint(position)) {
           // Return surface type from userData
           const surfaceType = platform.userData?.surfaceType;
           if (surfaceType === 'grass' || surfaceType === 'stone' || surfaceType === 'wood') {
