@@ -94,10 +94,8 @@ export function addOutlinesToObject(
     outlineMesh.rotation.copy(mesh.rotation);
     outlineMesh.scale.copy(mesh.scale);
 
-    // Insert before original mesh (renders behind)
-    const index = parent.children.indexOf(mesh);
-    parent.children.splice(index, 0, outlineMesh);
-    outlineMesh.parent = parent;
+    // Add outline via Three.js API (depth buffer handles render order for opaque objects)
+    parent.add(outlineMesh);
   }
 }
 
