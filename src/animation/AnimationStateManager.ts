@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 
-export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'fall' | 'land' | 'groundPound';
+export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'fall' | 'land';
 
 // Priority determines which animations can interrupt others
 // Higher priority = can interrupt lower priority states
@@ -18,7 +18,6 @@ const STATE_PRIORITY: Record<AnimationState, number> = {
   fall: 3,
   jump: 4,
   land: 5,
-  groundPound: 6,  // Highest priority - interrupts everything
 };
 
 // States that auto-transition to another state when complete
@@ -35,7 +34,6 @@ const DEFAULT_CROSSFADE: Partial<Record<AnimationState, number>> = {
   jump: 0.1,
   fall: 0.2,
   land: 0.1,
-  groundPound: 0.05,  // Very fast for impact feel
 };
 
 export interface AnimationStateManagerOptions {

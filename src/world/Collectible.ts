@@ -1,7 +1,7 @@
 /**
  * Collectible - Manages collectible items in the game
  *
- * Handles keys, stars, and cards with pickup detection,
+ * Handles keys and cards with pickup detection,
  * animations, and inventory tracking.
  */
 
@@ -103,7 +103,7 @@ export class CollectibleManager {
       const distance = currentPos.distanceTo(playerPosition);
       const pickupRadius = 1.5 + playerRadius;
 
-      // Magnet attraction effect - only for stars and cards, not key
+      // Magnet attraction effect - only for cards, not key
       if (collectible.type !== 'key' && distance < this.magnetDistance && distance > pickupRadius) {
         // Calculate drift speed - faster as player gets closer
         const proximity = 1 - (distance / this.magnetDistance);
@@ -163,7 +163,7 @@ export class CollectibleManager {
             if (collectible.type === 'card') {
               mat.emissive.setHex(0xff4444);
             } else {
-              // Stars and keys get gold emissive
+              // Keys get gold emissive
               mat.emissive.setHex(0xffd700);
             }
           }
