@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { LevelData, WonderStar } from '../data/LevelData';
+import { validateLevelData } from '../data/LevelData';
 import { LevelBuilder, type BuiltLevel } from '../world/LevelBuilder';
 import { CollectibleManager } from '../world/Collectible';
 import { WonderStarManager } from '../world/WonderStarManager';
@@ -370,7 +371,11 @@ export class SceneManager {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      return await response.json();
+      const data = await response.json();
+      if (!validateLevelData(data)) {
+        throw new Error('Invalid level data structure');
+      }
+      return data;
     } catch (error) {
       console.error(`Failed to fetch level data:`, error);
       return null;

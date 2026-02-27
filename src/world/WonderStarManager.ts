@@ -423,7 +423,9 @@ export class WonderStarManager {
   private getCollectedStarIds(): string[] {
     try {
       const stored = localStorage.getItem(this.storageKey);
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }
