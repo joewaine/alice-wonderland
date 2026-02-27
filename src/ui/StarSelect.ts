@@ -38,6 +38,7 @@ export class StarSelect {
    */
   hide(): void {
     this.isVisible = false;
+    document.removeEventListener('keydown', this.handleKeyDown);
     if (this.container) {
       document.body.removeChild(this.container);
       this.container = null;
@@ -311,7 +312,6 @@ export class StarSelect {
   private handleKeyDown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
       this.handleClose();
-      document.removeEventListener('keydown', this.handleKeyDown);
     }
   };
 }
