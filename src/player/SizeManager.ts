@@ -25,24 +25,24 @@ const SIZE_CONFIGS: Record<SizeState, SizeConfig> = {
     capsuleHeight: 0.25,
     capsuleRadius: 0.2,
     eyeHeight: 0.4,
-    jumpForce: 10,     // Slightly lower jump when small
-    moveSpeed: 10      // Slightly slower
+    jumpForce: 8.5,    // Slightly lower jump when small
+    moveSpeed: 8.5     // Slightly slower
   },
   normal: {
     scale: 1.0,
     capsuleHeight: 0.5,
     capsuleRadius: 0.4,
     eyeHeight: 1.0,
-    jumpForce: 12.5,   // Match baseJump in Game.ts
-    moveSpeed: 13      // Match baseSpeed in Game.ts
+    jumpForce: 11,     // Match baseJump in Game.ts
+    moveSpeed: 11      // Match baseSpeed in Game.ts
   },
   large: {
     scale: 2.0,
     capsuleHeight: 1.0,
     capsuleRadius: 0.8,
     eyeHeight: 2.0,
-    jumpForce: 15,     // Higher jump when large
-    moveSpeed: 15      // Faster movement
+    jumpForce: 13,     // Higher jump when large
+    moveSpeed: 13      // Faster movement
   }
 };
 

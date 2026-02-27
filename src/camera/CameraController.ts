@@ -42,7 +42,7 @@ export class CameraController {
 
   // Auto-follow: camera orbits to stay behind player's facing direction
   private playerFacingYaw: number | null = null;
-  private readonly AUTO_FOLLOW_SPEED = 5;
+  private readonly AUTO_FOLLOW_SPEED = 3;
 
   // Manual look state (right-click drag overrides auto-follow)
   private manualLookActive: boolean = false;
@@ -65,8 +65,8 @@ export class CameraController {
     mouseSensitivity: 0.003,
     minPitch: 0.1,
     maxPitch: 1.2,
-    followLerp: 5,
-    distanceLerp: 5,
+    followLerp: 3.5,
+    distanceLerp: 3.5,
   };
 
   // Camera zones for contextual zoom
@@ -97,7 +97,7 @@ export class CameraController {
   private readonly LOOK_AHEAD_MAX_DISTANCE = 2.5;
   private readonly LOOK_AHEAD_SPEED_THRESHOLD = 0.8;
   private readonly LOOK_AHEAD_LERP_SPEED = 4;
-  private readonly MAX_PLAYER_SPEED = 13;
+  private readonly MAX_PLAYER_SPEED = 11;
 
   // Screen shake state
   private shakeIntensity: number = 0;
@@ -136,6 +136,13 @@ export class CameraController {
   private dipVelocity: number = 0;
   private readonly DIP_RECOVERY_SPEED = 40;
 
+  // First-person / third-person toggle
+  private _isFirstPerson: boolean = false;
+  private readonly FP_HEIGHT_OFFSET = 1.6;  // Eye height above player position
+  private readonly FP_TRANSITION_SPEED = 8;  // How fast to blend between modes
+  private handlePointerLockChange: (() => void) | null = null;
+  public onViewModeChange: ((isFirstPerson: boolean) => void) | null = null;
+
   // Bound event handlers (stored for removal in dispose)
   private handleMouseDown = (e: MouseEvent): void => {
     if (e.button === 2) {
@@ -155,6 +162,12 @@ export class CameraController {
   };
 
   private handleMouseMove = (e: MouseEvent): void => {
+    // In first-person mode, use pointer lock for free look
+    if (this._isFirstPerson && document.pointerLockElement === this.canvas) {
+      this.rotate(-e.movementX, e.movementY);
+      return;
+    }
+
     if (this.isDragging) {
       const deltaX = e.clientX - this.lastMouseX;
       const deltaY = e.clientY - this.lastMouseY;
@@ -191,6 +204,15 @@ export class CameraController {
 
     // Setup mouse events for right-click drag
     this.setupMouseEvents();
+
+    // Exit first-person if pointer lock is lost (e.g. Escape key)
+    this.handlePointerLockChange = () => {
+      if (this._isFirstPerson && document.pointerLockElement !== this.canvas) {
+        this._isFirstPerson = false;
+        this.onViewModeChange?.(false);
+      }
+    };
+    document.addEventListener('pointerlockchange', this.handlePointerLockChange);
   }
 
   private setupMouseEvents(): void {
@@ -230,6 +252,27 @@ export class CameraController {
   setOccludables(objects: THREE.Object3D[]): void {
     this.restoreAllFadedMeshes();
     this.occludables = objects;
+  }
+
+  /**
+   * Toggle between first-person and third-person camera.
+   * Returns the new mode so Game.ts can show/hide the player mesh.
+   */
+  toggleViewMode(): boolean {
+    this._isFirstPerson = !this._isFirstPerson;
+    if (this._isFirstPerson) {
+      this.restoreAllFadedMeshes();
+      this.canvas.requestPointerLock();
+    } else {
+      if (document.pointerLockElement === this.canvas) {
+        document.exitPointerLock();
+      }
+    }
+    return this._isFirstPerson;
+  }
+
+  get isFirstPerson(): boolean {
+    return this._isFirstPerson;
   }
 
   /**
@@ -363,8 +406,8 @@ export class CameraController {
       }
     }
 
-    // Auto-orbit to stay behind player when moving (disabled during right-click drag)
-    if (this.playerFacingYaw !== null && !this.isDragging) {
+    // Auto-orbit to stay behind player when moving (disabled during right-click drag and first-person)
+    if (this.playerFacingYaw !== null && !this.isDragging && !this._isFirstPerson) {
       const behindYaw = this.playerFacingYaw - Math.PI;
       let diff = behindYaw - this.yaw;
       if (diff > Math.PI) diff -= Math.PI * 2;
@@ -453,80 +496,98 @@ export class CameraController {
       : undefined;
 
     // Calculate final camera position
-    const camPos = this.getIdealPosition(playerPos, this.currentDistance, dialoguePitch);
-
-    // Apply position with smoothing
-    this.camera.position.lerp(camPos, Math.min(1, this.config.followLerp * dt));
-
-    // Apply landing dip offset
-    if (Math.abs(this.dipOffset) > 0.001 || Math.abs(this.dipVelocity) > 0.001) {
-      this.dipVelocity += this.DIP_RECOVERY_SPEED * dt;
-      this.dipOffset += this.dipVelocity * dt;
-
-      if (this.dipOffset > 0) {
-        this.dipOffset = 0;
-        this.dipVelocity = 0;
-      }
-
-      this.camera.position.y += this.dipOffset;
-    }
-
-    // Apply screen shake if active
-    if (this.shakeIntensity > 0.001) {
-      this.shakeOffset.set(
-        (Math.random() - 0.5) * this.shakeIntensity * 0.8,
-        (Math.random() - 0.5) * this.shakeIntensity * 0.5,
-        (Math.random() - 0.5) * this.shakeIntensity * 0.8
+    if (this._isFirstPerson) {
+      // First-person: camera at player's eye height, looking in yaw/pitch direction
+      this.idealPosCache.set(
+        playerPos.x,
+        playerPos.y + this.FP_HEIGHT_OFFSET,
+        playerPos.z
       );
-      this.camera.position.add(this.shakeOffset);
-      this.shakeIntensity *= this.SHAKE_DECAY;
-    }
+      this.camera.position.lerp(this.idealPosCache, Math.min(1, this.FP_TRANSITION_SPEED * dt));
 
-    // Update FOV kick effect
-    if (this.currentFOV !== this.baseFOV || this.targetFOV !== this.baseFOV) {
-      if (Math.abs(this.currentFOV - this.targetFOV) > 0.1) {
-        this.currentFOV = THREE.MathUtils.lerp(this.currentFOV, this.targetFOV, 0.3);
-      } else {
-        this.currentFOV = this.targetFOV;
+      // Look direction from yaw/pitch
+      this.lookAtCache.set(
+        playerPos.x - Math.sin(this.yaw) * 10,
+        playerPos.y + this.FP_HEIGHT_OFFSET - Math.sin(this.pitch) * 10,
+        playerPos.z - Math.cos(this.yaw) * 10
+      );
+      this.camera.lookAt(this.lookAtCache);
+    } else {
+      const camPos = this.getIdealPosition(playerPos, this.currentDistance, dialoguePitch);
+
+      // Apply position with smoothing
+      this.camera.position.lerp(camPos, Math.min(1, this.config.followLerp * dt));
+
+      // Apply landing dip offset
+      if (Math.abs(this.dipOffset) > 0.001 || Math.abs(this.dipVelocity) > 0.001) {
+        this.dipVelocity += this.DIP_RECOVERY_SPEED * dt;
+        this.dipOffset += this.dipVelocity * dt;
+
+        if (this.dipOffset > 0) {
+          this.dipOffset = 0;
+          this.dipVelocity = 0;
+        }
+
+        this.camera.position.y += this.dipOffset;
       }
 
-      this.fovKickTimer += dt;
-      if (this.fovKickTimer >= this.fovKickDuration * 0.3) {
-        this.targetFOV = this.baseFOV;
+      // Apply screen shake if active
+      if (this.shakeIntensity > 0.001) {
+        this.shakeOffset.set(
+          (Math.random() - 0.5) * this.shakeIntensity * 0.8,
+          (Math.random() - 0.5) * this.shakeIntensity * 0.5,
+          (Math.random() - 0.5) * this.shakeIntensity * 0.8
+        );
+        this.camera.position.add(this.shakeOffset);
+        this.shakeIntensity *= this.SHAKE_DECAY;
       }
 
-      if (Math.abs(this.camera.fov - this.currentFOV) > 0.01) {
-        this.camera.fov = this.currentFOV;
-        this.camera.updateProjectionMatrix();
+      // Update FOV kick effect
+      if (this.currentFOV !== this.baseFOV || this.targetFOV !== this.baseFOV) {
+        if (Math.abs(this.currentFOV - this.targetFOV) > 0.1) {
+          this.currentFOV = THREE.MathUtils.lerp(this.currentFOV, this.targetFOV, 0.3);
+        } else {
+          this.currentFOV = this.targetFOV;
+        }
+
+        this.fovKickTimer += dt;
+        if (this.fovKickTimer >= this.fovKickDuration * 0.3) {
+          this.targetFOV = this.baseFOV;
+        }
+
+        if (Math.abs(this.camera.fov - this.currentFOV) > 0.01) {
+          this.camera.fov = this.currentFOV;
+          this.camera.updateProjectionMatrix();
+        }
       }
+
+      // Look at player with look-ahead offset
+      this.lookAtCache.set(
+        playerPos.x + this.lookAheadOffset.x,
+        playerPos.y + this.heightOffset * 0.5,
+        playerPos.z + this.lookAheadOffset.z
+      );
+      this.camera.lookAt(this.lookAtCache);
+
+      // Apply underwater wobble effect after lookAt
+      if (this.underwaterWobbleEnabled) {
+        this.wobbleTime += dt;
+
+        const rollAngle = Math.sin(this.wobbleTime * Math.PI * 2 * this.WOBBLE_ROLL_FREQUENCY)
+                          * this.WOBBLE_ROLL_AMPLITUDE;
+        const swayX = Math.sin(this.wobbleTime * Math.PI * 2 * this.WOBBLE_SWAY_FREQUENCY)
+                      * this.WOBBLE_SWAY_AMPLITUDE;
+        const swayY = Math.cos(this.wobbleTime * Math.PI * 2 * this.WOBBLE_SWAY_FREQUENCY * 0.7)
+                      * this.WOBBLE_SWAY_AMPLITUDE * 0.5;
+
+        this.camera.rotateZ(rollAngle);
+        this.camera.position.x += swayX;
+        this.camera.position.y += swayY;
+      }
+
+      // Wall fade-through (after camera position is finalized)
+      this.updateWallFade(playerPos);
     }
-
-    // Look at player with look-ahead offset
-    this.lookAtCache.set(
-      playerPos.x + this.lookAheadOffset.x,
-      playerPos.y + this.heightOffset * 0.5,
-      playerPos.z + this.lookAheadOffset.z
-    );
-    this.camera.lookAt(this.lookAtCache);
-
-    // Apply underwater wobble effect after lookAt
-    if (this.underwaterWobbleEnabled) {
-      this.wobbleTime += dt;
-
-      const rollAngle = Math.sin(this.wobbleTime * Math.PI * 2 * this.WOBBLE_ROLL_FREQUENCY)
-                        * this.WOBBLE_ROLL_AMPLITUDE;
-      const swayX = Math.sin(this.wobbleTime * Math.PI * 2 * this.WOBBLE_SWAY_FREQUENCY)
-                    * this.WOBBLE_SWAY_AMPLITUDE;
-      const swayY = Math.cos(this.wobbleTime * Math.PI * 2 * this.WOBBLE_SWAY_FREQUENCY * 0.7)
-                    * this.WOBBLE_SWAY_AMPLITUDE * 0.5;
-
-      this.camera.rotateZ(rollAngle);
-      this.camera.position.x += swayX;
-      this.camera.position.y += swayY;
-    }
-
-    // Wall fade-through (after camera position is finalized)
-    this.updateWallFade(playerPos);
   }
 
   /**
@@ -650,5 +711,11 @@ export class CameraController {
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
     this.canvas.removeEventListener('mouseleave', this.handleMouseLeave);
     this.canvas.removeEventListener('contextmenu', this.handleContextMenu);
+    if (this.handlePointerLockChange) {
+      document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
+    }
+    if (document.pointerLockElement === this.canvas) {
+      document.exitPointerLock();
+    }
   }
 }

@@ -74,8 +74,8 @@ export class Game {
   private loadingScreen: LoadingScreen;
 
   // Current player config (used by SizeManager callback)
-  private baseSpeed: number = 13;
-  private baseJump: number = 12.5;
+  private baseSpeed: number = 11;
+  private baseJump: number = 11;
 
   // Camera controller
   private cameraController: CameraController | null = null;
@@ -90,6 +90,9 @@ export class Game {
   // Audio state
   private isMuted: boolean = false;
   private wasMutePressed: boolean = false;
+
+  // View toggle state
+  private wasViewTogglePressed: boolean = false;
 
   // Respawn state
   private isRespawning: boolean = false;
@@ -232,7 +235,7 @@ export class Game {
     this.loadingScreen.setProgress(30, 'Creating world...');
 
     // Create physics world
-    const gravity = new RAPIER.Vector3(0, -26, 0);
+    const gravity = new RAPIER.Vector3(0, -22, 0);
     this.world = new RAPIER.World(gravity);
     this.physicsReady = true;
     this.loadingScreen.setProgress(50, 'Setting up player...');
@@ -872,6 +875,12 @@ export class Game {
     if (this.playerMesh) {
       this.cameraController.setPlayerMesh(this.playerMesh);
     }
+    // When pointer lock exits (Escape), revert player mesh visibility
+    this.cameraController.onViewModeChange = (isFirstPerson: boolean) => {
+      if (this.playerMesh) {
+        this.playerMesh.visible = !isFirstPerson;
+      }
+    };
     this.camera.position.set(0, 5, 10);
   }
 
@@ -1112,6 +1121,16 @@ export class Game {
     }
     this.wasMutePressed = isMutePressed;
 
+    // View toggle (V key) - switch between first-person and third-person
+    const isViewTogglePressed = this.input.isKeyDown('v');
+    if (isViewTogglePressed && !this.wasViewTogglePressed && this.cameraController) {
+      const isFirstPerson = this.cameraController.toggleViewMode();
+      if (this.playerMesh) {
+        this.playerMesh.visible = !isFirstPerson;
+      }
+    }
+    this.wasViewTogglePressed = isViewTogglePressed;
+
     // Size controls (Q to shrink, R to grow - E is reserved for interact)
     if (this.input.isKeyDown('q')) {
       this.sizeManager.shrink();
@@ -1206,7 +1225,7 @@ export class Game {
         }
 
         // Run dust puffs when at 80%+ max speed
-        const maxSpeed = 13;
+        const maxSpeed = 11;
         if (horizontalSpeed > maxSpeed * 0.8) {
           const pos = this.playerBody.translation();
           // Position slightly behind player based on velocity direction
@@ -1390,6 +1409,7 @@ export class Game {
       <p style="margin:5px 0"><b>Shift</b> - Sprint</p>
       <p style="margin:5px 0"><b>Q/R</b> - Shrink/Grow</p>
       <p style="margin:5px 0"><b>E</b> - Talk to NPCs</p>
+      <p style="margin:5px 0"><b>V</b> - Toggle View (1st/3rd Person)</p>
       <p style="margin:5px 0"><b>M</b> - Mute</p>
     `;
     document.body.appendChild(this.instructionsDiv);
@@ -1500,7 +1520,7 @@ export class Game {
     if (!this.vignetteOverlay) return;
 
     const horizontalSpeed = Math.sqrt(velX * velX + velZ * velZ);
-    const maxSpeed = 13;
+    const maxSpeed = 11;
     const speedThreshold = maxSpeed * 0.8;  // Effect starts at 80% max speed
 
     // Base vignette intensity (always present)
