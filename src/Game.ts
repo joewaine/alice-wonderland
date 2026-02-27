@@ -133,9 +133,6 @@ export class Game {
   private currentVignetteIntensity: number = 0.3;  // Base vignette darkness
   private targetVignetteIntensity: number = 0.3;
 
-  // Hitstop effect (freeze frames on ground pound impact)
-  private hitstopRemaining: number = 0;
-
   // Slow motion effect (for water entry, etc.)
   private timeScale: number = 1.0;
   private timeScaleTarget: number = 1.0;
@@ -362,6 +359,10 @@ export class Game {
 
       // Setup camera zones from level areas
       this.setupCameraZones();
+
+      // Set platform meshes as occludables for camera wall fade-through
+      const platformMeshes = this.sceneManager.getPlatformMeshes();
+      this.cameraController?.setOccludables(platformMeshes);
 
       // Setup area indicator
       const areas = this.sceneManager.getAreas();
@@ -867,7 +868,7 @@ export class Game {
     }
 
     // Camera controller
-    this.cameraController = new CameraController(this.camera, this.scene, this.renderer);
+    this.cameraController = new CameraController(this.camera, this.renderer);
     if (this.playerMesh) {
       this.cameraController.setPlayerMesh(this.playerMesh);
     }
@@ -1026,16 +1027,6 @@ export class Game {
     const now = performance.now();
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
-
-    // Hitstop freeze effect - skip physics/movement updates
-    if (this.hitstopRemaining > 0) {
-      this.hitstopRemaining -= dt;
-      // Still render during hitstop (frozen frame)
-      this.renderer.render(this.scene, this.camera);
-      this.updateStats(dt);
-      this.input.resetMouseDelta();
-      return;
-    }
 
     // Slow motion effect - gradually restore time scale
     let scaledDt = dt;

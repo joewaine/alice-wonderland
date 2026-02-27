@@ -35,7 +35,6 @@ interface CameraZone {
 
 export class CameraController {
   private camera: THREE.PerspectiveCamera;
-  private scene: THREE.Scene;
 
   // Current rotation state
   private yaw: number = 0;
@@ -81,7 +80,8 @@ export class CameraController {
   // Wall fade-through state
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
   private playerMesh: THREE.Object3D | null = null;
-  private fadedMeshes: Map<THREE.Mesh, { opacity: number; transparent: boolean; isShader: boolean }> = new Map();
+  private occludables: THREE.Object3D[] = [];
+  private fadedMeshes: Map<THREE.Mesh, { originalMaterial: THREE.Material }> = new Map();
   private readonly WALL_FADE_ALPHA = 0.15;
 
   // Canvas reference for event listener cleanup
@@ -179,11 +179,9 @@ export class CameraController {
 
   constructor(
     camera: THREE.PerspectiveCamera,
-    scene: THREE.Scene,
     renderer: THREE.WebGLRenderer
   ) {
     this.camera = camera;
-    this.scene = scene;
     this.canvas = renderer.domElement;
 
     // Store the camera's initial FOV as base
@@ -226,6 +224,15 @@ export class CameraController {
   }
 
   /**
+   * Set meshes that can occlude the camera (platforms, walls, large structures).
+   * Only these are checked for wall fade-through, avoiding full-scene raycast.
+   */
+  setOccludables(objects: THREE.Object3D[]): void {
+    this.restoreAllFadedMeshes();
+    this.occludables = objects;
+  }
+
+  /**
    * Check for camera zones at player position
    */
   private updateZone(playerPos: THREE.Vector3): void {
@@ -261,9 +268,12 @@ export class CameraController {
 
   /**
    * Fade meshes between camera and player to transparent.
-   * Restores meshes that are no longer occluding.
+   * Uses clone-on-fade to avoid shader recompilation from toggling mat.transparent,
+   * and only raycasts against registered occludables (not full scene).
    */
   private updateWallFade(playerPos: THREE.Vector3): void {
+    if (this.occludables.length === 0) return;
+
     this.rayDirCache.subVectors(this.camera.position, playerPos).normalize();
     const distance = this.camera.position.distanceTo(playerPos);
 
@@ -271,7 +281,7 @@ export class CameraController {
     this.raycaster.near = 0.5;
     this.raycaster.far = distance - 0.5;
 
-    const intersections = this.raycaster.intersectObjects(this.scene.children, true);
+    const intersections = this.raycaster.intersectObjects(this.occludables, true);
 
     const shouldFade = new Set<THREE.Mesh>();
 
@@ -283,9 +293,7 @@ export class CameraController {
       if (this.playerMesh && (obj === this.playerMesh || this.isChildOf(obj, this.playerMesh))) continue;
 
       // Skip small objects (collectibles, particles)
-      if (obj.geometry.boundingSphere) {
-        if (obj.geometry.boundingSphere.radius < 0.3) continue;
-      }
+      if (obj.geometry.boundingSphere && obj.geometry.boundingSphere.radius < 0.3) continue;
 
       shouldFade.add(obj);
 
@@ -293,39 +301,27 @@ export class CameraController {
         const mat = obj.material;
         if (Array.isArray(mat)) continue; // Skip multi-material meshes
 
-        if (mat instanceof THREE.ShaderMaterial && mat.uniforms.uOpacity) {
-          this.fadedMeshes.set(obj, {
-            opacity: mat.uniforms.uOpacity.value,
-            transparent: mat.transparent,
-            isShader: true,
-          });
-          mat.transparent = true;
-          mat.uniforms.uOpacity.value = this.WALL_FADE_ALPHA;
-        } else if ('opacity' in mat) {
-          this.fadedMeshes.set(obj, {
-            opacity: (mat as THREE.MeshStandardMaterial).opacity,
-            transparent: mat.transparent,
-            isShader: false,
-          });
-          mat.transparent = true;
-          (mat as THREE.MeshStandardMaterial).opacity = this.WALL_FADE_ALPHA;
+        // Clone material so we never mutate shared materials or toggle transparent
+        const clone = mat.clone();
+        clone.transparent = true;
+
+        if (clone instanceof THREE.ShaderMaterial && clone.uniforms.uOpacity) {
+          clone.uniforms.uOpacity.value = this.WALL_FADE_ALPHA;
+        } else if ('opacity' in clone) {
+          (clone as THREE.MeshStandardMaterial).opacity = this.WALL_FADE_ALPHA;
         }
+
+        this.fadedMeshes.set(obj, { originalMaterial: mat });
+        obj.material = clone;
       }
     }
 
     // Restore meshes no longer between camera and player
-    for (const [mesh, original] of this.fadedMeshes) {
+    for (const [mesh, saved] of this.fadedMeshes) {
       if (!shouldFade.has(mesh)) {
-        const mat = mesh.material;
-        if (!Array.isArray(mat)) {
-          if (original.isShader && mat instanceof THREE.ShaderMaterial && mat.uniforms.uOpacity) {
-            mat.uniforms.uOpacity.value = original.opacity;
-            mat.transparent = original.transparent;
-          } else if (!original.isShader && 'opacity' in mat) {
-            (mat as THREE.MeshStandardMaterial).opacity = original.opacity;
-            mat.transparent = original.transparent;
-          }
-        }
+        const fadedMat = mesh.material as THREE.Material;
+        mesh.material = saved.originalMaterial;
+        fadedMat.dispose();
         this.fadedMeshes.delete(mesh);
       }
     }
@@ -344,19 +340,13 @@ export class CameraController {
   }
 
   /**
-   * Restore all faded meshes to original opacity
+   * Restore all faded meshes to their original materials and dispose clones
    */
   private restoreAllFadedMeshes(): void {
-    for (const [mesh, original] of this.fadedMeshes) {
-      const mat = mesh.material;
-      if (Array.isArray(mat)) continue;
-      if (original.isShader && mat instanceof THREE.ShaderMaterial && mat.uniforms.uOpacity) {
-        mat.uniforms.uOpacity.value = original.opacity;
-        mat.transparent = original.transparent;
-      } else if (!original.isShader && 'opacity' in mat) {
-        (mat as THREE.MeshStandardMaterial).opacity = original.opacity;
-        mat.transparent = original.transparent;
-      }
+    for (const [mesh, saved] of this.fadedMeshes) {
+      const fadedMat = mesh.material as THREE.Material;
+      mesh.material = saved.originalMaterial;
+      fadedMat.dispose();
     }
     this.fadedMeshes.clear();
   }
