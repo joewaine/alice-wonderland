@@ -17,10 +17,13 @@ export interface CelShaderOptions {
   highlightColor?: THREE.Color | number;
   rimColor?: THREE.Color | number;
   rimPower?: number;
-  steps?: number;
   transparent?: boolean;
   opacity?: number;
 }
+
+// Cel-shading uses exactly 3 steps (shadow/mid/highlight) — the color band
+// thresholds in the fragment shader are hardcoded to match.
+const CEL_STEPS = 3;
 
 const defaultOptions: Required<CelShaderOptions> = {
   color: new THREE.Color(0xffffff),
@@ -29,7 +32,6 @@ const defaultOptions: Required<CelShaderOptions> = {
   highlightColor: new THREE.Color(0xfff8e7), // Warm highlight
   rimColor: new THREE.Color(0xadd8e6),       // Soft blue rim
   rimPower: 2.0,
-  steps: 3,
   transparent: false,
   opacity: 1.0,
 };
@@ -132,7 +134,7 @@ export function createCelShaderMaterial(options: CelShaderOptions = {}): THREE.S
       uHighlightColor: { value: highlightColor },
       uRimColor: { value: rimColor },
       uRimPower: { value: opts.rimPower },
-      uSteps: { value: opts.steps },
+      uSteps: { value: CEL_STEPS },
       uMap: { value: opts.map },
       uHasMap: { value: opts.map !== null },
       uLightDirection: { value: new THREE.Vector3(0.5, 1, 0.3).normalize() },

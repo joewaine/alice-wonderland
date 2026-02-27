@@ -17,11 +17,21 @@ interface ParticleSystem {
   isLooping: boolean;
   elapsed: number;
   noGravity?: boolean;
+  pooled?: boolean;  // Track if this system came from the pool
+  activeCount?: number;  // Actual particle count for pooled systems (avoids iterating full buffer)
 }
+
+// Max particles any single burst effect uses
+const POOL_MAX_PARTICLES = 20;
+const POOL_INITIAL_SIZE = 20;
 
 export class ParticleManager {
   private scene: THREE.Scene;
   private systems: ParticleSystem[] = [];
+  private static readonly MAX_SYSTEMS = 40;
+
+  // Object pool for burst particle systems
+  private pool: ParticleSystem[] = [];
 
   // Ambient particles
   private ambientParticles: THREE.Points | null = null;
@@ -33,14 +43,135 @@ export class ParticleManager {
     bounds: THREE.Box3;
   } | null = null;
 
+  // Pre-allocated vectors for updateRosePetals to avoid per-frame GC pressure
+  private readonly defaultWindDirection: THREE.Vector3 = new THREE.Vector3(0.3, 0, 0.1);
+  private readonly roseSizeCache: THREE.Vector3 = new THREE.Vector3();
+  private readonly roseCenterCache: THREE.Vector3 = new THREE.Vector3();
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+    this.initPool();
+  }
+
+  /**
+   * Pre-allocate pool of reusable particle systems to avoid per-burst allocation
+   */
+  private initPool(): void {
+    for (let i = 0; i < POOL_INITIAL_SIZE; i++) {
+      this.pool.push(this.createPooledSystem());
+    }
+  }
+
+  /**
+   * Create a single pooled particle system with max-capacity buffers
+   */
+  private createPooledSystem(): ParticleSystem {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(POOL_MAX_PARTICLES * 3);
+    const colors = new Float32Array(POOL_MAX_PARTICLES * 3);
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setDrawRange(0, 0); // Hidden until acquired
+
+    const material = new THREE.PointsMaterial({
+      size: 0.2,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    points.visible = false;
+
+    return {
+      points,
+      velocities: new Float32Array(POOL_MAX_PARTICLES * 3),
+      lifetimes: new Float32Array(POOL_MAX_PARTICLES),
+      maxLife: 1,
+      isLooping: false,
+      elapsed: 0,
+      pooled: true
+    };
+  }
+
+  /**
+   * Acquire a particle system from the pool.
+   * Grows the pool if empty. Only for effects with count <= POOL_MAX_PARTICLES.
+   *
+   * Use pooled systems for high-frequency effects (>1/sec): footstep dust, run dust,
+   * landing dust, collect burst, size change. Non-pooled allocation is
+   * acceptable for rare/large bursts (quest complete, gate unlock, death/respawn).
+   */
+  private acquireSystem(
+    count: number,
+    options: {
+      size?: number;
+      blending?: THREE.Blending;
+      vertexColors?: boolean;
+      color?: number;
+      maxLife: number;
+      noGravity?: boolean;
+    }
+  ): ParticleSystem {
+    if (count > POOL_MAX_PARTICLES) {
+      console.warn(`ParticleManager: acquireSystem called with count=${count} > POOL_MAX_PARTICLES=${POOL_MAX_PARTICLES}. Clamping.`);
+      count = POOL_MAX_PARTICLES;
+    }
+
+    let system = this.pool.pop();
+
+    if (!system) {
+      system = this.createPooledSystem();
+    }
+
+    // Configure material for this burst
+    const mat = system.points.material as THREE.PointsMaterial;
+    mat.size = options.size ?? 0.2;
+    mat.blending = options.blending ?? THREE.AdditiveBlending;
+    mat.opacity = 1;
+
+    const wantsVertexColors = options.vertexColors !== false;
+    if (mat.vertexColors !== wantsVertexColors) {
+      mat.vertexColors = wantsVertexColors;
+      mat.needsUpdate = true;  // Shader recompile needed when vertexColors changes
+    }
+    if (!wantsVertexColors) {
+      mat.color.set(options.color ?? 0xffffff);
+    }
+
+    // Set draw range for actual particle count
+    system.points.geometry.setDrawRange(0, count);
+    system.activeCount = count;
+    system.maxLife = options.maxLife;
+    system.elapsed = 0;
+    system.noGravity = options.noGravity ?? false;
+    system.points.visible = true;
+
+    // Add to scene
+    if (!system.points.parent) {
+      this.scene.add(system.points);
+    }
+
+    return system;
+  }
+
+  /**
+   * Release a particle system back to the pool
+   */
+  private releaseSystem(system: ParticleSystem): void {
+    system.points.visible = false;
+    system.points.geometry.setDrawRange(0, 0);
+    system.elapsed = 0;
+    this.pool.push(system);
   }
 
   /**
    * Create ambient floating particles (spores, sparkles, dust)
    */
-  createAmbientParticles(color: number = 0xffffff, count: number = 200): void {
+  createAmbientParticles(color: number = 0xffffff, count: number = 70): void {
     // Clean up existing
     if (this.ambientParticles) {
       this.scene.remove(this.ambientParticles);
@@ -114,13 +245,17 @@ export class ParticleManager {
     position: THREE.Vector3,
     growing: boolean
   ): void {
-    const count = 24;
+    const count = 20;
+    const system = this.acquireSystem(count, {
+      size: 0.3,
+      blending: THREE.AdditiveBlending,
+      vertexColors: true,
+      maxLife: 0.6,
+      noGravity: true
+    });
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const colors = (system.points.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
 
     // Color palettes based on growing/shrinking
     const burstColors = growing
@@ -146,43 +281,22 @@ export class ParticleManager {
       const speed = 2.5 + Math.random() * 1.5;
       if (growing) {
         // Expand outward from center
-        velocities[i * 3] = Math.cos(angle) * speed;
-        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;  // Slight vertical variance
-        velocities[i * 3 + 2] = Math.sin(angle) * speed;
+        system.velocities[i * 3] = Math.cos(angle) * speed;
+        system.velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;
+        system.velocities[i * 3 + 2] = Math.sin(angle) * speed;
       } else {
         // Collapse inward toward center
-        velocities[i * 3] = -Math.cos(angle) * speed;
-        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;  // Slight vertical variance
-        velocities[i * 3 + 2] = -Math.sin(angle) * speed;
+        system.velocities[i * 3] = -Math.cos(angle) * speed;
+        system.velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;
+        system.velocities[i * 3 + 2] = -Math.sin(angle) * speed;
       }
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.3,
-      transparent: true,
-      opacity: 1,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.6,  // 0.6 second duration
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Float in place, no gravity
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (system.points.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   /**
@@ -190,11 +304,15 @@ export class ParticleManager {
    */
   createCollectBurst(position: THREE.Vector3, color: number = 0xffd700): void {
     const count = 20;
+    const system = this.acquireSystem(count, {
+      size: 0.25,
+      blending: THREE.AdditiveBlending,
+      vertexColors: false,
+      color,
+      maxLife: 0.8
+    });
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
 
     for (let i = 0; i < count; i++) {
       positions[i * 3] = position.x;
@@ -205,35 +323,15 @@ export class ParticleManager {
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 2 + 1;
 
-      velocities[i * 3] = Math.cos(angle) * speed * 0.5;
-      velocities[i * 3 + 1] = Math.random() * 3 + 2;
-      velocities[i * 3 + 2] = Math.sin(angle) * speed * 0.5;
+      system.velocities[i * 3] = Math.cos(angle) * speed * 0.5;
+      system.velocities[i * 3 + 1] = Math.random() * 3 + 2;
+      system.velocities[i * 3 + 2] = Math.sin(angle) * speed * 0.5;
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const material = new THREE.PointsMaterial({
-      color,
-      size: 0.25,
-      transparent: true,
-      opacity: 1,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.8,
-      isLooping: false,
-      elapsed: 0
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   /**
@@ -243,95 +341,58 @@ export class ParticleManager {
    * @param surfaceType - Surface type for color selection (grass, stone, wood, bouncy)
    */
   createLandingDust(position: THREE.Vector3, intensity: number = 1, surfaceType: string = 'grass'): void {
-    const count = Math.floor(15 * intensity);
+    const count = Math.min(Math.floor(15 * intensity), POOL_MAX_PARTICLES);
+    const system = this.acquireSystem(count, {
+      size: 0.2,
+      blending: THREE.NormalBlending,
+      vertexColors: true,
+      maxLife: 0.5
+    });
+    (system.points.material as THREE.PointsMaterial).opacity = 0.7;
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const colors = (system.points.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
 
     // Surface-specific color palettes
     let dustColors: THREE.Color[];
     switch (surfaceType) {
       case 'grass':
-        dustColors = [
-          new THREE.Color(0x7CB342),  // Green
-          new THREE.Color(0x8D6E63),  // Brown
-          new THREE.Color(0x9CCC65),  // Light green
-        ];
+        dustColors = [new THREE.Color(0x7CB342), new THREE.Color(0x8D6E63), new THREE.Color(0x9CCC65)];
         break;
       case 'stone':
-        dustColors = [
-          new THREE.Color(0x9E9E9E),  // Gray
-          new THREE.Color(0xBDBDBD),  // Light gray
-          new THREE.Color(0x757575),  // Dark gray
-        ];
+        dustColors = [new THREE.Color(0x9E9E9E), new THREE.Color(0xBDBDBD), new THREE.Color(0x757575)];
         break;
       case 'wood':
-        dustColors = [
-          new THREE.Color(0xD7CCC8),  // Tan
-          new THREE.Color(0xA1887F),  // Brown
-          new THREE.Color(0xBCAAA4),  // Light brown
-        ];
+        dustColors = [new THREE.Color(0xD7CCC8), new THREE.Color(0xA1887F), new THREE.Color(0xBCAAA4)];
         break;
       case 'bouncy':
-        // Bouncy surfaces use the dedicated bounce pad effect instead
-        // Fall through to default if called directly
       default:
-        dustColors = [
-          new THREE.Color(0xccbb99),  // Dusty tan (default)
-          new THREE.Color(0xd4c4a8),  // Light dusty tan
-          new THREE.Color(0xc4b488),  // Darker tan
-        ];
+        dustColors = [new THREE.Color(0xccbb99), new THREE.Color(0xd4c4a8), new THREE.Color(0xc4b488)];
     }
 
     for (let i = 0; i < count; i++) {
-      // Start at ground level
       positions[i * 3] = position.x;
       positions[i * 3 + 1] = position.y - 0.5;
       positions[i * 3 + 2] = position.z;
 
-      // Assign random color from surface palette
       const color = dustColors[Math.floor(Math.random() * dustColors.length)];
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
 
-      // Spread outward along ground
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 2 + 1;
 
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = Math.random() * 1.5; // Slight upward
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+      system.velocities[i * 3] = Math.cos(angle) * speed;
+      system.velocities[i * 3 + 1] = Math.random() * 1.5;
+      system.velocities[i * 3 + 2] = Math.sin(angle) * speed;
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.2,
-      transparent: true,
-      opacity: 0.7,
-      vertexColors: true,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.5,
-      isLooping: false,
-      elapsed: 0
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (system.points.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   // Footstep dust throttling
@@ -354,52 +415,35 @@ export class ParticleManager {
     // Only create dust if moving fast enough
     if (movementSpeed < 0.3) return;
 
-    const count = 4;  // Small number of particles
+    const count = 4;
+    const system = this.acquireSystem(count, {
+      size: 0.08,
+      blending: THREE.NormalBlending,
+      vertexColors: false,
+      color: 0xd4c4a8,
+      maxLife: 0.3
+    });
+    (system.points.material as THREE.PointsMaterial).opacity = 0.5;
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
 
     for (let i = 0; i < count; i++) {
-      // Start at feet level
       positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
       positions[i * 3 + 1] = position.y - 0.8;
       positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
 
-      // Small outward puff
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 0.5 + 0.2;
 
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = Math.random() * 0.5 + 0.2;
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+      system.velocities[i * 3] = Math.cos(angle) * speed;
+      system.velocities[i * 3 + 1] = Math.random() * 0.5 + 0.2;
+      system.velocities[i * 3 + 2] = Math.sin(angle) * speed;
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const material = new THREE.PointsMaterial({
-      color: 0xd4c4a8,  // Light dusty tan
-      size: 0.08,
-      transparent: true,
-      opacity: 0.5,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.3,  // Quick fade
-      isLooping: false,
-      elapsed: 0
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   /**
@@ -412,66 +456,46 @@ export class ParticleManager {
     this.lastRunDustTime = now;
 
     const count = 5 + Math.floor(Math.random() * 4);  // 5-8 particles
+    const system = this.acquireSystem(count, {
+      size: 0.12,
+      blending: THREE.NormalBlending,
+      vertexColors: true,
+      maxLife: 0.2
+    });
+    (system.points.material as THREE.PointsMaterial).opacity = 0.7;
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const colors = (system.points.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
 
-    // Stone/dust color palette
     const dustColors = [
-      new THREE.Color(0xD2B48C),  // Tan
-      new THREE.Color(0xC4A882),  // Darker tan
-      new THREE.Color(0xBEB5A0),  // Stone gray-tan
+      new THREE.Color(0xD2B48C),
+      new THREE.Color(0xC4A882),
+      new THREE.Color(0xBEB5A0),
     ];
 
     for (let i = 0; i < count; i++) {
-      // Start at feet level, slightly behind player
       positions[i * 3] = position.x + (Math.random() - 0.5) * 0.4;
       positions[i * 3 + 1] = position.y - 0.7;
       positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.4;
 
-      // Assign random dust color
       const color = dustColors[Math.floor(Math.random() * dustColors.length)];
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
 
-      // Puff outward and slightly up
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 1.5 + 0.8;
 
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = Math.random() * 1.2 + 0.5;  // Upward bias
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+      system.velocities[i * 3] = Math.cos(angle) * speed;
+      system.velocities[i * 3 + 1] = Math.random() * 1.2 + 0.5;
+      system.velocities[i * 3 + 2] = Math.sin(angle) * speed;
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.12,
-      transparent: true,
-      opacity: 0.7,
-      vertexColors: true,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.2,  // Quick fade (0.2s)
-      isLooping: false,
-      elapsed: 0
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (system.points.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   /**
@@ -610,285 +634,6 @@ export class ParticleManager {
       maxLife: 0.5,  // Short lifetime (0.4-0.6s range)
       isLooping: false,
       elapsed: 0
-    });
-  }
-
-  /**
-   * Long jump motion trail - line of particles behind player
-   * Cyan/white particles that fade quickly for speed effect
-   */
-  createLongJumpTrail(position: THREE.Vector3, direction: THREE.Vector3): void {
-    const count = 10;  // 8-12 particles in a line
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Trail color palette (cyan to white, matching double-jump)
-    const trailColors = [
-      new THREE.Color(0x88CCFF),  // Light cyan
-      new THREE.Color(0xAADDFF),  // Pale cyan
-    ];
-
-    // Normalize direction for positioning
-    const dir = direction.clone().normalize();
-
-    for (let i = 0; i < count; i++) {
-      // Position particles in a line behind the player
-      // Offset increases for particles further back in the trail
-      const offset = (i / count) * 1.5;  // Spread over 1.5 units behind player
-      positions[i * 3] = position.x - dir.x * offset + (Math.random() - 0.5) * 0.2;
-      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.3;
-      positions[i * 3 + 2] = position.z - dir.z * offset + (Math.random() - 0.5) * 0.2;
-
-      // Assign alternating cyan colors
-      const color = trailColors[i % 2];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Slight outward drift from the trail line
-      const perpX = -dir.z;  // Perpendicular to movement direction
-      const perpZ = dir.x;
-      const drift = (Math.random() - 0.5) * 2;
-
-      velocities[i * 3] = perpX * drift;
-      velocities[i * 3 + 1] = Math.random() * 0.5;  // Slight upward float
-      velocities[i * 3 + 2] = perpZ * drift;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.15,
-      transparent: true,
-      opacity: 1,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.25,  // Short lifetime (0.2-0.3s range)
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Trail particles float, don't fall
-    });
-  }
-
-  /**
-   * Wall slide dust/sparks - small particles when sliding along walls
-   * Stone/dust colors that drift slightly away from wall
-   */
-  createWallSlideParticles(position: THREE.Vector3, wallNormal: THREE.Vector3): void {
-    const count = 4;  // 3-5 small particles per call
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Stone/dust color palette (matches stone path colors)
-    const dustColors = [
-      new THREE.Color(0xD2B48C),  // Tan
-      new THREE.Color(0xC4A882),  // Darker tan
-    ];
-
-    for (let i = 0; i < count; i++) {
-      // Start at wall contact point with slight random offset
-      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.2;
-      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.4;
-      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.2;
-
-      // Assign alternating dust colors
-      const color = dustColors[i % 2];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Drift away from wall using wallNormal, plus slight random spread
-      const driftSpeed = Math.random() * 1.5 + 0.5;
-      velocities[i * 3] = wallNormal.x * driftSpeed + (Math.random() - 0.5) * 0.5;
-      velocities[i * 3 + 1] = Math.random() * 0.3 - 0.1;  // Slight up/down
-      velocities[i * 3 + 2] = wallNormal.z * driftSpeed + (Math.random() - 0.5) * 0.5;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.08,  // Small particles
-      transparent: true,
-      opacity: 0.6,
-      vertexColors: true,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.2,  // Very short lifetime (0.15-0.25s)
-      isLooping: false,
-      elapsed: 0
-    });
-  }
-
-  /**
-   * Wall jump spark burst - impactful visual feedback for wall kicks
-   * White/yellow sparks that shoot away from wall
-   */
-  createWallJumpSpark(position: THREE.Vector3, wallNormal: THREE.Vector3): void {
-    const count = 12;
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Spark color palette (white to yellow/gold)
-    const sparkColors = [
-      new THREE.Color(0xFFFFFF),  // White
-      new THREE.Color(0xFFFACD),  // Lemon chiffon
-      new THREE.Color(0xFFD700),  // Gold
-    ];
-
-    for (let i = 0; i < count; i++) {
-      // Start at wall contact point
-      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.2;
-      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.3;
-      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.2;
-
-      // Assign random spark color
-      const color = sparkColors[Math.floor(Math.random() * sparkColors.length)];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Particles shoot away from wall with spread
-      const baseSpeed = Math.random() * 4 + 3;  // Fast-moving sparks
-      const spreadAngle = (Math.random() - 0.5) * Math.PI * 0.5;  // Spread in a cone
-
-      // Calculate spread direction perpendicular to wall normal
-      const perpX = -wallNormal.z;
-      const perpZ = wallNormal.x;
-
-      velocities[i * 3] = wallNormal.x * baseSpeed + perpX * Math.sin(spreadAngle) * 2;
-      velocities[i * 3 + 1] = (Math.random() - 0.3) * 3;  // Slight upward bias
-      velocities[i * 3 + 2] = wallNormal.z * baseSpeed + perpZ * Math.sin(spreadAngle) * 2;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.1,
-      transparent: true,
-      opacity: 1,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.4,  // 0.4 second duration
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Sparks float, don't fall
-    });
-  }
-
-  /**
-   * Ground pound shockwave - expanding ring of particles
-   */
-  createGroundPoundShockwave(position: THREE.Vector3): void {
-    const count = 36;  // Ring of particles
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Gold/orange color palette
-    const shockwaveColors = [
-      new THREE.Color(0xFFAA33),  // Gold
-      new THREE.Color(0xFFCC66),  // Light gold
-    ];
-
-    for (let i = 0; i < count; i++) {
-      // Start at impact point (at ground level)
-      positions[i * 3] = position.x;
-      positions[i * 3 + 1] = position.y - 0.5;  // Ground level
-      positions[i * 3 + 2] = position.z;
-
-      // Assign alternating gold colors
-      const color = shockwaveColors[i % 2];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Expand outward in a ring (no Y velocity)
-      const angle = (i / count) * Math.PI * 2;
-      const speed = 8 + Math.random() * 2;  // Fast outward expansion
-
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = 0;  // No vertical movement
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.35,
-      transparent: true,
-      opacity: 1,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.35,  // Short lifetime (0.3-0.4s)
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Shockwave stays at ground level
     });
   }
 
@@ -1201,6 +946,10 @@ export class ParticleManager {
   private lastSwimmingBubblesTime: number = 0;
   private swimmingBubblesInterval: number = 0.2;  // 200ms between bubble spawns
 
+  // Ambient dust throttling
+  private lastAmbientDustTime: number = 0;
+  private ambientDustInterval: number = 0.7;  // 700ms between dust spawns
+
   /**
    * Subtle sparkle trail for collectible magnet effect
    * Small particles that drift behind the collectible as it moves toward player
@@ -1270,6 +1019,84 @@ export class ParticleManager {
       isLooping: false,
       elapsed: 0,
       noGravity: true  // Trail particles float, don't fall
+    });
+  }
+
+  /**
+   * Ambient floating dust mote particles - atmospheric depth effect
+   * Very small, slow-moving particles in light colors
+   * @param position - Center position to spawn dust around (usually player position)
+   */
+  createAmbientDust(position: THREE.Vector3): void {
+    const now = performance.now() / 1000;
+    if (now - this.lastAmbientDustTime < this.ambientDustInterval) return;
+    this.lastAmbientDustTime = now;
+
+    const count = 2 + Math.floor(Math.random() * 2);  // 2-3 particles per spawn
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const lifetimes = new Float32Array(count);
+
+    // Light dust mote color palette (white, cream, pale yellow)
+    const dustColors = [
+      new THREE.Color(0xFFFFFF),  // White
+      new THREE.Color(0xFFFDD0),  // Cream
+      new THREE.Color(0xFFFACD),  // Lemon chiffon (pale yellow)
+    ];
+
+    for (let i = 0; i < count; i++) {
+      // Spawn in a sphere around the position (5-10 units radius)
+      const radius = 5 + Math.random() * 5;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI;
+
+      positions[i * 3] = position.x + Math.sin(phi) * Math.cos(theta) * radius;
+      positions[i * 3 + 1] = position.y + Math.cos(phi) * radius * 0.5 + Math.random() * 3;  // Bias toward player height
+      positions[i * 3 + 2] = position.z + Math.sin(phi) * Math.sin(theta) * radius;
+
+      // Assign random dust color
+      const color = dustColors[Math.floor(Math.random() * dustColors.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      // Very slow, gentle drift with slight upward float
+      const driftSpeed = Math.random() * 0.3 + 0.1;
+      const driftAngle = Math.random() * Math.PI * 2;
+
+      velocities[i * 3] = Math.cos(driftAngle) * driftSpeed;
+      velocities[i * 3 + 1] = Math.random() * 0.2 + 0.1;  // Gentle upward float
+      velocities[i * 3 + 2] = Math.sin(driftAngle) * driftSpeed;
+
+      lifetimes[i] = 1.0;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.04,  // Very small particles
+      transparent: true,
+      opacity: 0.3,  // Low opacity (0.2-0.4 range)
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    this.scene.add(points);
+
+    this.systems.push({
+      points,
+      velocities,
+      lifetimes,
+      maxLife: 4.0,  // Long lifetime (3-5 seconds range)
+      isLooping: false,
+      elapsed: 0,
+      noGravity: true  // Dust motes float, don't fall
     });
   }
 
@@ -1518,72 +1345,6 @@ export class ParticleManager {
   }
 
   /**
-   * Ledge grab shimmer - soft golden sparkles at grab point
-   * Delicate, floating particles for visual feedback
-   */
-  createLedgeGrabShimmer(position: THREE.Vector3): void {
-    const count = 8;
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-
-    // Soft golden sparkle palette
-    const shimmerColors = [
-      new THREE.Color(0xFFD700),  // Gold
-      new THREE.Color(0xFFFACD),  // Lemon chiffon
-      new THREE.Color(0xFFF8DC),  // Cornsilk
-    ];
-
-    for (let i = 0; i < count; i++) {
-      // Start at grab point with slight random offset
-      positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
-      positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.2;
-      positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
-
-      // Assign random shimmer color
-      const color = shimmerColors[Math.floor(Math.random() * shimmerColors.length)];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-
-      // Gentle upward float with slight spread
-      velocities[i * 3] = (Math.random() - 0.5) * 0.3;
-      velocities[i * 3 + 1] = Math.random() * 0.8 + 0.3;  // Upward bias
-      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
-
-      lifetimes[i] = 1.0;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.08,
-      transparent: true,
-      opacity: 0.8,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.5,  // 0.5 second duration
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Shimmer floats gently upward
-    });
-  }
-
-  /**
    * Bounce pad effect - ring of particles expanding outward at ground level
    * Cyan/white colors for spring/bouncy feel
    */
@@ -1654,9 +1415,9 @@ export class ParticleManager {
 
   /**
    * Collect trail - particles arc upward toward top-left of screen (UI counter location)
-   * Called when collecting stars/cards to visually connect pickup to HUD
+   * Called when collecting cards to visually connect pickup to HUD
    * @param startPos - World position where collectible was picked up
-   * @param color - Particle color matching collectible type (gold for stars, red for cards)
+   * @param color - Particle color matching collectible type (red for cards)
    */
   createCollectTrail(startPos: THREE.Vector3, color: number): void {
     const count = 6;  // 5-6 particles
@@ -1930,6 +1691,18 @@ export class ParticleManager {
     // Update rose petals
     this.updateRosePetals(dt);
 
+    // Evict oldest systems if over cap
+    while (this.systems.length > ParticleManager.MAX_SYSTEMS) {
+      const oldest = this.systems.shift()!;
+      if (oldest.pooled) {
+        this.releaseSystem(oldest);
+      } else {
+        this.scene.remove(oldest.points);
+        oldest.points.geometry.dispose();
+        (oldest.points.material as THREE.Material).dispose();
+      }
+    }
+
     // Update burst systems
     const toRemove: number[] = [];
 
@@ -1944,7 +1717,8 @@ export class ParticleManager {
 
       const positions = system.points.geometry.attributes.position;
       const arr = positions.array as Float32Array;
-      const count = positions.count;
+      // Use activeCount for pooled systems to avoid iterating unused buffer slots
+      const count = system.activeCount ?? positions.count;
 
       // Update positions based on velocity
       for (let j = 0; j < count; j++) {
@@ -1968,13 +1742,17 @@ export class ParticleManager {
       material.opacity = 1 - (system.elapsed / system.maxLife);
     }
 
-    // Remove completed systems
+    // Remove completed systems (return pooled ones, dispose non-pooled)
     for (let i = toRemove.length - 1; i >= 0; i--) {
       const index = toRemove[i];
       const system = this.systems[index];
-      this.scene.remove(system.points);
-      system.points.geometry.dispose();
-      (system.points.material as THREE.Material).dispose();
+      if (system.pooled) {
+        this.releaseSystem(system);
+      } else {
+        this.scene.remove(system.points);
+        system.points.geometry.dispose();
+        (system.points.material as THREE.Material).dispose();
+      }
       this.systems.splice(index, 1);
     }
   }
@@ -1992,7 +1770,7 @@ export class ParticleManager {
    * Create rose petal emitter for Queen's Garden
    * Pink/red petals that drift slowly with wind simulation
    */
-  createRosePetals(bounds: THREE.Box3, count: number = 80): void {
+  createRosePetals(bounds: THREE.Box3, count: number = 35): void {
     // Clean up existing
     if (this.rosePetals) {
       this.scene.remove(this.rosePetals.points);
@@ -2064,8 +1842,9 @@ export class ParticleManager {
   /**
    * Update rose petals with wind simulation
    */
-  private updateRosePetals(dt: number, windDirection: THREE.Vector3 = new THREE.Vector3(0.3, 0, 0.1)): void {
+  private updateRosePetals(dt: number, windDirection?: THREE.Vector3): void {
     if (!this.rosePetals) return;
+    const wind = windDirection ?? this.defaultWindDirection;
 
     const positions = this.rosePetals.points.geometry.attributes.position;
     const arr = positions.array as Float32Array;
@@ -2073,18 +1852,18 @@ export class ParticleManager {
     const bounds = this.rosePetals.bounds;
     const velocities = this.rosePetals.velocities;
 
-    const size = new THREE.Vector3();
-    bounds.getSize(size);
-    const center = new THREE.Vector3();
-    bounds.getCenter(center);
+    bounds.getSize(this.roseSizeCache);
+    bounds.getCenter(this.roseCenterCache);
+    const size = this.roseSizeCache;
+    const center = this.roseCenterCache;
 
     for (let i = 0; i < count; i++) {
       // Add wind influence with slight turbulence
       const turbulence = Math.sin(arr[i * 3] * 0.5 + arr[i * 3 + 1] * 0.3) * 0.1;
 
       // Update velocity with wind
-      velocities[i * 3] += windDirection.x * dt + turbulence * dt;
-      velocities[i * 3 + 2] += windDirection.z * dt + turbulence * dt;
+      velocities[i * 3] += wind.x * dt + turbulence * dt;
+      velocities[i * 3 + 2] += wind.z * dt + turbulence * dt;
 
       // Apply velocity
       arr[i * 3] += velocities[i * 3] * dt;
@@ -2149,5 +1928,13 @@ export class ParticleManager {
       (system.points.material as THREE.Material).dispose();
     }
     this.systems = [];
+
+    // Dispose pool
+    for (const system of this.pool) {
+      this.scene.remove(system.points);
+      system.points.geometry.dispose();
+      (system.points.material as THREE.Material).dispose();
+    }
+    this.pool = [];
   }
 }

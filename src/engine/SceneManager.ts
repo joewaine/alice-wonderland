@@ -7,33 +7,30 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { LevelData, WonderStar } from '../data/LevelData';
+import type { LevelData } from '../data/LevelData';
+import { validateLevelData } from '../data/LevelData';
 import { LevelBuilder, type BuiltLevel } from '../world/LevelBuilder';
 import { CollectibleManager } from '../world/Collectible';
-import { WonderStarManager } from '../world/WonderStarManager';
 import { Gate } from '../world/Gate';
 import { HUD } from '../ui/HUD';
 import { audioManager } from '../audio/AudioManager';
 
 export class SceneManager {
   private scene: THREE.Scene;
-  private renderer: THREE.WebGLRenderer;
   private levelBuilder: LevelBuilder;
   private collectibleManager: CollectibleManager;
-  private wonderStarManager: WonderStarManager;
   private hud: HUD;
   private gate: Gate | null = null;
   private currentLevel: BuiltLevel | null = null;
-  private currentSkyboxTexture: THREE.Texture | null = null;
+  private currentSkyboxTexture: THREE.Texture | THREE.CubeTexture | null = null;
   private skyboxMesh: THREE.Mesh | null = null;
   private currentLevelData: LevelData | null = null;
 
   // Pre-allocated objects to avoid per-frame GC pressure
   private boundsCache: THREE.Box3 = new THREE.Box3();
+  private expandedBoundsCache: THREE.Box3 = new THREE.Box3();
+  private platformCenterCache: THREE.Vector3 = new THREE.Vector3();
 
-  // Wind animation state
-  private windTime: number = 0;
-  private foliageMeshes: THREE.Object3D[] = [];
 
   // Breakable platform stress tracking (maps platform index to stress time)
   private breakablePlatformStress: Map<number, number> = new Map();
@@ -43,17 +40,14 @@ export class SceneManager {
   public onCollectiblePickup: ((type: string, position: THREE.Vector3) => void) | null = null;
   public onGateUnlock: ((position: THREE.Vector3) => void) | null = null;
   public onGateEnter: ((position: THREE.Vector3) => void) | null = null;
-  public onWonderStarCollected: ((star: WonderStar, collected: number, total: number) => void) | null = null;
   public onCollectibleMagnetDrift: ((position: THREE.Vector3, direction: THREE.Vector3) => void) | null = null;
   public onCheckpointActivated: ((checkpoint: { position: THREE.Vector3; order: number }) => void) | null = null;
   public onBreakablePlatformStress: ((position: THREE.Vector3, intensity: number) => void) | null = null;
 
-  constructor(scene: THREE.Scene, world: RAPIER.World, renderer: THREE.WebGLRenderer) {
+  constructor(scene: THREE.Scene, world: RAPIER.World, _renderer: THREE.WebGLRenderer) {
     this.scene = scene;
-    this.renderer = renderer;
     this.levelBuilder = new LevelBuilder(scene, world);
     this.collectibleManager = new CollectibleManager();
-    this.wonderStarManager = new WonderStarManager(scene);
     this.hud = new HUD();
 
     // Wire up collectible updates to HUD and wonder star tracking
@@ -62,8 +56,6 @@ export class SceneManager {
       if (this.onCollectiblePickup) {
         this.onCollectiblePickup(type, position);
       }
-      // Track for wonder star challenges
-      this.wonderStarManager.trackCollectible(type as 'star' | 'card' | 'key');
     };
 
     // Wire up key collection to gate unlock
@@ -84,12 +76,6 @@ export class SceneManager {
       }
     };
 
-    // Wire up wonder star collection
-    this.wonderStarManager.onStarCollected = (star, collected, total) => {
-      this.hud.showMessage(`Wonder Star: ${star.name}!`, 3000);
-      audioManager.playKeyCollect();  // Use key sound for wonder stars
-      this.onWonderStarCollected?.(star, collected, total);
-    };
   }
 
   /**
@@ -122,17 +108,10 @@ export class SceneManager {
     this.gate.setup(this.scene);
     this.gate.onEnter = () => this.handleGateEnter();
 
-    // Setup wonder stars
     this.currentLevelData = levelData;
-    if (levelData.wonder_stars) {
-      this.wonderStarManager.setStars(levelData.wonder_stars);
-    }
 
     // Load skybox
     await this.loadSkybox();
-
-    // Collect foliage meshes for wind animation
-    this.collectFoliageMeshes();
 
     // Show welcome title
     this.hud.showChapterTitle(
@@ -149,7 +128,7 @@ export class SceneManager {
   }
 
   /**
-   * Load skybox as a large inverted sphere
+   * Load skybox — tries cubemap images first, falls back to procedural
    */
   private async loadSkybox(): Promise<void> {
     // Dispose previous skybox
@@ -163,102 +142,180 @@ export class SceneManager {
       (this.skyboxMesh.material as THREE.Material).dispose();
       this.skyboxMesh = null;
     }
+    this.scene.background = null;
 
-    const skyboxPath = `${import.meta.env.BASE_URL}assets/skyboxes/queens_garden.png`;
-
+    // Try loading cubemap images (AI-generated faces)
     try {
-      const texture = await new Promise<THREE.Texture>((resolve, reject) => {
-        const loader = new THREE.TextureLoader();
+      const loader = new THREE.CubeTextureLoader();
+      loader.setPath('assets/skyboxes/garden/');
+      const cubeTexture = await new Promise<THREE.CubeTexture>((resolve, reject) => {
         loader.load(
-          skyboxPath,
-          (tex) => resolve(tex),
+          ['px.png', 'nx.png', 'py.png', 'ny.png', 'pz.png', 'nz.png'],
+          resolve,
           undefined,
-          () => reject(new Error(`Failed to load skybox`))
+          reject
         );
       });
-
-      // Configure texture filtering for maximum quality
-      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-      texture.minFilter = THREE.LinearMipmapLinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-      texture.generateMipmaps = true;
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.ClampToEdgeWrapping;
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.needsUpdate = true;
-      this.currentSkyboxTexture = texture;
-
-      // Create inverted sphere for skybox (texture on inside)
-      const geometry = new THREE.SphereGeometry(500, 64, 32);
-      geometry.scale(-1, 1, 1);
-
-      const material = new THREE.MeshBasicMaterial({
-        map: texture,
-        side: THREE.FrontSide,
-        depthWrite: false
-      });
-
-      this.skyboxMesh = new THREE.Mesh(geometry, material);
-      this.skyboxMesh.renderOrder = -1;
-      this.scene.add(this.skyboxMesh);
-
-      // Clear scene background color
-      this.scene.background = null;
-
-      console.log(`Loaded skybox for The Queen's Garden`);
+      cubeTexture.colorSpace = THREE.SRGBColorSpace;
+      this.scene.background = cubeTexture;
+      this.currentSkyboxTexture = cubeTexture;
+      console.log('Loaded cubemap skybox from images');
     } catch {
-      // Fallback to gradient
-      this.createGradientSkybox();
+      // Fallback to procedural skybox
+      this.createGardenSkybox();
     }
   }
 
   /**
-   * Create fallback gradient skybox - Queen's Garden golden hour with clouds
+   * Create lush procedural garden skybox — Queen's Garden golden hour
+   * 2048x2048 canvas with sky gradient, sun, clouds, rolling hills, distant trees, and flowers
    */
-  private createGradientSkybox(): void {
+  private createGardenSkybox(): void {
+    const W = 2048;
+    const H = 2048;
     const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 1024;
+    canvas.width = W;
+    canvas.height = H;
     const ctx = canvas.getContext('2d')!;
 
-    // Golden hour gradient
-    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, '#5B9BD5');    // Sky blue at top
-    gradient.addColorStop(0.3, '#87CEEB');   // Light blue
-    gradient.addColorStop(0.5, '#FAD7A0');   // Golden
-    gradient.addColorStop(0.7, '#FFCC80');   // Warm orange
-    gradient.addColorStop(1, '#FFE4B5');     // Light peach at horizon
+    // --- Sky gradient: warm golden hour ---
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#4A90C4');     // Deep blue at zenith
+    sky.addColorStop(0.15, '#6BB3D9');  // Mid blue
+    sky.addColorStop(0.35, '#A8D8EA');  // Light blue
+    sky.addColorStop(0.50, '#F5E6C8');  // Warm golden
+    sky.addColorStop(0.60, '#FFD89B');  // Amber
+    sky.addColorStop(0.68, '#FFCC80');  // Warm orange
+    sky.addColorStop(0.75, '#E8C4A0');  // Peachy horizon
+    sky.addColorStop(1.0, '#D4E8C4');   // Green-ish below horizon
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // --- Sun with layered glow ---
+    const sunX = W * 0.72;
+    const sunY = H * 0.48;
 
-    // Draw sun glow
-    const sunX = canvas.width * 0.7;
-    const sunY = canvas.height * 0.55;
-    const sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 150);
-    sunGlow.addColorStop(0, 'rgba(255, 248, 220, 0.9)');
-    sunGlow.addColorStop(0.2, 'rgba(255, 223, 150, 0.6)');
-    sunGlow.addColorStop(0.5, 'rgba(255, 200, 100, 0.2)');
-    sunGlow.addColorStop(1, 'rgba(255, 200, 100, 0)');
-    ctx.fillStyle = sunGlow;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Outer glow
+    const outerGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 250);
+    outerGlow.addColorStop(0, 'rgba(255, 250, 220, 0.4)');
+    outerGlow.addColorStop(0.4, 'rgba(255, 230, 160, 0.15)');
+    outerGlow.addColorStop(1, 'rgba(255, 200, 100, 0)');
+    ctx.fillStyle = outerGlow;
+    ctx.fillRect(0, 0, W, H);
 
-    // Draw sun disk
-    ctx.fillStyle = 'rgba(255, 250, 230, 0.95)';
+    // Inner glow
+    const innerGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 120);
+    innerGlow.addColorStop(0, 'rgba(255, 252, 240, 0.9)');
+    innerGlow.addColorStop(0.3, 'rgba(255, 240, 190, 0.5)');
+    innerGlow.addColorStop(0.7, 'rgba(255, 220, 140, 0.15)');
+    innerGlow.addColorStop(1, 'rgba(255, 200, 100, 0)');
+    ctx.fillStyle = innerGlow;
+    ctx.fillRect(0, 0, W, H);
+
+    // Sun disk
+    const diskGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 50);
+    diskGrad.addColorStop(0, 'rgba(255, 255, 245, 1)');
+    diskGrad.addColorStop(0.7, 'rgba(255, 248, 220, 0.95)');
+    diskGrad.addColorStop(1, 'rgba(255, 240, 200, 0.3)');
+    ctx.fillStyle = diskGrad;
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 40, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 50, 0, Math.PI * 2);
     ctx.fill();
 
-    // Draw stylized clouds (BotW-inspired puffy shapes)
-    ctx.globalAlpha = 0.7;
-    this.drawCloud(ctx, canvas.width * 0.15, canvas.height * 0.25, 80);
-    this.drawCloud(ctx, canvas.width * 0.4, canvas.height * 0.18, 60);
-    this.drawCloud(ctx, canvas.width * 0.85, canvas.height * 0.32, 70);
-    this.drawCloud(ctx, canvas.width * 0.55, canvas.height * 0.38, 50);
-    this.drawCloud(ctx, canvas.width * 0.25, canvas.height * 0.42, 45);
+    // --- Clouds at multiple depths ---
+    // Far clouds (smaller, more transparent)
+    ctx.globalAlpha = 0.4;
+    this.drawCloud(ctx, W * 0.10, H * 0.15, 60);
+    this.drawCloud(ctx, W * 0.30, H * 0.12, 45);
+    this.drawCloud(ctx, W * 0.55, H * 0.20, 50);
+    this.drawCloud(ctx, W * 0.82, H * 0.18, 55);
+
+    // Mid clouds
+    ctx.globalAlpha = 0.6;
+    this.drawCloud(ctx, W * 0.05, H * 0.28, 90);
+    this.drawCloud(ctx, W * 0.25, H * 0.22, 75);
+    this.drawCloud(ctx, W * 0.50, H * 0.30, 85);
+    this.drawCloud(ctx, W * 0.90, H * 0.25, 80);
+
+    // Near clouds (larger, more opaque)
+    ctx.globalAlpha = 0.75;
+    this.drawCloud(ctx, W * 0.15, H * 0.35, 110);
+    this.drawCloud(ctx, W * 0.42, H * 0.38, 100);
+    this.drawCloud(ctx, W * 0.68, H * 0.33, 95);
+    this.drawCloud(ctx, W * 0.88, H * 0.40, 80);
     ctx.globalAlpha = 1;
 
-    // Create inverted sphere for sky dome
+    // --- Rolling hills silhouette ---
+    const horizonY = H * 0.68;
+
+    // Far hills (lighter green)
+    ctx.fillStyle = '#8CB878';
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY);
+    for (let x = 0; x <= W; x += 4) {
+      const h = Math.sin(x * 0.003) * 40 + Math.sin(x * 0.008 + 1) * 25 + Math.sin(x * 0.015) * 12;
+      ctx.lineTo(x, horizonY - 30 - h);
+    }
+    ctx.lineTo(W, H);
+    ctx.lineTo(0, H);
+    ctx.fill();
+
+    // Mid hills (medium green)
+    ctx.fillStyle = '#6B9F58';
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY);
+    for (let x = 0; x <= W; x += 4) {
+      const h = Math.sin(x * 0.004 + 2) * 35 + Math.sin(x * 0.01 + 0.5) * 20 + Math.sin(x * 0.02 + 3) * 10;
+      ctx.lineTo(x, horizonY - 10 - h);
+    }
+    ctx.lineTo(W, H);
+    ctx.lineTo(0, H);
+    ctx.fill();
+
+    // Near hills (darker green)
+    ctx.fillStyle = '#4A7C3F';
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY + 15);
+    for (let x = 0; x <= W; x += 4) {
+      const h = Math.sin(x * 0.005 + 4) * 30 + Math.sin(x * 0.012 + 1.5) * 18 + Math.sin(x * 0.025) * 8;
+      ctx.lineTo(x, horizonY + 15 - h);
+    }
+    ctx.lineTo(W, H);
+    ctx.lineTo(0, H);
+    ctx.fill();
+
+    // --- Distant trees along the hills ---
+    this.drawTreeLine(ctx, W, horizonY - 50, '#3D6B33', 0.6, 18);
+    this.drawTreeLine(ctx, W, horizonY - 25, '#2D5A27', 0.75, 25);
+    this.drawTreeLine(ctx, W, horizonY + 5, '#1F4A1C', 0.85, 30);
+
+    // --- Ground fill below horizon ---
+    const groundGrad = ctx.createLinearGradient(0, horizonY + 30, 0, H);
+    groundGrad.addColorStop(0, '#4A7C3F');
+    groundGrad.addColorStop(0.3, '#3D6B33');
+    groundGrad.addColorStop(1, '#2D5520');
+    ctx.fillStyle = groundGrad;
+    ctx.fillRect(0, horizonY + 30, W, H - horizonY - 30);
+
+    // --- Flower dots along the horizon ---
+    const flowerColors = [
+      'rgba(220, 60, 80, 0.7)',   // Red roses
+      'rgba(255, 180, 200, 0.7)', // Pink roses
+      'rgba(255, 255, 240, 0.6)', // White roses
+      'rgba(255, 220, 100, 0.5)', // Yellow
+      'rgba(200, 130, 220, 0.5)', // Purple
+    ];
+    for (let i = 0; i < 200; i++) {
+      const fx = (i * 37 + Math.sin(i * 7.3) * 60) % W;
+      const fy = horizonY + 10 + Math.sin(i * 3.1) * 25 + Math.sin(i * 0.7) * 15;
+      const fr = 2 + (i % 3);
+      ctx.fillStyle = flowerColors[i % flowerColors.length];
+      ctx.beginPath();
+      ctx.arc(fx, fy, fr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- Create sky dome mesh ---
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
 
@@ -277,7 +334,47 @@ export class SceneManager {
     this.scene.background = null;
 
     this.currentSkyboxTexture = texture;
-    console.log(`Using procedural golden hour skybox with clouds`);
+    console.log('Created lush garden skybox');
+  }
+
+  /**
+   * Draw a line of tree silhouettes along the hills
+   */
+  private drawTreeLine(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    baseY: number,
+    color: string,
+    alpha: number,
+    spacing: number
+  ): void {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+
+    for (let x = 0; x < width; x += spacing) {
+      const offset = Math.sin(x * 0.01 + baseY * 0.1) * 8;
+      const treeH = 15 + Math.abs(Math.sin(x * 0.037)) * 25;
+      const treeW = 8 + Math.abs(Math.sin(x * 0.023)) * 10;
+      const ty = baseY + offset;
+
+      // Triangle tree (simple stylized)
+      ctx.beginPath();
+      ctx.moveTo(x, ty);
+      ctx.lineTo(x - treeW / 2, ty + treeH);
+      ctx.lineTo(x + treeW / 2, ty + treeH);
+      ctx.closePath();
+      ctx.fill();
+
+      // Second layer for fullness
+      ctx.beginPath();
+      ctx.moveTo(x, ty + 5);
+      ctx.lineTo(x - treeW * 0.4, ty + treeH * 0.8);
+      ctx.lineTo(x + treeW * 0.4, ty + treeH * 0.8);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
   }
 
   /**
@@ -287,7 +384,7 @@ export class SceneManager {
     const cloudColor = 'rgba(255, 255, 255, 0.9)';
     const shadowColor = 'rgba(200, 200, 220, 0.4)';
 
-    // Cloud made of overlapping circles
+    // Cloud shadow
     ctx.fillStyle = shadowColor;
     ctx.beginPath();
     ctx.arc(x + size * 0.05, y + size * 0.1, size * 0.4, 0, Math.PI * 2);
@@ -295,6 +392,7 @@ export class SceneManager {
     ctx.arc(x - size * 0.35, y + size * 0.08, size * 0.3, 0, Math.PI * 2);
     ctx.fill();
 
+    // Cloud body — overlapping circles
     ctx.fillStyle = cloudColor;
     ctx.beginPath();
     ctx.arc(x, y, size * 0.4, 0, Math.PI * 2);
@@ -302,61 +400,10 @@ export class SceneManager {
     ctx.arc(x - size * 0.4, y, size * 0.3, 0, Math.PI * 2);
     ctx.arc(x + size * 0.15, y - size * 0.2, size * 0.3, 0, Math.PI * 2);
     ctx.arc(x - size * 0.15, y - size * 0.15, size * 0.25, 0, Math.PI * 2);
+    // Extra puffs for more detail
+    ctx.arc(x + size * 0.55, y - size * 0.05, size * 0.2, 0, Math.PI * 2);
+    ctx.arc(x - size * 0.5, y - size * 0.1, size * 0.2, 0, Math.PI * 2);
     ctx.fill();
-  }
-
-  /**
-   * Collect foliage meshes for wind animation
-   */
-  private collectFoliageMeshes(): void {
-    this.foliageMeshes = [];
-    if (!this.currentLevel) return;
-
-    // Traverse all level objects to find foliage (hedges, roses, topiaries)
-    this.scene.traverse((object) => {
-      // Look for objects that are likely foliage based on their material colors
-      if (object instanceof THREE.Mesh) {
-        const material = object.material as THREE.ShaderMaterial;
-        if (material.uniforms?.color) {
-          const color = material.uniforms.color.value as THREE.Color;
-          // Green colors (hedges, topiaries) - check if predominantly green
-          if (color.g > 0.3 && color.g > color.r && color.g > color.b * 0.8) {
-            this.foliageMeshes.push(object);
-          }
-        }
-      }
-      // Also include Groups that contain foliage (rose bushes, topiaries)
-      if (object.name && (
-        object.name.includes('hedge') ||
-        object.name.includes('rose') ||
-        object.name.includes('topiary')
-      )) {
-        this.foliageMeshes.push(object);
-      }
-    });
-
-    console.log(`Found ${this.foliageMeshes.length} foliage objects for wind animation`);
-  }
-
-  /**
-   * Update wind animation on foliage
-   */
-  private updateWindAnimation(dt: number): void {
-    this.windTime += dt;
-
-    for (let i = 0; i < this.foliageMeshes.length; i++) {
-      const mesh = this.foliageMeshes[i];
-
-      // Create gentle swaying motion using sin waves
-      // Use mesh position as seed for variation
-      const seed = mesh.position.x * 0.1 + mesh.position.z * 0.15;
-      const swayX = Math.sin(this.windTime * 1.2 + seed) * 0.015;
-      const swayZ = Math.sin(this.windTime * 0.9 + seed + 1.5) * 0.012;
-
-      // Apply rotation-based sway (more natural than position shift)
-      mesh.rotation.x = swayX;
-      mesh.rotation.z = swayZ;
-    }
   }
 
   /**
@@ -368,7 +415,11 @@ export class SceneManager {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      return await response.json();
+      const data = await response.json();
+      if (!validateLevelData(data)) {
+        throw new Error('Invalid level data structure');
+      }
+      return data;
     } catch (error) {
       console.error(`Failed to fetch level data:`, error);
       return null;
@@ -404,12 +455,6 @@ export class SceneManager {
     // Update collectibles
     this.collectibleManager.update(dt, playerPosition, playerRadius);
 
-    // Update wonder stars
-    this.wonderStarManager.update(dt, playerPosition, playerRadius);
-
-    // Track exploration challenges (player reaching positions)
-    this.wonderStarManager.trackReachPosition(playerPosition);
-
     // Update gate
     if (this.gate) {
       this.gate.update(dt, playerPosition);
@@ -423,9 +468,6 @@ export class SceneManager {
 
     // Update bouncy platforms
     this.updateBouncyPlatforms(dt, playerPosition);
-
-    // Animate foliage wind
-    this.updateWindAnimation(dt);
 
     // Update breakable platforms (crumble warning effect)
     this.updateBreakablePlatforms(dt, playerPosition);
@@ -522,11 +564,11 @@ export class SceneManager {
       if (platform.broken) continue;
 
       // Check if player is on top of this breakable platform
-      const expandedBounds = platform.bounds.clone();
-      expandedBounds.max.y += 1.5;  // Check above platform surface
-      expandedBounds.min.y = platform.bounds.max.y - 0.2;  // Only top surface
+      this.expandedBoundsCache.copy(platform.bounds);
+      this.expandedBoundsCache.max.y += 1.5;  // Check above platform surface
+      this.expandedBoundsCache.min.y = platform.bounds.max.y - 0.2;  // Only top surface
 
-      const isOnPlatform = expandedBounds.containsPoint(playerPosition);
+      const isOnPlatform = this.expandedBoundsCache.containsPoint(playerPosition);
 
       if (isOnPlatform) {
         // Accumulate stress time
@@ -538,12 +580,11 @@ export class SceneManager {
         const intensity = Math.min(newStress / breakTime, 1);
 
         // Emit crumble particles - position at platform center top
-        const platformCenter = new THREE.Vector3();
-        platform.bounds.getCenter(platformCenter);
-        platformCenter.y = platform.bounds.max.y;
+        platform.bounds.getCenter(this.platformCenterCache);
+        this.platformCenterCache.y = platform.bounds.max.y;
 
         if (this.onBreakablePlatformStress) {
-          this.onBreakablePlatformStress(platformCenter, intensity);
+          this.onBreakablePlatformStress(this.platformCenterCache, intensity);
         }
 
         // Visual feedback: shake the platform mesh slightly
@@ -658,11 +699,11 @@ export class SceneManager {
         }
 
         // Expand slightly above the platform surface
-        const checkBounds = this.boundsCache.clone();
-        checkBounds.max.y += 1.5; // Check above platform
-        checkBounds.min.y = checkBounds.max.y - 2; // Only check near the top
+        this.expandedBoundsCache.copy(this.boundsCache);
+        this.expandedBoundsCache.max.y += 1.5; // Check above platform
+        this.expandedBoundsCache.min.y = this.expandedBoundsCache.max.y - 2; // Only check near the top
 
-        if (checkBounds.containsPoint(position)) {
+        if (this.expandedBoundsCache.containsPoint(position)) {
           // Return surface type from userData
           const surfaceType = platform.userData?.surfaceType;
           if (surfaceType === 'grass' || surfaceType === 'stone' || surfaceType === 'wood') {
@@ -706,7 +747,7 @@ export class SceneManager {
         (platform.mesh.material as THREE.Material).dispose();
 
         // Remove physics body
-        this.levelBuilder['world'].removeRigidBody(platform.body);
+        this.levelBuilder.removeRigidBody(platform.body);
 
         console.log('Platform broken!');
         return true;
@@ -773,15 +814,6 @@ export class SceneManager {
     this.hud.flashScreen();
   }
 
-  // ===== Wonder Star Methods =====
-
-  /**
-   * Get wonder stars for current level
-   */
-  getWonderStars(): WonderStar[] {
-    return this.currentLevelData?.wonder_stars || [];
-  }
-
   /**
    * Get quests for current level (for QuestManager)
    */
@@ -805,57 +837,6 @@ export class SceneManager {
 
 
   /**
-   * Get collected star IDs
-   */
-  getCollectedStarIds(): string[] {
-    return this.wonderStarManager.getStars()
-      .filter(s => s.collected)
-      .map(s => s.data.id);
-  }
-
-  /**
-   * Set active wonder star challenge
-   */
-  setActiveWonderStar(starId: string | null): void {
-    this.wonderStarManager.setActiveStar(starId);
-  }
-
-  /**
-   * Get spawn point for active star (if specified)
-   */
-  getActiveStarSpawn(): THREE.Vector3 | null {
-    return this.wonderStarManager.getActiveStarSpawn();
-  }
-
-  /**
-   * Track platform break for wonder star challenges
-   */
-  trackPlatformBreak(): void {
-    this.wonderStarManager.trackPlatformBreak();
-  }
-
-  /**
-   * Track ground pound for wonder star challenges
-   */
-  trackGroundPound(): void {
-    this.wonderStarManager.trackGroundPound();
-  }
-
-  /**
-   * Track long jump for wonder star challenges
-   */
-  trackLongJump(): void {
-    this.wonderStarManager.trackLongJump();
-  }
-
-  /**
-   * Get wonder star stats
-   */
-  getWonderStarStats(): { collected: number; total: number } {
-    return this.wonderStarManager.getStats();
-  }
-
-  /**
    * Clean up
    */
   dispose(): void {
@@ -870,7 +851,7 @@ export class SceneManager {
       this.skyboxMesh.geometry.dispose();
       (this.skyboxMesh.material as THREE.Material).dispose();
     }
-    this.wonderStarManager.cleanup();
+    this.scene.background = null;
     this.hud.dispose();
   }
 }

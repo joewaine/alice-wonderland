@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 
-export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'fall' | 'land' | 'groundPound';
+export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'fall' | 'land';
 
 // Priority determines which animations can interrupt others
 // Higher priority = can interrupt lower priority states
@@ -18,7 +18,6 @@ const STATE_PRIORITY: Record<AnimationState, number> = {
   fall: 3,
   jump: 4,
   land: 5,
-  groundPound: 6,  // Highest priority - interrupts everything
 };
 
 // States that auto-transition to another state when complete
@@ -35,7 +34,6 @@ const DEFAULT_CROSSFADE: Partial<Record<AnimationState, number>> = {
   jump: 0.1,
   fall: 0.2,
   land: 0.1,
-  groundPound: 0.05,  // Very fast for impact feel
 };
 
 export interface AnimationStateManagerOptions {
@@ -54,29 +52,31 @@ export class AnimationStateManager {
   // Callback when animation completes (for auto-transitions)
   private onAnimationComplete: ((state: AnimationState) => void) | null = null;
 
+  // Stored handler ref for cleanup
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private handleFinished = (e: any) => {
+    const action = e.action as THREE.AnimationAction;
+    const state = this.findStateForAction(action);
+
+    if (state && state === this.currentState) {
+      const nextState = AUTO_TRANSITIONS[state];
+      if (nextState && this.animations.has(nextState)) {
+        this.setState(nextState);
+      }
+
+      if (this.onAnimationComplete) {
+        this.onAnimationComplete(state);
+      }
+    }
+  };
+
   constructor(mixer: THREE.AnimationMixer, options: AnimationStateManagerOptions = {}) {
     this.mixer = mixer;
     this.defaultCrossfade = options.defaultCrossfade ?? 0.2;
     this.speedScale = options.speedScale ?? 1.0;
 
     // Listen for animation completion
-    this.mixer.addEventListener('finished', (e) => {
-      const action = e.action as THREE.AnimationAction;
-      const state = this.findStateForAction(action);
-
-      if (state && state === this.currentState) {
-        // Check for auto-transition
-        const nextState = AUTO_TRANSITIONS[state];
-        if (nextState && this.animations.has(nextState)) {
-          this.setState(nextState);
-        }
-
-        // Notify callback
-        if (this.onAnimationComplete) {
-          this.onAnimationComplete(state);
-        }
-      }
-    });
+    this.mixer.addEventListener('finished', this.handleFinished);
   }
 
   /**
@@ -204,20 +204,6 @@ export class AnimationStateManager {
   }
 
   /**
-   * Check if currently in a specific state
-   */
-  isInState(state: AnimationState): boolean {
-    return this.currentState === state;
-  }
-
-  /**
-   * Check if currently transitioning between states
-   */
-  getIsTransitioning(): boolean {
-    return this.isTransitioning;
-  }
-
-  /**
    * Set callback for when animations complete
    */
   setOnAnimationComplete(callback: (state: AnimationState) => void): void {
@@ -225,23 +211,9 @@ export class AnimationStateManager {
   }
 
   /**
-   * Get all registered states
-   */
-  getRegisteredStates(): AnimationState[] {
-    return Array.from(this.animations.keys());
-  }
-
-  /**
-   * Check if a state has an animation registered
-   */
-  hasAnimation(state: AnimationState): boolean {
-    return this.animations.has(state);
-  }
-
-  /**
    * Stop all animations
    */
-  stopAll(): void {
+  private stopAll(): void {
     this.mixer.stopAllAction();
   }
 
@@ -261,6 +233,7 @@ export class AnimationStateManager {
    * Dispose of the animation manager
    */
   dispose(): void {
+    this.mixer.removeEventListener('finished', this.handleFinished);
     this.stopAll();
     this.animations.clear();
   }

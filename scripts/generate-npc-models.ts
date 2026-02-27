@@ -44,6 +44,96 @@ const NPCS = [
     id: 'bill_the_lizard',
     name: 'Bill the Lizard',
     prompt: 'low poly 3D character, N64 video game style, Bill the Lizard from Alice in Wonderland, small green lizard character, wearing work clothes, simple geometry, standing upright'
+  },
+  {
+    id: 'eaglet',
+    name: 'The Eaglet',
+    prompt: 'low poly 3D character, N64 video game style, young eagle bird, fluffy brown feathers with golden nape, large round eyes, small hooked beak, white tail band, simple geometry, cartoon style'
+  },
+  {
+    id: 'duck',
+    name: 'The Duck',
+    prompt: 'low poly 3D character, N64 video game style, mallard duck character, glossy green head, white neck ring, brown chest, orange flat bill, webbed orange feet, simple geometry, standing pose, cartoon style'
+  },
+  {
+    id: 'pat',
+    name: 'Pat',
+    prompt: 'low poly 3D character, N64 video game style, anthropomorphic monkey servant from Alice in Wonderland, brown fur, wearing green waistcoat and brown flat cap, short stocky build, simple geometry, standing upright'
+  },
+  {
+    id: 'puppy',
+    name: 'The Puppy',
+    prompt: 'low poly 3D character, N64 video game style, Norfolk Terrier dog, wheaten tan shaggy fur, small folded ears, playful happy expression, compact body, simple geometry, cartoon style'
+  },
+  {
+    id: 'caterpillar',
+    name: 'The Caterpillar',
+    prompt: 'low poly 3D character, N64 video game style, blue caterpillar from Alice in Wonderland, segmented body, anthropomorphic with wise sleepy face, sitting on mushroom, holding hookah pipe, simple geometry, cartoon style'
+  },
+  {
+    id: 'duchess',
+    name: 'The Duchess',
+    prompt: 'low poly 3D character, N64 video game style, the Duchess from Alice in Wonderland, large ugly woman with big head, wearing elaborate Victorian dress and headdress, holding a baby, simple geometry, cartoon style'
+  },
+  {
+    id: 'gryphon',
+    name: 'The Gryphon',
+    prompt: 'low poly 3D character, N64 video game style, gryphon mythical creature, eagle head and wings with lion body and tail, proud fierce expression, simple geometry, bright colors, standing pose, cartoon style'
+  },
+  {
+    id: 'mock_turtle',
+    name: 'The Mock Turtle',
+    prompt: 'low poly 3D character, N64 video game style, Mock Turtle from Alice in Wonderland, turtle body with calf head hooves and tail, sad weeping expression, simple geometry, cartoon style'
+  },
+  {
+    id: 'queen_of_hearts',
+    name: 'Queen of Hearts',
+    prompt: 'low poly 3D character, N64 video game style, Queen of Hearts from Alice in Wonderland, imposing queen in red and black dress with heart motifs, gold crown, angry fierce expression, large head, simple geometry, bright colors, cartoon style'
+  },
+  {
+    id: 'king_of_hearts',
+    name: 'King of Hearts',
+    prompt: 'low poly 3D character, N64 video game style, King of Hearts from Alice in Wonderland, small timid king in red royal robes with heart-shaped crown, meek expression, simple geometry, bright colors, cartoon style'
+  },
+  {
+    id: 'knave_of_hearts',
+    name: 'Knave of Hearts',
+    prompt: 'low poly 3D character, N64 video game style, Knave of Hearts from Alice in Wonderland, young guard in playing card outfit decorated with hearts, holding a tray of tarts, simple geometry, bright colors, cartoon style'
+  },
+  {
+    id: 'cheshire_cat',
+    name: 'Cheshire Cat',
+    prompt: 'low poly 3D character, N64 video game style, Cheshire Cat from Alice in Wonderland, purple and pink striped cat with enormous wide grin, floating pose, mischievous eyes, simple geometry, bright colors, cartoon style'
+  },
+  {
+    id: 'mad_hatter',
+    name: 'Mad Hatter',
+    prompt: 'low poly 3D character, N64 video game style, Mad Hatter from Alice in Wonderland, eccentric man with oversized green top hat with price tag, large bowtie, wild red hair, tea-stained clothes, simple geometry, bright colors, cartoon style'
+  },
+  {
+    id: 'march_hare',
+    name: 'March Hare',
+    prompt: 'low poly 3D character, N64 video game style, March Hare from Alice in Wonderland, scruffy brown hare with wild straw in fur, crazy eyes, holding teacup, standing upright, simple geometry, bright colors, cartoon style'
+  },
+  {
+    id: 'dormouse',
+    name: 'Dormouse',
+    prompt: 'low poly 3D character, N64 video game style, Dormouse from Alice in Wonderland, tiny sleepy brown mouse curled up, eyes half closed, sitting in a teapot, drowsy expression, simple geometry, bright colors, cartoon style'
+  },
+  {
+    id: 'card_painter',
+    name: 'Card Painter',
+    prompt: 'low poly 3D character, N64 video game style, playing card soldier from Alice in Wonderland, flat rectangular body like a playing card with spade symbol, holding paintbrush, painting white roses red, simple geometry, bright colors, cartoon style'
+  },
+  {
+    id: 'flamingo',
+    name: 'Flamingo',
+    prompt: 'low poly 3D character, N64 video game style, pink flamingo bird, long curved neck, standing on one leg, used as croquet mallet in Alice in Wonderland, simple geometry, bright pink colors, cartoon style'
+  },
+  {
+    id: 'hedgehog',
+    name: 'Hedgehog',
+    prompt: 'low poly 3D character, N64 video game style, small round hedgehog, brown spines, curled into a ball, used as croquet ball in Alice in Wonderland, cute tiny face, simple geometry, bright colors, cartoon style'
   }
 ];
 

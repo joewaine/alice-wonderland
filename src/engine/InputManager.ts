@@ -16,33 +16,26 @@ export class InputManager {
   // Pointer lock state
   public isPointerLocked: boolean = false;
 
+  // Stored handler refs for cleanup
+  private handleKeyDown = (e: KeyboardEvent) => { this.keys.add(e.key.toLowerCase()); };
+  private handleKeyUp = (e: KeyboardEvent) => { this.keys.delete(e.key.toLowerCase()); };
+  private handleMouseMove = (e: MouseEvent) => {
+    if (this.isPointerLocked) {
+      this.mouseDeltaX += e.movementX;
+      this.mouseDeltaY += e.movementY;
+    }
+  };
+  private handlePointerLockChange = () => {
+    this.isPointerLocked = document.pointerLockElement !== null;
+  };
+  private handleBlur = () => { this.keys.clear(); };
+
   constructor() {
-    // Keyboard events
-    window.addEventListener('keydown', (e) => {
-      this.keys.add(e.key.toLowerCase());
-    });
-
-    window.addEventListener('keyup', (e) => {
-      this.keys.delete(e.key.toLowerCase());
-    });
-
-    // Mouse movement (only tracked when pointer is locked)
-    window.addEventListener('mousemove', (e) => {
-      if (this.isPointerLocked) {
-        this.mouseDeltaX += e.movementX;
-        this.mouseDeltaY += e.movementY;
-      }
-    });
-
-    // Pointer lock state tracking
-    document.addEventListener('pointerlockchange', () => {
-      this.isPointerLocked = document.pointerLockElement !== null;
-    });
-
-    // Clear keys when window loses focus
-    window.addEventListener('blur', () => {
-      this.keys.clear();
-    });
+    window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener('keyup', this.handleKeyUp);
+    window.addEventListener('mousemove', this.handleMouseMove);
+    document.addEventListener('pointerlockchange', this.handlePointerLockChange);
+    window.addEventListener('blur', this.handleBlur);
   }
 
   /**
@@ -118,5 +111,16 @@ export class InputManager {
   resetMouseDelta(): void {
     this.mouseDeltaX = 0;
     this.mouseDeltaY = 0;
+  }
+
+  /**
+   * Remove all event listeners
+   */
+  dispose(): void {
+    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('keyup', this.handleKeyUp);
+    window.removeEventListener('mousemove', this.handleMouseMove);
+    document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
+    window.removeEventListener('blur', this.handleBlur);
   }
 }

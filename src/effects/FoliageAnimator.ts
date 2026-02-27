@@ -18,6 +18,7 @@ interface FoliageObject {
 export class FoliageAnimator {
   private foliageObjects: FoliageObject[] = [];
   private time: number = 0;
+  private frameCount: number = 0;
   private windDirection: THREE.Vector2 = new THREE.Vector2(1, 0.3);
   private windStrength: number = 1.0;
 
@@ -65,6 +66,10 @@ export class FoliageAnimator {
    */
   update(dt: number): void {
     this.time += dt;
+
+    // Skip every other frame to halve CPU cost (barely visible difference)
+    this.frameCount++;
+    if (this.frameCount % 2 !== 0) return;
 
     for (const foliage of this.foliageObjects) {
       // Calculate sway based on time and wind
