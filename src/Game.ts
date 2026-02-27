@@ -79,8 +79,8 @@ export class Game {
   private loadingScreen: LoadingScreen;
 
   // Current player config (used by SizeManager callback)
-  private baseSpeed: number = 14;
-  private baseJump: number = 14;
+  private baseSpeed: number = 13;
+  private baseJump: number = 12.5;
 
   // Camera controller
   private cameraController: CameraController | null = null;
@@ -257,7 +257,7 @@ export class Game {
     this.loadingScreen.setProgress(30, 'Creating world...');
 
     // Create physics world
-    const gravity = new RAPIER.Vector3(0, -20, 0);
+    const gravity = new RAPIER.Vector3(0, -26, 0);
     this.world = new RAPIER.World(gravity);
     this.physicsReady = true;
     this.loadingScreen.setProgress(50, 'Setting up player...');
@@ -1236,8 +1236,8 @@ export class Game {
           );
         }
 
-        // Run dust puffs when at 80%+ max speed (max speed is ~16)
-        const maxSpeed = 16;
+        // Run dust puffs when at 80%+ max speed
+        const maxSpeed = 13;
         if (horizontalSpeed > maxSpeed * 0.8) {
           const pos = this.playerBody.translation();
           // Position slightly behind player based on velocity direction
@@ -1532,7 +1532,7 @@ export class Game {
     if (!this.vignetteOverlay) return;
 
     const horizontalSpeed = Math.sqrt(velX * velX + velZ * velZ);
-    const maxSpeed = 16;
+    const maxSpeed = 13;
     const speedThreshold = maxSpeed * 0.8;  // Effect starts at 80% max speed
 
     // Base vignette intensity (always present)
