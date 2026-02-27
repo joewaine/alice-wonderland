@@ -130,7 +130,7 @@ Make movement feel snappier and more responsive. Modern 3rd-person, not momentum
 
 **File to modify:**
 
-- [ ] `src/player/PlayerController.ts` — Tune constants (~lines 132-163):
+- [x] `src/player/PlayerController.ts` — Tune constants (~lines 132-163):
 
 | Constant | Current | Target | Why |
 |----------|---------|--------|-----|
@@ -141,7 +141,7 @@ Make movement feel snappier and more responsive. Modern 3rd-person, not momentum
 | `JUMP_FORCE` | 14 | 12-13 | Less floaty arc |
 | `DOUBLE_JUMP_FORCE` | 12 | 11-12 | Match main jump feel |
 
-- [ ] `src/Game.ts` — Gravity tuning: Current gravity is `(0, -20, 0)`. May increase to `-25` or `-28` to reduce float time. Test in combination with jump force changes.
+- [x] `src/Game.ts` — Gravity tuning: Current gravity is `(0, -20, 0)`. May increase to `-25` or `-28` to reduce float time. Test in combination with jump force changes.
 
 **Tuning approach:** These are iterative. Set initial values, playtest, adjust. The brainstorm numbers are starting points.
 

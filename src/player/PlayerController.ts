@@ -80,17 +80,17 @@ export class PlayerController {
   private swimmingSplashTimer: number = 0;
   private readonly SWIMMING_SPLASH_INTERVAL: number = 0.4; // Seconds between swim splashes
 
-  // Tuning constants - movement (snappy, responsive feel)
-  private readonly GROUND_ACCEL = 1.8;      // Fast acceleration
-  private readonly AIR_ACCEL = 0.6;         // Good air control
-  private readonly GROUND_FRICTION = 0.75;  // Quick stops
+  // Tuning constants - movement (snappy, responsive modern 3rd-person feel)
+  private readonly GROUND_ACCEL = 2.8;      // Snappy start
+  private readonly AIR_ACCEL = 0.9;         // Good air control
+  private readonly GROUND_FRICTION = 0.68;  // Quick stops, minimal slide
   private readonly AIR_FRICTION = 0.96;     // Maintain air momentum
-  private readonly MAX_SPEED = 16;          // Slightly faster top speed
+  private readonly MAX_SPEED = 13;          // Controlled top speed
   private readonly MIN_SPEED_THRESHOLD = 0.1;
 
   // Tuning constants - jumping
-  private readonly JUMP_FORCE = 14;
-  private readonly DOUBLE_JUMP_FORCE = 12;
+  private readonly JUMP_FORCE = 12.5;
+  private readonly DOUBLE_JUMP_FORCE = 11;
 
   // Tuning constants - landing lockout
   private readonly HARD_LANDING_THRESHOLD = 10; // fall speed that triggers lockout

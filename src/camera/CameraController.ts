@@ -97,7 +97,7 @@ export class CameraController {
   private readonly LOOK_AHEAD_MAX_DISTANCE = 2.5;
   private readonly LOOK_AHEAD_SPEED_THRESHOLD = 0.8;
   private readonly LOOK_AHEAD_LERP_SPEED = 4;
-  private readonly MAX_PLAYER_SPEED = 16;
+  private readonly MAX_PLAYER_SPEED = 13;
 
   // Screen shake state
   private shakeIntensity: number = 0;
