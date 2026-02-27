@@ -235,13 +235,13 @@ Remove/reduce systems that cost GPU/CPU without proportional visual value.
 
 Final sweep to make everything feel cohesive with the new skybox and simplified systems.
 
-- [ ] Adjust fog color (`0xFFE8C8`) and distance (40-180) to match new skybox palette
-- [ ] Adjust ambient light color/intensity to complement skybox
-- [ ] Verify sun direction matches skybox sun position
-- [ ] Check cel-shader light direction syncing still looks correct
-- [ ] Test all remaining particle colors against new skybox backdrop
-- [ ] Verify NPC and garden model materials look correct without bloom
-- [ ] Playtest full loop: start → explore garden → collect cards → find key → gate
+- [x] Adjust fog color (`0xFFE8C8`) and distance (40-180) to match new skybox palette
+- [x] Adjust ambient light color/intensity to complement skybox
+- [ ] Verify sun direction matches skybox sun position (needs playtest)
+- [ ] Check cel-shader light direction syncing still looks correct (needs playtest)
+- [ ] Test all remaining particle colors against new skybox backdrop (needs playtest)
+- [ ] Verify NPC and garden model materials look correct without bloom (needs playtest)
+- [ ] Playtest full loop: start → explore garden → collect cards → find key → gate (needs playtest)
 
 **Acceptance criteria:**
 - [ ] Art style feels cohesive across skybox, models, particles, lighting
