@@ -18,6 +18,7 @@ interface ParticleSystem {
   elapsed: number;
   noGravity?: boolean;
   pooled?: boolean;  // Track if this system came from the pool
+  activeCount?: number;  // Actual particle count for pooled systems (avoids iterating full buffer)
 }
 
 // Max particles any single burst effect uses (triple jump spiral = 35)
@@ -98,7 +99,11 @@ export class ParticleManager {
 
   /**
    * Acquire a particle system from the pool.
-   * Grows the pool if empty.
+   * Grows the pool if empty. Only for effects with count <= POOL_MAX_PARTICLES.
+   *
+   * Use pooled systems for high-frequency effects (>1/sec): footstep dust, run dust,
+   * landing dust, collect burst, size change, wall slide. Non-pooled allocation is
+   * acceptable for rare/large bursts (quest complete, gate unlock, death/respawn).
    */
   private acquireSystem(
     count: number,
@@ -111,6 +116,11 @@ export class ParticleManager {
       noGravity?: boolean;
     }
   ): ParticleSystem {
+    if (count > POOL_MAX_PARTICLES) {
+      console.warn(`ParticleManager: acquireSystem called with count=${count} > POOL_MAX_PARTICLES=${POOL_MAX_PARTICLES}. Clamping.`);
+      count = POOL_MAX_PARTICLES;
+    }
+
     let system = this.pool.pop();
 
     if (!system) {
@@ -123,15 +133,18 @@ export class ParticleManager {
     mat.blending = options.blending ?? THREE.AdditiveBlending;
     mat.opacity = 1;
 
-    if (options.vertexColors === false) {
-      mat.vertexColors = false;
+    const wantsVertexColors = options.vertexColors !== false;
+    if (mat.vertexColors !== wantsVertexColors) {
+      mat.vertexColors = wantsVertexColors;
+      mat.needsUpdate = true;  // Shader recompile needed when vertexColors changes
+    }
+    if (!wantsVertexColors) {
       mat.color.set(options.color ?? 0xffffff);
-    } else {
-      mat.vertexColors = true;
     }
 
     // Set draw range for actual particle count
     system.points.geometry.setDrawRange(0, count);
+    system.activeCount = count;
     system.maxLife = options.maxLife;
     system.elapsed = 0;
     system.noGravity = options.noGravity ?? false;
@@ -2095,7 +2108,8 @@ export class ParticleManager {
 
       const positions = system.points.geometry.attributes.position;
       const arr = positions.array as Float32Array;
-      const count = positions.count;
+      // Use activeCount for pooled systems to avoid iterating unused buffer slots
+      const count = system.activeCount ?? positions.count;
 
       // Update positions based on velocity
       for (let j = 0; j < count; j++) {
