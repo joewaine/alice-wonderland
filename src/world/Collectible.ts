@@ -10,9 +10,7 @@ import type { CollectibleObject } from './LevelBuilder';
 
 export interface CollectionState {
   hasKey: boolean;
-  stars: number;
   cards: number;
-  totalStars: number;
   totalCards: number;
 }
 
@@ -20,9 +18,7 @@ export class CollectibleManager {
   private collectibles: CollectibleObject[] = [];
   private state: CollectionState = {
     hasKey: false,
-    stars: 0,
     cards: 0,
-    totalStars: 0,
     totalCards: 0
   };
 
@@ -84,10 +80,8 @@ export class CollectibleManager {
     }
 
     // Count totals
-    this.state.totalStars = collectibles.filter(c => c.type === 'star').length;
     this.state.totalCards = collectibles.filter(c => c.type === 'card').length;
     this.state.hasKey = false;
-    this.state.stars = 0;
     this.state.cards = 0;
   }
 
@@ -203,10 +197,6 @@ export class CollectibleManager {
           this.onKeyCollected();
         }
         break;
-      case 'star':
-        this.state.stars++;
-        console.log(`Collected star ${this.state.stars}/${this.state.totalStars}`);
-        break;
       case 'card':
         this.state.cards++;
         console.log(`Collected card ${this.state.cards}/${this.state.totalCards}`);
@@ -239,9 +229,7 @@ export class CollectibleManager {
   reset(): void {
     this.state = {
       hasKey: false,
-      stars: 0,
       cards: 0,
-      totalStars: 0,
       totalCards: 0
     };
 
