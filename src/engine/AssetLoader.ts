@@ -7,13 +7,19 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
 export class AssetLoader {
   private gltfLoader: GLTFLoader;
+  private dracoLoader: DRACOLoader;
   private loadedModels: Map<string, THREE.Group> = new Map();
 
   constructor() {
+    this.dracoLoader = new DRACOLoader();
+    this.dracoLoader.setDecoderPath('/draco/');
+
     this.gltfLoader = new GLTFLoader();
+    this.gltfLoader.setDRACOLoader(this.dracoLoader);
   }
 
   /**
@@ -146,6 +152,7 @@ export class AssetLoader {
       });
     }
     this.loadedModels.clear();
+    this.dracoLoader.dispose();
   }
 }
 

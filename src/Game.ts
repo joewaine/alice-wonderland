@@ -7,9 +7,6 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { InputManager } from './engine/InputManager';
 import { SceneManager } from './engine/SceneManager';
 import { SizeManager } from './player/SizeManager';
@@ -20,7 +17,6 @@ import { NPCController } from './npcs/NPCController';
 import { ParticleManager } from './effects/ParticleManager';
 import { MainMenu } from './ui/MainMenu';
 import { LoadingScreen } from './ui/LoadingScreen';
-import { StarSelect } from './ui/StarSelect';
 import { audioManager } from './audio/AudioManager';
 import { musicManager } from './audio/MusicManager';
 import { assetLoader } from './engine/AssetLoader';
@@ -39,8 +35,6 @@ export class Game {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
 
-  // Post-processing
-  private composer: EffectComposer;
 
   // Rapier physics
   private world: RAPIER.World | null = null;
@@ -59,6 +53,7 @@ export class Game {
   // Player
   private playerBody: RAPIER.RigidBody | null = null;
   private playerMesh: THREE.Object3D | null = null;
+  private playerFacingAngle: number = 0; // Current facing direction (radians)
   private sizeManager: SizeManager | null = null;
   private playerController: PlayerController | null = null;
 
@@ -77,11 +72,10 @@ export class Game {
   // Menu system
   private mainMenu: MainMenu;
   private loadingScreen: LoadingScreen;
-  private starSelect: StarSelect;
 
   // Current player config (used by SizeManager callback)
-  private baseSpeed: number = 14;
-  private baseJump: number = 14;
+  private baseSpeed: number = 11;
+  private baseJump: number = 11;
 
   // Camera controller
   private cameraController: CameraController | null = null;
@@ -96,6 +90,9 @@ export class Game {
   // Audio state
   private isMuted: boolean = false;
   private wasMutePressed: boolean = false;
+
+  // View toggle state
+  private wasViewTogglePressed: boolean = false;
 
   // Respawn state
   private isRespawning: boolean = false;
@@ -119,6 +116,7 @@ export class Game {
   private playerPosCache: THREE.Vector3 = new THREE.Vector3();
   private tempPosCache: THREE.Vector3 = new THREE.Vector3();
   private playerVelocityCache: THREE.Vector3 = new THREE.Vector3();
+  private boundsCache: THREE.Box3 = new THREE.Box3();
 
   // Quest system
   private questManager: QuestManager | null = null;
@@ -138,9 +136,6 @@ export class Game {
   private currentVignetteIntensity: number = 0.3;  // Base vignette darkness
   private targetVignetteIntensity: number = 0.3;
 
-  // Hitstop effect (freeze frames on ground pound impact)
-  private hitstopRemaining: number = 0;
-
   // Slow motion effect (for water entry, etc.)
   private timeScale: number = 1.0;
   private timeScaleTarget: number = 1.0;
@@ -149,10 +144,6 @@ export class Game {
   // Bounce pad detection
   private prevVerticalVelocity: number = 0;
   private bouncePadCooldown: number = 0;
-
-  // Long jump trail spawning
-  private longJumpTrailTimer: number = 0;
-  private readonly LONG_JUMP_TRAIL_INTERVAL: number = 0.05; // seconds between trail spawns
 
   constructor() {
     // Create renderer - BasicShadowMap for hard cel-shaded shadows
@@ -188,23 +179,6 @@ export class Game {
       1000
     );
 
-    // Setup post-processing pipeline for bloom effect
-    this.composer = new EffectComposer(this.renderer);
-
-    // RenderPass - renders the scene normally
-    const renderPass = new RenderPass(this.scene, this.camera);
-    this.composer.addPass(renderPass);
-
-    // UnrealBloomPass - BotW-style soft glow on bright/emissive areas only
-    // Settings from style_bible.json: intensity 0.3, threshold 0.85
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.3,   // strength (intensity)
-      0.4,   // radius
-      0.85   // threshold (only bright areas bloom)
-    );
-    this.composer.addPass(bloomPass);
-
     // Input manager
     this.input = new InputManager();
 
@@ -225,9 +199,6 @@ export class Game {
 
     // Loading screen
     this.loadingScreen = new LoadingScreen();
-
-    // Star select UI
-    this.starSelect = new StarSelect();
 
     // Quest notification UI
     this.questNotification = new QuestNotification();
@@ -264,7 +235,7 @@ export class Game {
     this.loadingScreen.setProgress(30, 'Creating world...');
 
     // Create physics world
-    const gravity = new RAPIER.Vector3(0, -20, 0);
+    const gravity = new RAPIER.Vector3(0, -22, 0);
     this.world = new RAPIER.World(gravity);
     this.physicsReady = true;
     this.loadingScreen.setProgress(50, 'Setting up player...');
@@ -293,13 +264,11 @@ export class Game {
 
     // Handle collectible particle effects
     this.sceneManager.onCollectiblePickup = (type, position) => {
-      const color = type === 'key' ? 0xffd700 : type === 'star' ? 0xffff00 : 0xff6b6b;
+      const color = type === 'key' ? 0xffd700 : 0xff6b6b;
       this.particleManager.createCollectBurst(position, color);
 
-      // Create trail particles arcing toward UI counter (stars and cards only)
-      if (type === 'star') {
-        this.particleManager.createCollectTrail(position, 0xffd700);  // Gold
-      } else if (type === 'card') {
+      // Create trail particles arcing toward UI counter (cards only)
+      if (type === 'card') {
         this.particleManager.createCollectTrail(position, 0xff6b6b);  // Red
       }
 
@@ -310,7 +279,7 @@ export class Game {
         this.cameraController?.kickFOV(62, 0.2);
       } else {
         audioManager.playCollect();
-        // Small screen shake for star/card collection
+        // Small screen shake for card collection
         this.cameraController?.shake(0.1);
       }
     };
@@ -394,6 +363,10 @@ export class Game {
       // Setup camera zones from level areas
       this.setupCameraZones();
 
+      // Set platform meshes as occludables for camera wall fade-through
+      const platformMeshes = this.sceneManager.getPlatformMeshes();
+      this.cameraController?.setOccludables(platformMeshes);
+
       // Setup area indicator
       const areas = this.sceneManager.getAreas();
       this.areaIndicator.setAreas(areas);
@@ -435,12 +408,6 @@ export class Game {
 
       // Add size pickups for the level
       this.setupSizePickups();
-
-      // Show star select UI if there are wonder stars
-      const wonderStars = this.sceneManager.getWonderStars();
-      if (wonderStars.length > 0) {
-        this.showStarSelect();
-      }
 
       // Sync cel-shader lighting after level loads
       this.syncCelShaderLighting();
@@ -572,43 +539,6 @@ export class Game {
   }
 
   /**
-   * Show star select UI
-   */
-  private showStarSelect(): void {
-    if (!this.sceneManager) return;
-
-    const stars = this.sceneManager.getWonderStars();
-    const collectedIds = this.sceneManager.getCollectedStarIds();
-
-    // Pause game while selecting
-    this.isRunning = false;
-
-    this.starSelect.show(stars, collectedIds, {
-      onStarSelected: (starId) => {
-        this.sceneManager?.setActiveWonderStar(starId);
-
-        // Spawn at star-specific location if specified
-        const spawnPoint = this.sceneManager?.getActiveStarSpawn();
-        if (spawnPoint) {
-          this.spawnPlayerAt(spawnPoint);
-        }
-
-        // Resume game
-        this.isRunning = true;
-        this.lastTime = performance.now();
-        this.gameLoop();
-      },
-      onClose: () => {
-        // No star selected, just play normally
-        this.sceneManager?.setActiveWonderStar(null);
-        this.isRunning = true;
-        this.lastTime = performance.now();
-        this.gameLoop();
-      }
-    });
-  }
-
-  /**
    * Handle player death - fade to black, respawn, fade back in
    */
   private async handleDeath(): Promise<void> {
@@ -674,8 +604,8 @@ export class Game {
    * Warm, dramatic late-afternoon lighting with BotW cel-shaded style
    */
   private setupLighting(): void {
-    // Warm ambient - golden hour glow
-    const ambient = new THREE.AmbientLight(0xFFF8E0, 0.35);
+    // Warm ambient - golden hour glow (slightly brighter to compensate for no bloom)
+    const ambient = new THREE.AmbientLight(0xFFF8E0, 0.4);
     this.scene.add(ambient);
 
     // Golden sun at low angle for dramatic shadows
@@ -884,55 +814,14 @@ export class Game {
         if (fallSpeed >= 15) {
           // Hard landing
           this.cameraController?.dip(0.6);
+          // Camera shake for high falls - scales from 0.1 at fallSpeed 15 to 0.3 at fallSpeed 25+
+          const shakeIntensity = Math.min(0.3, 0.1 + (fallSpeed - 15) * 0.02);
+          this.cameraController?.shake(shakeIntensity);
         } else if (fallSpeed >= 8) {
           // Medium landing
           this.cameraController?.dip(0.3);
         }
         // Light landing (fallSpeed < 8): no dip
-      },
-      onGroundPound: () => {
-        // Strong squash and screen shake
-        this.targetSquash.set(1.5, 0.5, 1.5);
-        audioManager.playLand(); // Use land sound for now
-        // Track for wonder star challenges
-        this.sceneManager?.trackGroundPound();
-      },
-      onGroundPoundLand: (position) => {
-        // Screen shake for impact
-        this.cameraController?.shake(0.4);
-
-        // Hitstop freeze effect (50ms / 3 frames at 60fps)
-        this.hitstopRemaining = 0.05;
-
-        // Expanding ring shockwave effect
-        this.particleManager.createGroundPoundShockwave(position);
-
-        // Check for breakable platforms
-        if (this.sceneManager && this.sizeManager) {
-          const currentSize = this.sizeManager.getCurrentSize();
-          const broke = this.sceneManager.tryBreakPlatform(position, currentSize);
-          if (broke) {
-            // Extra shake and particles for breaking
-            this.cameraController?.shake(0.3);  // Additional shake for breaking
-            this.particleManager.createLandingDust(position, 2.0);
-            audioManager.playLand();
-            // Track for wonder star challenges
-            this.sceneManager.trackPlatformBreak();
-          }
-        }
-      },
-      onLongJump: () => {
-        audioManager.playJump();
-        this.targetSquash.set(0.6, 1.2, 1.4); // Stretch forward
-        // Motion trail particles for visual flair
-        if (this.playerBody && this.playerController) {
-          const pos = this.playerBody.translation();
-          this.tempPosCache.set(pos.x, pos.y, pos.z);
-          const momentum = this.playerController.getMomentum();
-          this.particleManager.createLongJumpTrail(this.tempPosCache, momentum);
-        }
-        // Track for wonder star challenges
-        this.sceneManager?.trackLongJump();
       },
       onFootstep: (surface) => {
         audioManager.playFootstep(surface);
@@ -971,29 +860,6 @@ export class Game {
         // Low intensity splash while swimming
         this.particleManager.createWaterSplash(position, 0.4);
       },
-      onWallSlide: (position, wallNormal) => {
-        // Dust/spark particles when sliding along walls
-        this.particleManager.createWallSlideParticles(position, wallNormal);
-      },
-      onWallJump: (position, wallNormal) => {
-        // Spark burst when wall jumping
-        this.particleManager.createWallJumpSpark(position, wallNormal);
-        audioManager.playJump();
-      },
-      onLedgeGrab: (position) => {
-        // Shimmer particles when grabbing a ledge
-        this.particleManager.createLedgeGrabShimmer(position);
-      },
-      onCrouch: (isCrouching) => {
-        // Visual squash when crouching on ground
-        if (isCrouching) {
-          // Squash: Y compressed (0.7), XZ wider (1.15)
-          this.targetSquash.set(1.15, 0.7, 1.15);
-        } else {
-          // Return to normal
-          this.targetSquash.set(1, 1, 1);
-        }
-      },
     });
 
     // Initialize ground check distance for normal size
@@ -1005,7 +871,16 @@ export class Game {
     }
 
     // Camera controller
-    this.cameraController = new CameraController(this.camera, this.world, this.renderer);
+    this.cameraController = new CameraController(this.camera, this.renderer);
+    if (this.playerMesh) {
+      this.cameraController.setPlayerMesh(this.playerMesh);
+    }
+    // When pointer lock exits (Escape), revert player mesh visibility
+    this.cameraController.onViewModeChange = (isFirstPerson: boolean) => {
+      if (this.playerMesh) {
+        this.playerMesh.visible = !isFirstPerson;
+      }
+    };
     this.camera.position.set(0, 5, 10);
   }
 
@@ -1154,23 +1029,13 @@ export class Game {
 
     // Check if paused
     if (this.mainMenu.getIsPaused()) {
-      this.composer.render();
+      this.renderer.render(this.scene, this.camera);
       return;
     }
 
     const now = performance.now();
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
-
-    // Hitstop freeze effect - skip physics/movement updates
-    if (this.hitstopRemaining > 0) {
-      this.hitstopRemaining -= dt;
-      // Still render during hitstop (frozen frame)
-      this.composer.render();
-      this.updateStats(dt);
-      this.input.resetMouseDelta();
-      return;
-    }
 
     // Slow motion effect - gradually restore time scale
     let scaledDt = dt;
@@ -1191,7 +1056,7 @@ export class Game {
     this.updatePhysics();
 
     // Render
-    this.composer.render();
+    this.renderer.render(this.scene, this.camera);
 
     // Update performance stats overlay
     this.updateStats(dt);
@@ -1256,6 +1121,16 @@ export class Game {
     }
     this.wasMutePressed = isMutePressed;
 
+    // View toggle (V key) - switch between first-person and third-person
+    const isViewTogglePressed = this.input.isKeyDown('v');
+    if (isViewTogglePressed && !this.wasViewTogglePressed && this.cameraController) {
+      const isFirstPerson = this.cameraController.toggleViewMode();
+      if (this.playerMesh) {
+        this.playerMesh.visible = !isFirstPerson;
+      }
+    }
+    this.wasViewTogglePressed = isViewTogglePressed;
+
     // Size controls (Q to shrink, R to grow - E is reserved for interact)
     if (this.input.isKeyDown('q')) {
       this.sizeManager.shrink();
@@ -1284,13 +1159,13 @@ export class Game {
 
         for (const platform of this.sceneManager.getBouncyPlatforms()) {
           const mesh = platform.mesh;
-          const bounds = new THREE.Box3().setFromObject(mesh);
+          this.boundsCache.setFromObject(mesh);
           // Expand bounds slightly for detection
-          bounds.expandByScalar(0.5);
+          this.boundsCache.expandByScalar(0.5);
 
-          if (this.tempPosCache.x >= bounds.min.x && this.tempPosCache.x <= bounds.max.x &&
-              this.tempPosCache.z >= bounds.min.z && this.tempPosCache.z <= bounds.max.z &&
-              this.tempPosCache.y >= bounds.max.y - 1 && this.tempPosCache.y <= bounds.max.y + 2) {
+          if (this.tempPosCache.x >= this.boundsCache.min.x && this.tempPosCache.x <= this.boundsCache.max.x &&
+              this.tempPosCache.z >= this.boundsCache.min.z && this.tempPosCache.z <= this.boundsCache.max.z &&
+              this.tempPosCache.y >= this.boundsCache.max.y - 1 && this.tempPosCache.y <= this.boundsCache.max.y + 2) {
             // Player bounced off this platform - create particle effect and sound
             this.particleManager.createBouncePadEffect(this.tempPosCache);
             audioManager.playBounce();
@@ -1303,28 +1178,15 @@ export class Game {
       }
       this.prevVerticalVelocity = vel.y;
 
-      // Long jump trail particles: spawn continuously while long jumping
-      if (this.playerController.getIsLongJumping()) {
-        this.longJumpTrailTimer += dt;
-        if (this.longJumpTrailTimer >= this.LONG_JUMP_TRAIL_INTERVAL) {
-          this.longJumpTrailTimer = 0;
-          const playerPos = this.playerBody.translation();
-          this.tempPosCache.set(playerPos.x, playerPos.y, playerPos.z);
-          const momentum = this.playerController.getMomentum();
-          this.particleManager.createLongJumpTrail(this.tempPosCache, momentum);
-        }
-      } else {
-        this.longJumpTrailTimer = 0;
-      }
-
       // Speed-based vignette effect: intensifies at high speeds
       this.updateSpeedVignette(vel.x, vel.z, dt);
+
+      // Compute horizontal speed once for breathing + footstep + dust checks
+      const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
 
       // Return to normal squash when grounded and not jumping
       // Apply subtle breathing animation when idle
       if (this.playerController.getIsGrounded() && !this.input.jump) {
-        // Reuse velocity from bounce detection above
-        const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
         const hasInput = this.input.forward || this.input.backward ||
                          this.input.left || this.input.right;
 
@@ -1353,25 +1215,25 @@ export class Game {
 
       // Footstep dust particles when walking on ground
       if (this.playerController.getIsGrounded()) {
-        // Reuse velocity from bounce detection above
-        const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
         if (horizontalSpeed > 2) {  // Only when moving at decent speed
           const pos = this.playerBody.translation();
+          this.tempPosCache.set(pos.x, pos.y, pos.z);
           this.particleManager.createFootstepDust(
-            new THREE.Vector3(pos.x, pos.y, pos.z),
+            this.tempPosCache,
             horizontalSpeed / 10
           );
         }
 
-        // Run dust puffs when at 80%+ max speed (max speed is ~16)
-        const maxSpeed = 16;
+        // Run dust puffs when at 80%+ max speed
+        const maxSpeed = 11;
         if (horizontalSpeed > maxSpeed * 0.8) {
           const pos = this.playerBody.translation();
           // Position slightly behind player based on velocity direction
           const behindX = pos.x - (vel.x / horizontalSpeed) * 0.3;
           const behindZ = pos.z - (vel.z / horizontalSpeed) * 0.3;
+          this.tempPosCache.set(behindX, pos.y, behindZ);
           this.particleManager.createRunDustPuff(
-            new THREE.Vector3(behindX, pos.y, behindZ)
+            this.tempPosCache
           );
         }
 
@@ -1412,6 +1274,22 @@ export class Game {
     if (this.playerMesh) {
       this.playerMesh.position.set(pos.x, pos.y, pos.z);
 
+      // Rotate Alice to face movement direction
+      if (this.playerController) {
+        const momentum = this.playerController.getMomentum();
+        const hSpeed = momentum.x * momentum.x + momentum.z * momentum.z;
+        if (hSpeed > 0.5) {
+          // Target angle from momentum direction
+          const targetAngle = Math.atan2(momentum.x, momentum.z);
+          // Smooth rotation lerp (handle wrapping around PI/-PI)
+          let diff = targetAngle - this.playerFacingAngle;
+          if (diff > Math.PI) diff -= Math.PI * 2;
+          if (diff < -Math.PI) diff += Math.PI * 2;
+          this.playerFacingAngle += diff * Math.min(1, 12 * dt);
+        }
+        this.playerMesh.rotation.y = this.playerFacingAngle;
+      }
+
       // Apply squash/stretch (combine with size scale)
       const sizeScale = this.sizeManager?.config.scale || 1;
       this.playerMesh.scale.set(
@@ -1429,9 +1307,13 @@ export class Game {
       if (this.playerController) {
         const momentum = this.playerController.getMomentum();
         this.playerVelocityCache.copy(momentum);
+
+        // Tell camera to orbit behind Alice when moving
+        const hSpeed = momentum.x * momentum.x + momentum.z * momentum.z;
+        this.cameraController.setPlayerFacing(hSpeed > 0.5 ? this.playerFacingAngle : null);
       }
 
-      this.cameraController.update(dt, this.playerPosCache, this.input, this.playerVelocityCache);
+      this.cameraController.update(dt, this.playerPosCache, this.playerVelocityCache);
 
       // Enable underwater wobble when player is below water surface
       const isUnderwater = this.playerController?.isUnderwater() ?? false;
@@ -1479,6 +1361,9 @@ export class Game {
     this.playerPosCache.set(pos.x, pos.y, pos.z);
     this.particleManager.update(dt, this.playerPosCache);
 
+    // Spawn ambient dust motes around player for atmosphere
+    this.particleManager.createAmbientDust(this.playerPosCache);
+
     // Update foliage wind animation
     this.foliageAnimator.update(dt);
   }
@@ -1498,7 +1383,6 @@ export class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.composer.setSize(window.innerWidth, window.innerHeight);
   }
 
   /**
@@ -1522,9 +1406,10 @@ export class Game {
       <p style="margin:0"><b>WASD</b> - Move</p>
       <p style="margin:5px 0"><b>Arrow Keys</b> - Camera</p>
       <p style="margin:5px 0"><b>Space</b> - Jump</p>
-      <p style="margin:5px 0"><b>Shift</b> - Ground Pound</p>
+      <p style="margin:5px 0"><b>Shift</b> - Sprint</p>
       <p style="margin:5px 0"><b>Q/R</b> - Shrink/Grow</p>
       <p style="margin:5px 0"><b>E</b> - Talk to NPCs</p>
+      <p style="margin:5px 0"><b>V</b> - Toggle View (1st/3rd Person)</p>
       <p style="margin:5px 0"><b>M</b> - Mute</p>
     `;
     document.body.appendChild(this.instructionsDiv);
@@ -1635,7 +1520,7 @@ export class Game {
     if (!this.vignetteOverlay) return;
 
     const horizontalSpeed = Math.sqrt(velX * velX + velZ * velZ);
-    const maxSpeed = 16;
+    const maxSpeed = 11;
     const speedThreshold = maxSpeed * 0.8;  // Effect starts at 80% max speed
 
     // Base vignette intensity (always present)

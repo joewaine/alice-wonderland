@@ -17,7 +17,7 @@ export interface Platform {
   type: 'solid' | 'bouncy';
   color?: string;  // Hex color
   requires_size?: 'small' | 'normal' | 'large';
-  breakable?: boolean;  // Can be destroyed by ground pound
+  breakable?: boolean;
   break_requires_size?: 'large';  // Size required to break
   asset_id?: string;  // Garden asset ID (e.g., "hedge_straight", "fountain")
   rotation?: Vector3;  // Rotation in degrees (y-axis rotation most common)
@@ -49,32 +49,8 @@ export interface Checkpoint {
   order: number;  // 0 = start/finish, 1+ = checkpoints
 }
 
-export interface WonderStar {
-  id: string;
-  name: string;
-  position: Vector3;
-  challenge_type: 'exploration' | 'race' | 'puzzle' | 'collection' | 'skill';
-  requirements: {
-    // For exploration - reach a specific location
-    reach_position?: Vector3;
-    reach_radius?: number;
-    // For race - beat a time
-    beat_time?: number;
-    // For puzzle - activate switches or break platforms
-    break_platforms?: number;
-    // For collection - collect items
-    collect_stars?: number;
-    collect_cards?: number;
-    // For skill - perform specific moves
-    perform_ground_pounds?: number;
-    perform_long_jumps?: number;
-  };
-  hint: string;
-  spawn_near?: Vector3;  // Optional spawn point when selecting this star
-}
-
 export interface Collectible {
-  type: 'key' | 'star' | 'card';
+  type: 'key' | 'card';
   position: Vector3;
   card_suit?: 'hearts' | 'diamonds' | 'clubs' | 'spades';
   card_value?: number;
@@ -177,8 +153,6 @@ export interface LevelData {
   water_zones?: WaterZone[];
   speed_boosts?: SpeedBoost[];
   checkpoints?: Checkpoint[];
-  wonder_stars?: WonderStar[];
-
   // Quest system (optional - for story-driven levels like Queen's Garden)
   areas?: Area[];
   quests?: Quest[];

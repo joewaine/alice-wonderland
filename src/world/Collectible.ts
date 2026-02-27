@@ -1,7 +1,7 @@
 /**
  * Collectible - Manages collectible items in the game
  *
- * Handles keys, stars, and cards with pickup detection,
+ * Handles keys and cards with pickup detection,
  * animations, and inventory tracking.
  */
 
@@ -10,9 +10,7 @@ import type { CollectibleObject } from './LevelBuilder';
 
 export interface CollectionState {
   hasKey: boolean;
-  stars: number;
   cards: number;
-  totalStars: number;
   totalCards: number;
 }
 
@@ -20,9 +18,7 @@ export class CollectibleManager {
   private collectibles: CollectibleObject[] = [];
   private state: CollectionState = {
     hasKey: false,
-    stars: 0,
     cards: 0,
-    totalStars: 0,
     totalCards: 0
   };
 
@@ -48,6 +44,9 @@ export class CollectibleManager {
 
   // Track current base positions for magnet effect (drifts toward player)
   private currentPositions: Map<CollectibleObject, THREE.Vector3> = new Map();
+
+  // Pre-allocated vector for magnet direction calculation
+  private toPlayerCache: THREE.Vector3 = new THREE.Vector3();
 
   // Callback for magnet trail particles
   public onMagnetDrift: ((position: THREE.Vector3, towardPlayer: THREE.Vector3) => void) | null = null;
@@ -81,10 +80,8 @@ export class CollectibleManager {
     }
 
     // Count totals
-    this.state.totalStars = collectibles.filter(c => c.type === 'star').length;
     this.state.totalCards = collectibles.filter(c => c.type === 'card').length;
     this.state.hasKey = false;
-    this.state.stars = 0;
     this.state.cards = 0;
   }
 
@@ -106,23 +103,21 @@ export class CollectibleManager {
       const distance = currentPos.distanceTo(playerPosition);
       const pickupRadius = 1.5 + playerRadius;
 
-      // Magnet attraction effect - only for stars and cards, not key
+      // Magnet attraction effect - only for cards, not key
       if (collectible.type !== 'key' && distance < this.magnetDistance && distance > pickupRadius) {
         // Calculate drift speed - faster as player gets closer
         const proximity = 1 - (distance / this.magnetDistance);
         const driftSpeed = this.magnetSpeedMin + (this.magnetSpeedMax - this.magnetSpeedMin) * proximity * proximity;
 
         // Direction toward player
-        const toPlayer = new THREE.Vector3()
-          .subVectors(playerPosition, currentPos)
-          .normalize();
+        this.toPlayerCache.subVectors(playerPosition, currentPos).normalize();
 
         // Move the current position toward player (this is the "drifting" base position)
-        currentPos.addScaledVector(toPlayer, driftSpeed * dt);
+        currentPos.addScaledVector(this.toPlayerCache, driftSpeed * dt);
 
         // Emit magnet trail particles occasionally
         if (this.onMagnetDrift && Math.random() < 0.3) {
-          this.onMagnetDrift(currentPos.clone(), toPlayer);
+          this.onMagnetDrift(currentPos.clone(), this.toPlayerCache);
         }
       }
 
@@ -168,7 +163,7 @@ export class CollectibleManager {
             if (collectible.type === 'card') {
               mat.emissive.setHex(0xff4444);
             } else {
-              // Stars and keys get gold emissive
+              // Keys get gold emissive
               mat.emissive.setHex(0xffd700);
             }
           }
@@ -202,10 +197,6 @@ export class CollectibleManager {
           this.onKeyCollected();
         }
         break;
-      case 'star':
-        this.state.stars++;
-        console.log(`Collected star ${this.state.stars}/${this.state.totalStars}`);
-        break;
       case 'card':
         this.state.cards++;
         console.log(`Collected card ${this.state.cards}/${this.state.totalCards}`);
@@ -238,9 +229,7 @@ export class CollectibleManager {
   reset(): void {
     this.state = {
       hasKey: false,
-      stars: 0,
       cards: 0,
-      totalStars: 0,
       totalCards: 0
     };
 

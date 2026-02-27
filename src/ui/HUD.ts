@@ -10,14 +10,12 @@ export class HUD {
   private container: HTMLDivElement;
   private chapterTitle: HTMLDivElement;
   private collectiblesDisplay: HTMLDivElement;
-  private starCounter: HTMLDivElement | null = null;
   private messageDisplay: HTMLDivElement;
   private muteIndicator: HTMLDivElement;
   private sizeIndicator: HTMLDivElement;
   private fadeOverlay: HTMLDivElement;
   private messageTimeout: number | null = null;
-  private previousStarCount: number = 0;
-  private popAnimationStyle: HTMLStyleElement | null = null;
+  private celebrateStyle: HTMLStyleElement | null = null;
 
   constructor() {
     // Main container
@@ -133,26 +131,26 @@ export class HUD {
 
     document.body.appendChild(this.container);
 
-    // Add CSS animation for star counter pop effect
-    this.popAnimationStyle = document.createElement('style');
-    this.popAnimationStyle.textContent = `
-      @keyframes starPop {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.3); color: #fff700; }
-        100% { transform: scale(1); }
+    // Add CSS animations for celebration overlays (created once, not per-invocation)
+    this.celebrateStyle = document.createElement('style');
+    this.celebrateStyle.textContent = `
+      @keyframes celebrate {
+        0% { transform: scale(0.5); opacity: 0; }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
       }
-      .star-pop {
-        animation: starPop 0.2s ease-out;
+      @keyframes levelCelebrate {
+        0% { transform: scale(0.5); opacity: 0; }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
       }
     `;
-    document.head.appendChild(this.popAnimationStyle);
+    document.head.appendChild(this.celebrateStyle);
 
     // Initialize display
     this.updateCollectibles({
       hasKey: false,
-      stars: 0,
       cards: 0,
-      totalStars: 0,
       totalCards: 0
     });
   }
@@ -161,10 +159,16 @@ export class HUD {
    * Show chapter title with fade
    */
   showChapterTitle(title: string, subtitle?: string): void {
-    this.chapterTitle.innerHTML = `
-      <div>${title}</div>
-      ${subtitle ? `<div style="font-size: 16px; margin-top: 5px; font-weight: normal">${subtitle}</div>` : ''}
-    `;
+    this.chapterTitle.textContent = '';
+    const titleDiv = document.createElement('div');
+    titleDiv.textContent = title;
+    this.chapterTitle.appendChild(titleDiv);
+    if (subtitle) {
+      const subtitleDiv = document.createElement('div');
+      subtitleDiv.style.cssText = 'font-size: 16px; margin-top: 5px; font-weight: normal';
+      subtitleDiv.textContent = subtitle;
+      this.chapterTitle.appendChild(subtitleDiv);
+    }
     this.chapterTitle.style.opacity = '1';
 
     // Fade out after 3 seconds
@@ -179,45 +183,15 @@ export class HUD {
   updateCollectibles(state: CollectionState): void {
     const keyIcon = state.hasKey ? '🔑' : '🔒';
     const keyColor = state.hasKey ? '#ffd700' : '#666';
-    const shouldPopStar = state.stars > this.previousStarCount;
 
     this.collectiblesDisplay.innerHTML = `
       <div style="margin-bottom: 8px;">
         <span style="color: ${keyColor}">${keyIcon} Key</span>
       </div>
-      <div id="star-counter" style="margin-bottom: 8px; color: #ffff00; display: inline-block;">
-        ⭐ ${state.stars} / ${state.totalStars}
-      </div>
       <div style="color: #ff6b6b">
         🃏 ${state.cards} / ${state.totalCards}
       </div>
     `;
-
-    // Get reference to star counter element
-    this.starCounter = this.collectiblesDisplay.querySelector('#star-counter');
-
-    // Trigger pop animation if stars increased
-    if (shouldPopStar && this.starCounter) {
-      this.popStarCounter();
-    }
-
-    this.previousStarCount = state.stars;
-  }
-
-  /**
-   * Trigger pop animation on star counter
-   */
-  private popStarCounter(): void {
-    if (!this.starCounter) return;
-
-    // Remove class first to allow re-triggering
-    this.starCounter.classList.remove('star-pop');
-
-    // Force reflow to restart animation
-    void this.starCounter.offsetWidth;
-
-    // Add animation class
-    this.starCounter.classList.add('star-pop');
   }
 
   /**
@@ -340,7 +314,7 @@ export class HUD {
    */
   showChapterComplete(
     chapterNum: number,
-    stats: { stars: number; totalStars: number; cards: number; totalCards: number },
+    stats: { cards: number; totalCards: number },
     onComplete: () => void
   ): void {
     // Create celebration overlay
@@ -393,7 +367,6 @@ export class HUD {
       margin-bottom: 40px;
     `;
     statsDiv.innerHTML = `
-      <p style="margin: 10px 0; color: #ffff00">⭐ Stars: ${stats.stars} / ${stats.totalStars}</p>
       <p style="margin: 10px 0; color: #ff6b6b">🃏 Cards: ${stats.cards} / ${stats.totalCards}</p>
     `;
     overlay.appendChild(statsDiv);
@@ -408,17 +381,6 @@ export class HUD {
     `;
     overlay.appendChild(continueText);
 
-    // Add animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes celebrate {
-        0% { transform: scale(0.5); opacity: 0; }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(style);
-
     document.body.appendChild(overlay);
 
     // Fade in
@@ -431,7 +393,6 @@ export class HUD {
       overlay.style.opacity = '0';
       setTimeout(() => {
         document.body.removeChild(overlay);
-        document.head.removeChild(style); // Clean up injected style
         onComplete();
       }, 500);
     }, 3000);
@@ -442,7 +403,7 @@ export class HUD {
    */
   showLevelComplete(
     levelName: string,
-    stats: { stars: number; totalStars: number; cards: number; totalCards: number },
+    stats: { cards: number; totalCards: number },
     onComplete: () => void
   ): void {
     // Create celebration overlay
@@ -496,7 +457,6 @@ export class HUD {
       margin-bottom: 40px;
     `;
     statsDiv.innerHTML = `
-      <p style="margin: 10px 0; color: #ffff00">Stars: ${stats.stars} / ${stats.totalStars}</p>
       <p style="margin: 10px 0; color: #ff6b6b">Cards: ${stats.cards} / ${stats.totalCards}</p>
     `;
     overlay.appendChild(statsDiv);
@@ -511,17 +471,6 @@ export class HUD {
     `;
     overlay.appendChild(completeText);
 
-    // Add animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes levelCelebrate {
-        0% { transform: scale(0.5); opacity: 0; }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(style);
-
     document.body.appendChild(overlay);
 
     // Fade in
@@ -534,7 +483,6 @@ export class HUD {
       overlay.style.opacity = '0';
       setTimeout(() => {
         document.body.removeChild(overlay);
-        document.head.removeChild(style);
         onComplete();
       }, 500);
     }, 4000);
@@ -547,8 +495,8 @@ export class HUD {
     if (this.messageTimeout) {
       clearTimeout(this.messageTimeout);
     }
-    if (this.popAnimationStyle) {
-      document.head.removeChild(this.popAnimationStyle);
+    if (this.celebrateStyle) {
+      document.head.removeChild(this.celebrateStyle);
     }
     document.body.removeChild(this.container);
   }

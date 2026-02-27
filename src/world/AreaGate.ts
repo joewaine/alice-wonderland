@@ -70,7 +70,6 @@ export class AreaGate {
         highlightColor: 0xfff8e7,  // Warm highlight
         rimColor: 0x88CC88,        // Light green rim
         rimPower: 3.0,
-        steps: 3,
       });
 
       this.mesh = new THREE.Mesh(geometry, material);
