@@ -18,6 +18,7 @@ export class HUD {
   private messageTimeout: number | null = null;
   private previousStarCount: number = 0;
   private popAnimationStyle: HTMLStyleElement | null = null;
+  private celebrateStyle: HTMLStyleElement | null = null;
 
   constructor() {
     // Main container
@@ -146,6 +147,22 @@ export class HUD {
       }
     `;
     document.head.appendChild(this.popAnimationStyle);
+
+    // Add CSS animations for celebration overlays (created once, not per-invocation)
+    this.celebrateStyle = document.createElement('style');
+    this.celebrateStyle.textContent = `
+      @keyframes celebrate {
+        0% { transform: scale(0.5); opacity: 0; }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      @keyframes levelCelebrate {
+        0% { transform: scale(0.5); opacity: 0; }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(this.celebrateStyle);
 
     // Initialize display
     this.updateCollectibles({
@@ -414,17 +431,6 @@ export class HUD {
     `;
     overlay.appendChild(continueText);
 
-    // Add animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes celebrate {
-        0% { transform: scale(0.5); opacity: 0; }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(style);
-
     document.body.appendChild(overlay);
 
     // Fade in
@@ -437,7 +443,6 @@ export class HUD {
       overlay.style.opacity = '0';
       setTimeout(() => {
         document.body.removeChild(overlay);
-        document.head.removeChild(style); // Clean up injected style
         onComplete();
       }, 500);
     }, 3000);
@@ -517,17 +522,6 @@ export class HUD {
     `;
     overlay.appendChild(completeText);
 
-    // Add animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes levelCelebrate {
-        0% { transform: scale(0.5); opacity: 0; }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(style);
-
     document.body.appendChild(overlay);
 
     // Fade in
@@ -540,7 +534,6 @@ export class HUD {
       overlay.style.opacity = '0';
       setTimeout(() => {
         document.body.removeChild(overlay);
-        document.head.removeChild(style);
         onComplete();
       }, 500);
     }, 4000);
@@ -555,6 +548,9 @@ export class HUD {
     }
     if (this.popAnimationStyle) {
       document.head.removeChild(this.popAnimationStyle);
+    }
+    if (this.celebrateStyle) {
+      document.head.removeChild(this.celebrateStyle);
     }
     document.body.removeChild(this.container);
   }

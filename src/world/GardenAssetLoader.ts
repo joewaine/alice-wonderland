@@ -122,7 +122,6 @@ function applyGardenStyling(model: THREE.Group, assetId: string): void {
         highlightColor: 0xFFF8E7,
         rimColor: preset.rimColor,
         rimPower: 3.0,
-        steps: 3,
       });
 
       child.castShadow = true;
@@ -187,7 +186,6 @@ function createFallbackAsset(assetId: string): THREE.Group {
     highlightColor: 0xFFF8E7,
     rimColor: preset.rimColor,
     rimPower: 3.0,
-    steps: 3,
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -213,7 +211,6 @@ function createHedgeFallback(assetId: string): THREE.Group {
     highlightColor: 0xA8D8A8,
     rimColor: preset.rimColor,
     rimPower: 2.5,
-    steps: 3,
   });
 
   // Create hedge segment with noise
@@ -274,7 +271,6 @@ function createHedgeFallback(assetId: string): THREE.Group {
       highlightColor: 0xB8E8B8,
       rimColor: 0x88CC88,
       rimPower: 2.0,
-      steps: 3,
     });
     const leaf = new THREE.Mesh(leafGeo, leafMat);
     // Spread leaves across the hedge shape
@@ -320,7 +316,6 @@ function createRoseBushFallback(assetId: string): THREE.Group {
     highlightColor: 0x88CC88,
     rimColor: 0x4A7C3F,
     rimPower: 2.5,
-    steps: 3,
   });
   const bush = new THREE.Mesh(bushGeo, bushMat);
   bush.position.y = 0.4;
@@ -345,7 +340,6 @@ function createRoseBushFallback(assetId: string): THREE.Group {
       highlightColor: 0xFFF0F5,
       rimColor: preset.rimColor,
       rimPower: 2.0,
-      steps: 3,
     });
     const rose = new THREE.Mesh(roseGeo, roseMat);
     rose.position.set(pos.x, pos.y, pos.z);
@@ -373,7 +367,6 @@ function createFountainFallback(): THREE.Group {
     highlightColor: 0xFFFFFF,
     rimColor: preset.rimColor,
     rimPower: 3.0,
-    steps: 3,
   });
   const pool = new THREE.Mesh(poolGeo, poolMat);
   pool.position.y = 0.25;
@@ -433,7 +426,6 @@ function createTopiaryFallback(assetId: string): THREE.Group {
     highlightColor: 0xA8D8A8,
     rimColor: preset.rimColor,
     rimPower: 2.5,
-    steps: 3,
   });
 
   // Pot/base
@@ -444,7 +436,6 @@ function createTopiaryFallback(assetId: string): THREE.Group {
     highlightColor: 0xD2B48C,
     rimColor: 0xA0522D,
     rimPower: 2.0,
-    steps: 3,
   });
   const pot = new THREE.Mesh(potGeo, potMat);
   pot.position.y = 0.2;
@@ -459,7 +450,6 @@ function createTopiaryFallback(assetId: string): THREE.Group {
     highlightColor: 0x6B4423,
     rimColor: 0x4A3520,
     rimPower: 2.0,
-    steps: 3,
   });
   const stem = new THREE.Mesh(stemGeo, stemMat);
   stem.position.y = 0.7;
@@ -523,7 +513,6 @@ function createGazeboFallback(): THREE.Group {
     highlightColor: 0xA1887F,
     rimColor: preset.rimColor,
     rimPower: 2.5,
-    steps: 3,
   });
 
   // Floor
@@ -555,7 +544,6 @@ function createGazeboFallback(): THREE.Group {
     highlightColor: 0xCD5C5C,
     rimColor: 0xDC143C,
     rimPower: 2.5,
-    steps: 3,
   });
   const roof = new THREE.Mesh(roofGeo, roofMat);
   roof.position.y = 3.9;
@@ -599,7 +587,6 @@ function createBenchFallback(): THREE.Group {
     highlightColor: 0xA1887F,
     rimColor: preset.rimColor,
     rimPower: 2.5,
-    steps: 3,
   });
 
   // Seat
@@ -643,7 +630,6 @@ function createChairFallback(): THREE.Group {
     highlightColor: 0xA1887F,
     rimColor: preset.rimColor,
     rimPower: 2.5,
-    steps: 3,
   });
 
   // Seat
@@ -692,7 +678,6 @@ function createTableFallback(): THREE.Group {
     highlightColor: 0xA1887F,
     rimColor: preset.rimColor,
     rimPower: 2.5,
-    steps: 3,
   });
 
   // Table top
@@ -734,7 +719,6 @@ function createLanternFallback(): THREE.Group {
     highlightColor: 0xFFEC8B,
     rimColor: preset.rimColor,
     rimPower: 2.0,
-    steps: 3,
   });
 
   // Base

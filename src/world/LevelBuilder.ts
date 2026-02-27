@@ -301,7 +301,6 @@ export class LevelBuilder {
           highlightColor: 0xfff8e7, // Warm highlight
           rimColor: 0x88ccff,       // Soft blue rim
           rimPower: 3.0,
-          steps: 3,
         });
 
         mesh = new THREE.Mesh(geometry, material);
@@ -424,7 +423,6 @@ export class LevelBuilder {
         highlightColor: 0xFFF8E7,
         rimColor: 0xE8DCC4,
         rimPower: 3.0,
-        steps: 3,
       });
 
       const step = new THREE.Mesh(geometry, material);
@@ -692,7 +690,6 @@ export class LevelBuilder {
           highlightColor: 0xfff0f5, // Soft pink highlight
           rimColor: 0xdda0dd,       // Plum rim for characters
           rimPower: 2.5,
-          steps: 3,
         });
       }
     });
