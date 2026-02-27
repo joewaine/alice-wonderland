@@ -56,37 +56,6 @@ export function createOutlineMaterial(options: OutlineOptions = {}): THREE.Shade
 }
 
 /**
- * Create an outlined mesh by grouping original mesh with outline mesh
- *
- * @param mesh - The original mesh to outline
- * @param options - Outline options (color, thickness)
- * @returns Group containing both meshes
- */
-export function createOutlinedMesh(
-  mesh: THREE.Mesh,
-  options: OutlineOptions = {}
-): THREE.Group {
-  const group = new THREE.Group();
-
-  // Clone mesh for outline (shares geometry, uses outline material)
-  const outlineMesh = new THREE.Mesh(mesh.geometry, createOutlineMaterial(options));
-  outlineMesh.name = `${mesh.name}_outline`;
-
-  // Copy transforms
-  outlineMesh.position.copy(mesh.position);
-  outlineMesh.rotation.copy(mesh.rotation);
-  outlineMesh.scale.copy(mesh.scale);
-
-  // Add outline first (renders behind)
-  group.add(outlineMesh);
-
-  // Add original mesh on top
-  group.add(mesh);
-
-  return group;
-}
-
-/**
  * Add outlines to all meshes in an object hierarchy
  *
  * Creates outline meshes as siblings in the hierarchy.
@@ -132,53 +101,3 @@ export function addOutlinesToObject(
   }
 }
 
-/**
- * Remove all outline meshes from an object hierarchy
- */
-export function removeOutlinesFromObject(object: THREE.Object3D): void {
-  const outlinesToRemove: THREE.Object3D[] = [];
-
-  object.traverse((child) => {
-    if (child.name.endsWith('_outline')) {
-      outlinesToRemove.push(child);
-    }
-  });
-
-  for (const outline of outlinesToRemove) {
-    outline.parent?.remove(outline);
-    if (outline instanceof THREE.Mesh) {
-      outline.geometry.dispose();
-      (outline.material as THREE.Material).dispose();
-    }
-  }
-}
-
-/**
- * Update outline thickness for all outlines in object hierarchy
- */
-export function updateOutlineThickness(object: THREE.Object3D, thickness: number): void {
-  object.traverse((child) => {
-    if (child instanceof THREE.Mesh && child.name.endsWith('_outline')) {
-      const material = child.material as THREE.ShaderMaterial;
-      if (material.uniforms?.uThickness) {
-        material.uniforms.uThickness.value = thickness;
-      }
-    }
-  });
-}
-
-/**
- * Update outline color for all outlines in object hierarchy
- */
-export function updateOutlineColor(object: THREE.Object3D, color: THREE.Color | number): void {
-  const colorValue = color instanceof THREE.Color ? color : new THREE.Color(color);
-
-  object.traverse((child) => {
-    if (child instanceof THREE.Mesh && child.name.endsWith('_outline')) {
-      const material = child.material as THREE.ShaderMaterial;
-      if (material.uniforms?.uColor) {
-        material.uniforms.uColor.value.copy(colorValue);
-      }
-    }
-  });
-}

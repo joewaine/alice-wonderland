@@ -206,20 +206,6 @@ export class AnimationStateManager {
   }
 
   /**
-   * Check if currently in a specific state
-   */
-  isInState(state: AnimationState): boolean {
-    return this.currentState === state;
-  }
-
-  /**
-   * Check if currently transitioning between states
-   */
-  getIsTransitioning(): boolean {
-    return this.isTransitioning;
-  }
-
-  /**
    * Set callback for when animations complete
    */
   setOnAnimationComplete(callback: (state: AnimationState) => void): void {
@@ -227,23 +213,9 @@ export class AnimationStateManager {
   }
 
   /**
-   * Get all registered states
-   */
-  getRegisteredStates(): AnimationState[] {
-    return Array.from(this.animations.keys());
-  }
-
-  /**
-   * Check if a state has an animation registered
-   */
-  hasAnimation(state: AnimationState): boolean {
-    return this.animations.has(state);
-  }
-
-  /**
    * Stop all animations
    */
-  stopAll(): void {
+  private stopAll(): void {
     this.mixer.stopAllAction();
   }
 

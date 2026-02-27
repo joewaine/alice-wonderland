@@ -146,7 +146,7 @@ if (input.crouch && input.jump && this.isGrounded && speed > 5) {
 - [x] Implement ground pound with shake effect
 - [x] Implement long jump with momentum requirement
 - [ ] Add wall detection raycast for wall kick
-- [ ] Implement triple jump (momentum + timing window)
+- [x] Implement triple jump (momentum + timing window)
 
 ---
 
@@ -488,11 +488,11 @@ export class CameraController {
 ```
 
 **Tasks:**
-- [ ] Extract camera logic to CameraController.ts
-- [ ] Add manual rotation (arrow keys / right-click drag)
-- [ ] Implement wall collision avoidance
-- [ ] Add contextual zoom (close indoors, far outdoors)
-- [ ] Smooth camera transitions between zones
+- [x] Extract camera logic to CameraController.ts
+- [x] Add manual rotation (arrow keys / right-click drag)
+- [x] Implement wall collision avoidance
+- [x] Add contextual zoom (close indoors, far outdoors)
+- [x] Smooth camera transitions between zones
 
 ---
 
