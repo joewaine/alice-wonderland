@@ -17,12 +17,20 @@ interface ParticleSystem {
   isLooping: boolean;
   elapsed: number;
   noGravity?: boolean;
+  pooled?: boolean;  // Track if this system came from the pool
 }
+
+// Max particles any single burst effect uses (triple jump spiral = 35)
+const POOL_MAX_PARTICLES = 35;
+const POOL_INITIAL_SIZE = 20;
 
 export class ParticleManager {
   private scene: THREE.Scene;
   private systems: ParticleSystem[] = [];
   private static readonly MAX_SYSTEMS = 80;
+
+  // Object pool for burst particle systems
+  private pool: ParticleSystem[] = [];
 
   // Ambient particles
   private ambientParticles: THREE.Points | null = null;
@@ -41,6 +49,110 @@ export class ParticleManager {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+    this.initPool();
+  }
+
+  /**
+   * Pre-allocate pool of reusable particle systems to avoid per-burst allocation
+   */
+  private initPool(): void {
+    for (let i = 0; i < POOL_INITIAL_SIZE; i++) {
+      this.pool.push(this.createPooledSystem());
+    }
+  }
+
+  /**
+   * Create a single pooled particle system with max-capacity buffers
+   */
+  private createPooledSystem(): ParticleSystem {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(POOL_MAX_PARTICLES * 3);
+    const colors = new Float32Array(POOL_MAX_PARTICLES * 3);
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setDrawRange(0, 0); // Hidden until acquired
+
+    const material = new THREE.PointsMaterial({
+      size: 0.2,
+      transparent: true,
+      opacity: 1,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const points = new THREE.Points(geometry, material);
+    points.visible = false;
+
+    return {
+      points,
+      velocities: new Float32Array(POOL_MAX_PARTICLES * 3),
+      lifetimes: new Float32Array(POOL_MAX_PARTICLES),
+      maxLife: 1,
+      isLooping: false,
+      elapsed: 0,
+      pooled: true
+    };
+  }
+
+  /**
+   * Acquire a particle system from the pool.
+   * Grows the pool if empty.
+   */
+  private acquireSystem(
+    count: number,
+    options: {
+      size?: number;
+      blending?: THREE.Blending;
+      vertexColors?: boolean;
+      color?: number;
+      maxLife: number;
+      noGravity?: boolean;
+    }
+  ): ParticleSystem {
+    let system = this.pool.pop();
+
+    if (!system) {
+      system = this.createPooledSystem();
+    }
+
+    // Configure material for this burst
+    const mat = system.points.material as THREE.PointsMaterial;
+    mat.size = options.size ?? 0.2;
+    mat.blending = options.blending ?? THREE.AdditiveBlending;
+    mat.opacity = 1;
+
+    if (options.vertexColors === false) {
+      mat.vertexColors = false;
+      mat.color.set(options.color ?? 0xffffff);
+    } else {
+      mat.vertexColors = true;
+    }
+
+    // Set draw range for actual particle count
+    system.points.geometry.setDrawRange(0, count);
+    system.maxLife = options.maxLife;
+    system.elapsed = 0;
+    system.noGravity = options.noGravity ?? false;
+    system.points.visible = true;
+
+    // Add to scene
+    if (!system.points.parent) {
+      this.scene.add(system.points);
+    }
+
+    return system;
+  }
+
+  /**
+   * Release a particle system back to the pool
+   */
+  private releaseSystem(system: ParticleSystem): void {
+    system.points.visible = false;
+    system.points.geometry.setDrawRange(0, 0);
+    system.elapsed = 0;
+    this.pool.push(system);
   }
 
   /**
@@ -121,12 +233,16 @@ export class ParticleManager {
     growing: boolean
   ): void {
     const count = 24;
+    const system = this.acquireSystem(count, {
+      size: 0.3,
+      blending: THREE.AdditiveBlending,
+      vertexColors: true,
+      maxLife: 0.6,
+      noGravity: true
+    });
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const colors = (system.points.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
 
     // Color palettes based on growing/shrinking
     const burstColors = growing
@@ -152,43 +268,22 @@ export class ParticleManager {
       const speed = 2.5 + Math.random() * 1.5;
       if (growing) {
         // Expand outward from center
-        velocities[i * 3] = Math.cos(angle) * speed;
-        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;  // Slight vertical variance
-        velocities[i * 3 + 2] = Math.sin(angle) * speed;
+        system.velocities[i * 3] = Math.cos(angle) * speed;
+        system.velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;
+        system.velocities[i * 3 + 2] = Math.sin(angle) * speed;
       } else {
         // Collapse inward toward center
-        velocities[i * 3] = -Math.cos(angle) * speed;
-        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;  // Slight vertical variance
-        velocities[i * 3 + 2] = -Math.sin(angle) * speed;
+        system.velocities[i * 3] = -Math.cos(angle) * speed;
+        system.velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;
+        system.velocities[i * 3 + 2] = -Math.sin(angle) * speed;
       }
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.3,
-      transparent: true,
-      opacity: 1,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.6,  // 0.6 second duration
-      isLooping: false,
-      elapsed: 0,
-      noGravity: true  // Float in place, no gravity
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (system.points.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   /**
@@ -196,11 +291,15 @@ export class ParticleManager {
    */
   createCollectBurst(position: THREE.Vector3, color: number = 0xffd700): void {
     const count = 20;
+    const system = this.acquireSystem(count, {
+      size: 0.25,
+      blending: THREE.AdditiveBlending,
+      vertexColors: false,
+      color,
+      maxLife: 0.8
+    });
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
 
     for (let i = 0; i < count; i++) {
       positions[i * 3] = position.x;
@@ -211,35 +310,15 @@ export class ParticleManager {
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 2 + 1;
 
-      velocities[i * 3] = Math.cos(angle) * speed * 0.5;
-      velocities[i * 3 + 1] = Math.random() * 3 + 2;
-      velocities[i * 3 + 2] = Math.sin(angle) * speed * 0.5;
+      system.velocities[i * 3] = Math.cos(angle) * speed * 0.5;
+      system.velocities[i * 3 + 1] = Math.random() * 3 + 2;
+      system.velocities[i * 3 + 2] = Math.sin(angle) * speed * 0.5;
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const material = new THREE.PointsMaterial({
-      color,
-      size: 0.25,
-      transparent: true,
-      opacity: 1,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.8,
-      isLooping: false,
-      elapsed: 0
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   /**
@@ -249,95 +328,58 @@ export class ParticleManager {
    * @param surfaceType - Surface type for color selection (grass, stone, wood, bouncy)
    */
   createLandingDust(position: THREE.Vector3, intensity: number = 1, surfaceType: string = 'grass'): void {
-    const count = Math.floor(15 * intensity);
+    const count = Math.min(Math.floor(15 * intensity), POOL_MAX_PARTICLES);
+    const system = this.acquireSystem(count, {
+      size: 0.2,
+      blending: THREE.NormalBlending,
+      vertexColors: true,
+      maxLife: 0.5
+    });
+    (system.points.material as THREE.PointsMaterial).opacity = 0.7;
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const colors = (system.points.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
 
     // Surface-specific color palettes
     let dustColors: THREE.Color[];
     switch (surfaceType) {
       case 'grass':
-        dustColors = [
-          new THREE.Color(0x7CB342),  // Green
-          new THREE.Color(0x8D6E63),  // Brown
-          new THREE.Color(0x9CCC65),  // Light green
-        ];
+        dustColors = [new THREE.Color(0x7CB342), new THREE.Color(0x8D6E63), new THREE.Color(0x9CCC65)];
         break;
       case 'stone':
-        dustColors = [
-          new THREE.Color(0x9E9E9E),  // Gray
-          new THREE.Color(0xBDBDBD),  // Light gray
-          new THREE.Color(0x757575),  // Dark gray
-        ];
+        dustColors = [new THREE.Color(0x9E9E9E), new THREE.Color(0xBDBDBD), new THREE.Color(0x757575)];
         break;
       case 'wood':
-        dustColors = [
-          new THREE.Color(0xD7CCC8),  // Tan
-          new THREE.Color(0xA1887F),  // Brown
-          new THREE.Color(0xBCAAA4),  // Light brown
-        ];
+        dustColors = [new THREE.Color(0xD7CCC8), new THREE.Color(0xA1887F), new THREE.Color(0xBCAAA4)];
         break;
       case 'bouncy':
-        // Bouncy surfaces use the dedicated bounce pad effect instead
-        // Fall through to default if called directly
       default:
-        dustColors = [
-          new THREE.Color(0xccbb99),  // Dusty tan (default)
-          new THREE.Color(0xd4c4a8),  // Light dusty tan
-          new THREE.Color(0xc4b488),  // Darker tan
-        ];
+        dustColors = [new THREE.Color(0xccbb99), new THREE.Color(0xd4c4a8), new THREE.Color(0xc4b488)];
     }
 
     for (let i = 0; i < count; i++) {
-      // Start at ground level
       positions[i * 3] = position.x;
       positions[i * 3 + 1] = position.y - 0.5;
       positions[i * 3 + 2] = position.z;
 
-      // Assign random color from surface palette
       const color = dustColors[Math.floor(Math.random() * dustColors.length)];
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
 
-      // Spread outward along ground
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 2 + 1;
 
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = Math.random() * 1.5; // Slight upward
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+      system.velocities[i * 3] = Math.cos(angle) * speed;
+      system.velocities[i * 3 + 1] = Math.random() * 1.5;
+      system.velocities[i * 3 + 2] = Math.sin(angle) * speed;
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.2,
-      transparent: true,
-      opacity: 0.7,
-      vertexColors: true,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.5,
-      isLooping: false,
-      elapsed: 0
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (system.points.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   // Footstep dust throttling
@@ -360,52 +402,35 @@ export class ParticleManager {
     // Only create dust if moving fast enough
     if (movementSpeed < 0.3) return;
 
-    const count = 4;  // Small number of particles
+    const count = 4;
+    const system = this.acquireSystem(count, {
+      size: 0.08,
+      blending: THREE.NormalBlending,
+      vertexColors: false,
+      color: 0xd4c4a8,
+      maxLife: 0.3
+    });
+    (system.points.material as THREE.PointsMaterial).opacity = 0.5;
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
 
     for (let i = 0; i < count; i++) {
-      // Start at feet level
       positions[i * 3] = position.x + (Math.random() - 0.5) * 0.3;
       positions[i * 3 + 1] = position.y - 0.8;
       positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.3;
 
-      // Small outward puff
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 0.5 + 0.2;
 
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = Math.random() * 0.5 + 0.2;
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+      system.velocities[i * 3] = Math.cos(angle) * speed;
+      system.velocities[i * 3 + 1] = Math.random() * 0.5 + 0.2;
+      system.velocities[i * 3 + 2] = Math.sin(angle) * speed;
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const material = new THREE.PointsMaterial({
-      color: 0xd4c4a8,  // Light dusty tan
-      size: 0.08,
-      transparent: true,
-      opacity: 0.5,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.3,  // Quick fade
-      isLooping: false,
-      elapsed: 0
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   /**
@@ -418,66 +443,46 @@ export class ParticleManager {
     this.lastRunDustTime = now;
 
     const count = 5 + Math.floor(Math.random() * 4);  // 5-8 particles
+    const system = this.acquireSystem(count, {
+      size: 0.12,
+      blending: THREE.NormalBlending,
+      vertexColors: true,
+      maxLife: 0.2
+    });
+    (system.points.material as THREE.PointsMaterial).opacity = 0.7;
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const colors = (system.points.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
 
-    // Stone/dust color palette
     const dustColors = [
-      new THREE.Color(0xD2B48C),  // Tan
-      new THREE.Color(0xC4A882),  // Darker tan
-      new THREE.Color(0xBEB5A0),  // Stone gray-tan
+      new THREE.Color(0xD2B48C),
+      new THREE.Color(0xC4A882),
+      new THREE.Color(0xBEB5A0),
     ];
 
     for (let i = 0; i < count; i++) {
-      // Start at feet level, slightly behind player
       positions[i * 3] = position.x + (Math.random() - 0.5) * 0.4;
       positions[i * 3 + 1] = position.y - 0.7;
       positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.4;
 
-      // Assign random dust color
       const color = dustColors[Math.floor(Math.random() * dustColors.length)];
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
 
-      // Puff outward and slightly up
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 1.5 + 0.8;
 
-      velocities[i * 3] = Math.cos(angle) * speed;
-      velocities[i * 3 + 1] = Math.random() * 1.2 + 0.5;  // Upward bias
-      velocities[i * 3 + 2] = Math.sin(angle) * speed;
+      system.velocities[i * 3] = Math.cos(angle) * speed;
+      system.velocities[i * 3 + 1] = Math.random() * 1.2 + 0.5;
+      system.velocities[i * 3 + 2] = Math.sin(angle) * speed;
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.12,
-      transparent: true,
-      opacity: 0.7,
-      vertexColors: true,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.2,  // Quick fade (0.2s)
-      isLooping: false,
-      elapsed: 0
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (system.points.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   /**
@@ -767,64 +772,41 @@ export class ParticleManager {
    * Stone/dust colors that drift slightly away from wall
    */
   createWallSlideParticles(position: THREE.Vector3, wallNormal: THREE.Vector3): void {
-    const count = 4;  // 3-5 small particles per call
+    const count = 4;
+    const system = this.acquireSystem(count, {
+      size: 0.08,
+      blending: THREE.NormalBlending,
+      vertexColors: true,
+      maxLife: 0.2
+    });
+    (system.points.material as THREE.PointsMaterial).opacity = 0.6;
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
+    const positions = (system.points.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const colors = (system.points.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
 
-    // Stone/dust color palette (matches stone path colors)
-    const dustColors = [
-      new THREE.Color(0xD2B48C),  // Tan
-      new THREE.Color(0xC4A882),  // Darker tan
-    ];
+    const dustColors = [new THREE.Color(0xD2B48C), new THREE.Color(0xC4A882)];
 
     for (let i = 0; i < count; i++) {
-      // Start at wall contact point with slight random offset
       positions[i * 3] = position.x + (Math.random() - 0.5) * 0.2;
       positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 0.4;
       positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 0.2;
 
-      // Assign alternating dust colors
       const color = dustColors[i % 2];
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
 
-      // Drift away from wall using wallNormal, plus slight random spread
       const driftSpeed = Math.random() * 1.5 + 0.5;
-      velocities[i * 3] = wallNormal.x * driftSpeed + (Math.random() - 0.5) * 0.5;
-      velocities[i * 3 + 1] = Math.random() * 0.3 - 0.1;  // Slight up/down
-      velocities[i * 3 + 2] = wallNormal.z * driftSpeed + (Math.random() - 0.5) * 0.5;
+      system.velocities[i * 3] = wallNormal.x * driftSpeed + (Math.random() - 0.5) * 0.5;
+      system.velocities[i * 3 + 1] = Math.random() * 0.3 - 0.1;
+      system.velocities[i * 3 + 2] = wallNormal.z * driftSpeed + (Math.random() - 0.5) * 0.5;
 
-      lifetimes[i] = 1.0;
+      system.lifetimes[i] = 1.0;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: 0.08,  // Small particles
-      transparent: true,
-      opacity: 0.6,
-      vertexColors: true,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    });
-
-    const points = new THREE.Points(geometry, material);
-    this.scene.add(points);
-
-    this.systems.push({
-      points,
-      velocities,
-      lifetimes,
-      maxLife: 0.2,  // Very short lifetime (0.15-0.25s)
-      isLooping: false,
-      elapsed: 0
-    });
+    (system.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (system.points.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    this.systems.push(system);
   }
 
   /**
@@ -2090,9 +2072,13 @@ export class ParticleManager {
     // Evict oldest systems if over cap
     while (this.systems.length > ParticleManager.MAX_SYSTEMS) {
       const oldest = this.systems.shift()!;
-      this.scene.remove(oldest.points);
-      oldest.points.geometry.dispose();
-      (oldest.points.material as THREE.Material).dispose();
+      if (oldest.pooled) {
+        this.releaseSystem(oldest);
+      } else {
+        this.scene.remove(oldest.points);
+        oldest.points.geometry.dispose();
+        (oldest.points.material as THREE.Material).dispose();
+      }
     }
 
     // Update burst systems
@@ -2133,13 +2119,17 @@ export class ParticleManager {
       material.opacity = 1 - (system.elapsed / system.maxLife);
     }
 
-    // Remove completed systems
+    // Remove completed systems (return pooled ones, dispose non-pooled)
     for (let i = toRemove.length - 1; i >= 0; i--) {
       const index = toRemove[i];
       const system = this.systems[index];
-      this.scene.remove(system.points);
-      system.points.geometry.dispose();
-      (system.points.material as THREE.Material).dispose();
+      if (system.pooled) {
+        this.releaseSystem(system);
+      } else {
+        this.scene.remove(system.points);
+        system.points.geometry.dispose();
+        (system.points.material as THREE.Material).dispose();
+      }
       this.systems.splice(index, 1);
     }
   }
@@ -2315,5 +2305,13 @@ export class ParticleManager {
       (system.points.material as THREE.Material).dispose();
     }
     this.systems = [];
+
+    // Dispose pool
+    for (const system of this.pool) {
+      this.scene.remove(system.points);
+      system.points.geometry.dispose();
+      (system.points.material as THREE.Material).dispose();
+    }
+    this.pool = [];
   }
 }

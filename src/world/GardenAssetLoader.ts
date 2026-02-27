@@ -43,6 +43,11 @@ const GARDEN_ASSETS: Record<string, string> = {
   // Stairs
   'stairs_stone': 'assets/models/garden/stairs_stone.glb',
   'stairs_grass': 'assets/models/garden/stairs_grass.glb',
+
+  // Additional structures
+  'hedge_arch': 'assets/models/garden/hedge_arch.glb',
+  'pillar_stone': 'assets/models/garden/pillar_stone.glb',
+  'gate_ornate': 'assets/models/garden/gate_ornate.glb',
 };
 
 // Material presets based on style_bible.json
