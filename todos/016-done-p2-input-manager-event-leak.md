@@ -1,5 +1,5 @@
 ---
-status: pending
+status: done
 priority: p2
 issue_id: "016"
 tags: [memory-leak, event-listeners, input]
