@@ -10,15 +10,59 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle } from '../data/LevelData';
+import type { LevelData, Platform, Collectible as CollectibleData, NPC, SizePuzzle, AirCurrent, WaterZone, SpeedBoost, Checkpoint } from '../data/LevelData';
 import { assetLoader } from '../engine/AssetLoader';
+import { createCelShaderMaterial } from '../shaders/CelShaderMaterial';
+import { addOutlinesToObject } from '../shaders/OutlineEffect';
+import { loadGardenAsset, hasGardenAsset } from './GardenAssetLoader';
+import type { SurfaceType } from '../audio/AudioManager';
+
+/**
+ * Determine surface type from asset_id for footstep sounds
+ */
+function getSurfaceType(assetId?: string): SurfaceType {
+  if (!assetId) return 'grass'; // Default for procedural platforms in garden
+
+  // Stone surfaces
+  if (assetId.startsWith('stone') || assetId.startsWith('stairs_stone')) {
+    return 'stone';
+  }
+
+  // Wood surfaces
+  if (
+    assetId.includes('chair') ||
+    assetId.includes('bench') ||
+    assetId.includes('table') ||
+    assetId.startsWith('gazebo')
+  ) {
+    return 'wood';
+  }
+
+  // Grass/hedge surfaces (default for garden)
+  if (
+    assetId.startsWith('hedge') ||
+    assetId.startsWith('grass') ||
+    assetId.startsWith('topiary') ||
+    assetId.startsWith('stairs_grass')
+  ) {
+    return 'grass';
+  }
+
+  // Default to grass for garden setting
+  return 'grass';
+}
 
 export interface BuiltLevel {
   platforms: THREE.Mesh[];
   bouncyPlatforms: BouncyPlatform[];
+  breakablePlatforms: BreakablePlatform[];
   collectibles: CollectibleObject[];
   npcs: NPCObject[];
   sizePuzzleZones: SizePuzzleZone[];
+  airCurrentZones: AirCurrentZone[];
+  waterZones: WaterZoneObject[];
+  speedBoostZones: SpeedBoostZone[];
+  checkpoints: CheckpointObject[];
   spawnPoint: THREE.Vector3;
   gatePosition: THREE.Vector3;
   cleanup: () => void;
@@ -46,12 +90,52 @@ export interface NPCObject {
   dialogue: string[];
   dialogueIndex: number;
   modelId?: string;  // For portrait loading
+  // Animation support
+  mixer?: THREE.AnimationMixer;
+  animations?: Map<string, THREE.AnimationAction>;
+  hasSkeletalAnimation?: boolean;
 }
 
 export interface SizePuzzleZone {
   bounds: THREE.Box3;
   requiredSize: 'small' | 'large';
   hint: string;
+}
+
+export interface AirCurrentZone {
+  bounds: THREE.Box3;
+  force: number;  // Vertical force (negative = slows fall / updraft)
+  mesh: THREE.Mesh;
+}
+
+export interface WaterZoneObject {
+  bounds: THREE.Box3;
+  surfaceY: number;
+  current: THREE.Vector3;
+  mesh: THREE.Mesh;
+}
+
+export interface SpeedBoostZone {
+  bounds: THREE.Box3;
+  direction: THREE.Vector3;
+  force: number;
+  mesh: THREE.Mesh;
+}
+
+export interface CheckpointObject {
+  position: THREE.Vector3;
+  radius: number;
+  order: number;
+  mesh: THREE.Mesh;
+  passed: boolean;
+}
+
+export interface BreakablePlatform {
+  mesh: THREE.Mesh;
+  body: RAPIER.RigidBody;
+  bounds: THREE.Box3;
+  requiresSize: 'large' | undefined;
+  broken: boolean;
 }
 
 export class LevelBuilder {
@@ -69,13 +153,13 @@ export class LevelBuilder {
    * Build a complete level from LevelData
    */
   async build(levelData: LevelData): Promise<BuiltLevel> {
-    console.log(`Building level: ${levelData.chapter_title}`);
+    console.log(`Building level: ${levelData.title}`);
 
     // Apply atmosphere first
     this.applyAtmosphere(levelData.atmosphere);
 
     // Build platforms
-    const { meshes: platforms, bouncy: bouncyPlatforms } = this.buildPlatforms(levelData.platforms);
+    const { meshes: platforms, bouncy: bouncyPlatforms, breakable: breakablePlatforms } = await this.buildPlatforms(levelData.platforms);
 
     // Create collectibles
     const collectibles = this.buildCollectibles(levelData.collectibles);
@@ -85,6 +169,18 @@ export class LevelBuilder {
 
     // Create size puzzle zones
     const sizePuzzleZones = this.buildSizePuzzleZones(levelData.size_puzzles);
+
+    // Create air current zones
+    const airCurrentZones = this.buildAirCurrents(levelData.air_currents || []);
+
+    // Create water zones
+    const waterZones = this.buildWaterZones(levelData.water_zones || []);
+
+    // Create speed boost zones
+    const speedBoostZones = this.buildSpeedBoosts(levelData.speed_boosts || []);
+
+    // Create checkpoints
+    const checkpoints = this.buildCheckpoints(levelData.checkpoints || []);
 
     // Create gate
     this.buildGate(levelData.gate_position);
@@ -105,9 +201,14 @@ export class LevelBuilder {
     return {
       platforms,
       bouncyPlatforms,
+      breakablePlatforms,
       collectibles,
       npcs,
       sizePuzzleZones,
+      airCurrentZones,
+      waterZones,
+      speedBoostZones,
+      checkpoints,
       spawnPoint,
       gatePosition,
       cleanup: () => this.cleanup()
@@ -139,31 +240,89 @@ export class LevelBuilder {
   /**
    * Build platforms with physics
    */
-  private buildPlatforms(platforms: Platform[]): { meshes: THREE.Mesh[], bouncy: BouncyPlatform[] } {
+  private async buildPlatforms(platforms: Platform[]): Promise<{ meshes: THREE.Mesh[], bouncy: BouncyPlatform[], breakable: BreakablePlatform[] }> {
     const meshes: THREE.Mesh[] = [];
     const bouncy: BouncyPlatform[] = [];
+    const breakable: BreakablePlatform[] = [];
 
     for (const platform of platforms) {
-      // Visual mesh
-      const geometry = new THREE.BoxGeometry(
-        platform.size.x,
-        platform.size.y,
-        platform.size.z
-      );
+      let mesh: THREE.Mesh | THREE.Group;
 
-      const color = platform.color ? new THREE.Color(platform.color) : new THREE.Color(0x8B4513);
-      const material = new THREE.MeshStandardMaterial({
-        color,
-        roughness: 0.8
-      });
+      // Check if this platform uses a garden asset
+      if (platform.asset_id && hasGardenAsset(platform.asset_id)) {
+        // Load garden asset (already has cel-shader and outlines applied)
+        const assetGroup = await loadGardenAsset(platform.asset_id);
+        assetGroup.position.set(platform.position.x, platform.position.y, platform.position.z);
 
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(platform.position.x, platform.position.y, platform.position.z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.scene.add(mesh);
-      this.createdMeshes.push(mesh);
-      meshes.push(mesh);
+        // Apply rotation if specified
+        if (platform.rotation) {
+          assetGroup.rotation.set(
+            THREE.MathUtils.degToRad(platform.rotation.x || 0),
+            THREE.MathUtils.degToRad(platform.rotation.y || 0),
+            THREE.MathUtils.degToRad(platform.rotation.z || 0)
+          );
+        }
+
+        // Scale to match platform size (assets are designed for ~4x2x1 base size)
+        const baseSize = { x: 4, y: 2, z: 1 };
+        assetGroup.scale.set(
+          platform.size.x / baseSize.x,
+          platform.size.y / baseSize.y,
+          platform.size.z / baseSize.z
+        );
+
+        this.scene.add(assetGroup);
+        this.createdMeshes.push(assetGroup as unknown as THREE.Mesh);
+        mesh = assetGroup as unknown as THREE.Mesh;
+      } else {
+        // Use procedural geometry (original behavior)
+        const geometry = new THREE.BoxGeometry(
+          platform.size.x,
+          platform.size.y,
+          platform.size.z
+        );
+
+        // BotW-inspired color palette - natural, earthy tones
+        const celColors = [
+          0x8fbc8f,  // Dark sea green (grass/hedge)
+          0xdeb887,  // Burlywood (stone/earth)
+          0x9acd32,  // Yellow green (fresh grass)
+          0xd2b48c,  // Tan (sand/path)
+          0x87ceeb,  // Sky blue (sky platforms)
+          0xf5deb3,  // Wheat (light stone)
+        ];
+        const defaultColor = celColors[Math.floor(Math.random() * celColors.length)];
+        const color = platform.color ? new THREE.Color(platform.color) : new THREE.Color(defaultColor);
+
+        // Use cel-shader material for BotW look
+        const material = createCelShaderMaterial({
+          color,
+          shadowColor: 0x4a5568,   // Muted blue-gray shadow
+          highlightColor: 0xfff8e7, // Warm highlight
+          rimColor: 0x88ccff,       // Soft blue rim
+          rimPower: 3.0,
+          steps: 3,
+        });
+
+        mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(platform.position.x, platform.position.y, platform.position.z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        // Add outline for cel-shaded look
+        addOutlinesToObject(mesh, {
+          color: 0x2d3748,  // Dark blue-gray outline
+          thickness: 0.02,
+        });
+
+        this.scene.add(mesh);
+        this.createdMeshes.push(mesh);
+      }
+
+      meshes.push(mesh as THREE.Mesh);
+
+      // Store surface type for footstep sounds
+      mesh.userData.surfaceType = getSurfaceType(platform.asset_id);
 
       // Physics body
       const bodyDesc = RAPIER.RigidBodyDesc.fixed()
@@ -178,11 +337,14 @@ export class LevelBuilder {
         platform.size.z / 2
       );
 
-      // Bouncy platforms
+      // Bouncy platforms - warm orange color for visibility
       if (platform.type === 'bouncy') {
         colliderDesc.setRestitution(1.5);
-        // Make bouncy platforms visually distinct
-        (mesh.material as THREE.MeshStandardMaterial).color.set(0xff69b4);
+        // Update cel-shader color uniform for bouncy platforms
+        const shaderMat = mesh.material as THREE.ShaderMaterial;
+        if (shaderMat.uniforms?.uColor) {
+          shaderMat.uniforms.uColor.value.set(0xffa07a); // Light salmon
+        }
 
         // Track for animation
         bouncy.push({
@@ -193,10 +355,118 @@ export class LevelBuilder {
       }
 
       this.world.createCollider(colliderDesc, body);
+
+      // Track breakable platforms
+      if (platform.breakable) {
+        // Make breakable platforms visually distinct (darker, cracked appearance)
+        const shaderMat = mesh.material as THREE.ShaderMaterial;
+        if (shaderMat.uniforms?.uColor) {
+          const currentColor = shaderMat.uniforms.uColor.value as THREE.Color;
+          currentColor.multiplyScalar(0.7);
+        }
+
+        const halfSize = new THREE.Vector3(
+          platform.size.x / 2,
+          platform.size.y / 2,
+          platform.size.z / 2
+        );
+        const pos = new THREE.Vector3(platform.position.x, platform.position.y, platform.position.z);
+
+        breakable.push({
+          mesh,
+          body,
+          bounds: new THREE.Box3(
+            pos.clone().sub(halfSize),
+            pos.clone().add(halfSize)
+          ),
+          requiresSize: platform.break_requires_size,
+          broken: false
+        });
+      }
     }
 
-    console.log(`Built ${meshes.length} platforms`);
-    return { meshes, bouncy };
+    console.log(`Built ${meshes.length} platforms (${breakable.length} breakable)`);
+    return { meshes, bouncy, breakable };
+  }
+
+  /**
+   * Build stairs between two points
+   * Creates a series of stepped platforms with physics colliders
+   */
+  buildStairs(
+    start: THREE.Vector3,
+    end: THREE.Vector3,
+    width: number = 3,
+    stepCount: number = 8,
+    color: number = 0xD2B48C  // Stone tan
+  ): THREE.Group {
+    const stairs = new THREE.Group();
+    const totalHeight = end.y - start.y;
+    const stepHeight = totalHeight / stepCount;
+
+    // Calculate horizontal distance
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+    const stepDepth = horizontalDist / stepCount;
+
+    // Direction vector (normalized)
+    const dirX = dx / horizontalDist;
+    const dirZ = dz / horizontalDist;
+
+    for (let i = 0; i < stepCount; i++) {
+      // Each step is a box
+      const geometry = new THREE.BoxGeometry(width, stepHeight, stepDepth);
+
+      const material = createCelShaderMaterial({
+        color: new THREE.Color(color),
+        shadowColor: 0x8B7355,
+        highlightColor: 0xFFF8E7,
+        rimColor: 0xE8DCC4,
+        rimPower: 3.0,
+        steps: 3,
+      });
+
+      const step = new THREE.Mesh(geometry, material);
+
+      // Position each step
+      const stepX = start.x + dirX * stepDepth * (i + 0.5);
+      const stepY = start.y + stepHeight * (i + 0.5);
+      const stepZ = start.z + dirZ * stepDepth * (i + 0.5);
+
+      step.position.set(stepX, stepY, stepZ);
+      step.castShadow = true;
+      step.receiveShadow = true;
+
+      // Rotate to face direction
+      step.rotation.y = Math.atan2(dirX, dirZ);
+
+      // Add outline
+      addOutlinesToObject(step, {
+        color: 0x2D3748,
+        thickness: 0.015,
+      });
+
+      stairs.add(step);
+      this.createdMeshes.push(step);
+
+      // Physics collider for each step
+      const bodyDesc = RAPIER.RigidBodyDesc.fixed()
+        .setTranslation(stepX, stepY, stepZ);
+      const body = this.world.createRigidBody(bodyDesc);
+      this.createdBodies.push(body);
+
+      const colliderDesc = RAPIER.ColliderDesc.cuboid(
+        width / 2,
+        stepHeight / 2,
+        stepDepth / 2
+      );
+      this.world.createCollider(colliderDesc, body);
+    }
+
+    this.scene.add(stairs);
+    console.log(`Built stairs with ${stepCount} steps`);
+    return stairs;
   }
 
   /**
@@ -248,12 +518,12 @@ export class LevelBuilder {
    * Create golden key mesh
    */
   private createKeyMesh(group: THREE.Group): void {
-    const material = new THREE.MeshStandardMaterial({
-      color: 0xffd700,
-      metalness: 0.8,
-      roughness: 0.2,
-      emissive: 0xffd700,
-      emissiveIntensity: 0.3
+    const material = createCelShaderMaterial({
+      color: 0xFFD700,
+      shadowColor: 0xB8860B,
+      highlightColor: 0xFFEC8B,
+      rimColor: 0xFFE135,
+      rimPower: 2.5
     });
 
     // Key handle (torus)
@@ -366,6 +636,9 @@ export class LevelBuilder {
           group.position.x = -center.x;
           group.position.z = -center.z;
 
+          // Apply cel-shading and outlines to NPC model
+          this.applyCelShaderToNPC(group);
+
           // Wrap in container for proper positioning
           const container = new THREE.Group();
           container.add(group);
@@ -401,26 +674,75 @@ export class LevelBuilder {
   }
 
   /**
-   * Create fallback procedural NPC (capsule + head)
+   * Apply cel-shading and outlines to NPC model
+   */
+  private applyCelShaderToNPC(model: THREE.Object3D): void {
+    model.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const originalMaterial = child.material as THREE.MeshStandardMaterial;
+
+        // Extract color from original material
+        const color = originalMaterial.color?.clone() || new THREE.Color(0x9370db);
+
+        // Create cel-shader material
+        child.material = createCelShaderMaterial({
+          color,
+          map: originalMaterial.map || null,
+          shadowColor: 0x5a4a6a,    // Purple-ish shadow for NPCs
+          highlightColor: 0xfff0f5, // Soft pink highlight
+          rimColor: 0xdda0dd,       // Plum rim for characters
+          rimPower: 2.5,
+          steps: 3,
+        });
+      }
+    });
+
+    // Add outlines
+    addOutlinesToObject(model, {
+      color: 0x2a2a3e,
+      thickness: 0.015,
+    });
+  }
+
+  /**
+   * Create fallback procedural NPC (capsule + head) with cel-shading
    */
   private createFallbackNPC(): THREE.Group {
     const group = new THREE.Group();
 
-    // Simple capsule body
+    // Simple capsule body with cel-shader
     const bodyGeo = new THREE.CapsuleGeometry(0.3, 0.8, 4, 8);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x9370db });
+    const bodyMat = createCelShaderMaterial({
+      color: 0x9370db,  // Medium purple
+      shadowColor: 0x5a4a6a,
+      highlightColor: 0xdda0dd,
+      rimColor: 0xb19cd9,
+      rimPower: 2.0,
+    });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.position.y = 0.7;
     body.castShadow = true;
     group.add(body);
 
-    // Head
+    // Head with cel-shader
     const headGeo = new THREE.SphereGeometry(0.25, 8, 8);
-    const headMat = new THREE.MeshStandardMaterial({ color: 0xffdab9 });
+    const headMat = createCelShaderMaterial({
+      color: 0xffdab9,  // Peach
+      shadowColor: 0xd4a574,
+      highlightColor: 0xfff0e6,
+      rimColor: 0xffc0cb,
+      rimPower: 2.0,
+    });
     const head = new THREE.Mesh(headGeo, headMat);
     head.position.y = 1.4;
     head.castShadow = true;
     group.add(head);
+
+    // Add outlines
+    addOutlinesToObject(group, {
+      color: 0x2a2a3e,
+      thickness: 0.015,
+    });
 
     return group;
   }
@@ -495,17 +817,231 @@ export class LevelBuilder {
   }
 
   /**
-   * Build the chapter gate
+   * Build air current zones (affect falling speed)
+   */
+  private buildAirCurrents(currents: AirCurrent[]): AirCurrentZone[] {
+    const zones: AirCurrentZone[] = [];
+
+    for (const current of currents) {
+      const pos = new THREE.Vector3(current.position.x, current.position.y, current.position.z);
+      const size = new THREE.Vector3(current.size.x, current.size.y, current.size.z);
+
+      // Create bounds
+      const halfSize = size.clone().multiplyScalar(0.5);
+      const min = pos.clone().sub(halfSize);
+      const max = pos.clone().add(halfSize);
+
+      // Visual indicator (translucent cylinder with particles effect)
+      const geo = new THREE.CylinderGeometry(
+        Math.max(size.x, size.z) / 2,
+        Math.max(size.x, size.z) / 2,
+        size.y,
+        8
+      );
+      const mat = new THREE.MeshBasicMaterial({
+        color: current.force < 0 ? 0x88ccff : 0xff8844,  // Blue = updraft, Orange = downdraft
+        transparent: true,
+        opacity: 0.15,
+        side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      this.scene.add(mesh);
+      this.createdMeshes.push(mesh);
+
+      zones.push({
+        bounds: new THREE.Box3(min, max),
+        force: current.force,
+        mesh
+      });
+    }
+
+    console.log(`Built ${zones.length} air current zones`);
+    return zones;
+  }
+
+  /**
+   * Build water zones (swimming areas)
+   */
+  private buildWaterZones(waters: WaterZone[]): WaterZoneObject[] {
+    const zones: WaterZoneObject[] = [];
+
+    for (const water of waters) {
+      const pos = new THREE.Vector3(water.position.x, water.position.y, water.position.z);
+      const size = new THREE.Vector3(water.size.x, water.size.y, water.size.z);
+
+      // Create bounds
+      const halfSize = size.clone().multiplyScalar(0.5);
+      const min = pos.clone().sub(halfSize);
+      const max = pos.clone().add(halfSize);
+
+      // Water current (default to zero)
+      const current = water.current
+        ? new THREE.Vector3(water.current.x, water.current.y, water.current.z)
+        : new THREE.Vector3(0, 0, 0);
+
+      // Storybook water - soft teal/turquoise, dreamy and inviting
+      const geo = new THREE.BoxGeometry(size.x, size.y, size.z);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x88DDDD,        // Soft teal
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.DoubleSide,
+        metalness: 0.0,
+        roughness: 0.3
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      this.scene.add(mesh);
+      this.createdMeshes.push(mesh);
+
+      // Create surface plane - cel-shaded water surface for consistent stylized look
+      const surfaceGeo = new THREE.PlaneGeometry(size.x, size.z);
+      const surfaceMat = createCelShaderMaterial({
+        color: 0x88CCDD,           // Light cyan base
+        shadowColor: 0x5599AA,     // Deeper cyan shadow
+        highlightColor: 0xCCEEFF,  // Bright highlight
+        rimColor: 0xAADDEE,        // Soft rim
+        transparent: true,
+        opacity: 0.7,
+      });
+      const surface = new THREE.Mesh(surfaceGeo, surfaceMat);
+      surface.rotation.x = -Math.PI / 2;
+      surface.position.set(pos.x, water.surface_y, pos.z);
+      this.scene.add(surface);
+      this.createdMeshes.push(surface);
+
+      zones.push({
+        bounds: new THREE.Box3(min, max),
+        surfaceY: water.surface_y,
+        current,
+        mesh
+      });
+    }
+
+    console.log(`Built ${zones.length} water zones`);
+    return zones;
+  }
+
+  /**
+   * Build speed boost zones (racing pads)
+   */
+  private buildSpeedBoosts(boosts: SpeedBoost[]): SpeedBoostZone[] {
+    const zones: SpeedBoostZone[] = [];
+
+    for (const boost of boosts) {
+      const pos = new THREE.Vector3(boost.position.x, boost.position.y, boost.position.z);
+      const size = new THREE.Vector3(boost.size.x, boost.size.y, boost.size.z);
+      const dir = new THREE.Vector3(boost.direction.x, boost.direction.y, boost.direction.z).normalize();
+
+      // Create bounds
+      const halfSize = size.clone().multiplyScalar(0.5);
+      const min = pos.clone().sub(halfSize);
+      const max = pos.clone().add(halfSize);
+
+      // Create arrow-shaped boost pad
+      const group = new THREE.Group();
+
+      // Cel-shaded boost pad - energetic gold
+      const padGeo = new THREE.BoxGeometry(size.x, 0.2, size.z);
+      const padMat = createCelShaderMaterial({
+        color: 0xFFD700,           // Gold/yellow
+        shadowColor: 0xCC9900,     // Darker gold
+        highlightColor: 0xFFFF99,  // Bright yellow
+        rimColor: 0xFFE066,        // Warm rim
+        rimPower: 2.0
+      });
+      const pad = new THREE.Mesh(padGeo, padMat);
+      group.add(pad);
+
+      // Cel-shaded arrow indicator - playful purple
+      const arrowGeo = new THREE.ConeGeometry(0.5, 1.5, 4);
+      const arrowMat = createCelShaderMaterial({
+        color: 0xDDA0DD,           // Soft plum
+        shadowColor: 0x9B6B9B,     // Darker plum shadow
+        highlightColor: 0xFFE0FF,  // Light pink highlight
+        rimColor: 0xE6B0E6,        // Warm orchid rim
+        rimPower: 2.0
+      });
+      const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+      arrow.rotation.x = -Math.PI / 2;
+      arrow.position.y = 0.5;
+      group.add(arrow);
+
+      // Rotate to point in boost direction
+      group.lookAt(pos.clone().add(dir));
+      group.position.copy(pos);
+
+      this.scene.add(group);
+      this.createdMeshes.push(group);
+
+      zones.push({
+        bounds: new THREE.Box3(min, max),
+        direction: dir,
+        force: boost.force,
+        mesh: pad
+      });
+    }
+
+    console.log(`Built ${zones.length} speed boost zones`);
+    return zones;
+  }
+
+  /**
+   * Build checkpoint rings
+   */
+  private buildCheckpoints(checkpointData: Checkpoint[]): CheckpointObject[] {
+    const checkpoints: CheckpointObject[] = [];
+
+    for (const cp of checkpointData) {
+      const pos = new THREE.Vector3(cp.position.x, cp.position.y, cp.position.z);
+
+      // Create ring mesh with cel-shaded material
+      const ringGeo = new THREE.TorusGeometry(cp.radius, 0.3, 8, 24);
+      const isStart = cp.order === 0;
+      const ringMat = createCelShaderMaterial({
+        color: isStart ? 0x44FF66 : 0x4488FF,           // Green for start, blue for others
+        shadowColor: isStart ? 0x228833 : 0x2255AA,
+        highlightColor: isStart ? 0xAAFFBB : 0x99CCFF,
+        rimColor: isStart ? 0x66FF88 : 0x66AAFF,
+        rimPower: 2.5,
+        transparent: true,
+        opacity: 0.8
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.position.copy(pos);
+      ring.rotation.x = Math.PI / 2;  // Make ring vertical
+      this.scene.add(ring);
+      this.createdMeshes.push(ring);
+
+      checkpoints.push({
+        position: pos,
+        radius: cp.radius,
+        order: cp.order,
+        mesh: ring,
+        passed: false
+      });
+    }
+
+    // Sort by order
+    checkpoints.sort((a, b) => a.order - b.order);
+
+    console.log(`Built ${checkpoints.length} checkpoints`);
+    return checkpoints;
+  }
+
+  /**
+   * Build the chapter gate - whimsical storybook archway
    */
   private buildGate(gatePos: { x: number; y: number; z: number }): void {
     const group = new THREE.Group();
 
-    // Two pillars
-    const pillarGeo = new THREE.CylinderGeometry(0.5, 0.5, 4, 8);
+    // Soft rose-colored pillars
+    const pillarGeo = new THREE.CylinderGeometry(0.5, 0.6, 4, 12);
     const pillarMat = new THREE.MeshStandardMaterial({
-      color: 0x808080,
-      metalness: 0.5,
-      roughness: 0.5
+      color: 0xE8C4D4,      // Soft rose
+      metalness: 0.0,
+      roughness: 0.8
     });
 
     const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
@@ -518,19 +1054,24 @@ export class LevelBuilder {
     rightPillar.castShadow = true;
     group.add(rightPillar);
 
-    // Archway
-    const archGeo = new THREE.TorusGeometry(1.5, 0.3, 8, 16, Math.PI);
-    const arch = new THREE.Mesh(archGeo, pillarMat);
+    // Whimsical archway - lavender
+    const archGeo = new THREE.TorusGeometry(1.5, 0.35, 12, 24, Math.PI);
+    const archMat = new THREE.MeshStandardMaterial({
+      color: 0xD4C4E8,      // Soft lavender
+      metalness: 0.0,
+      roughness: 0.7
+    });
+    const arch = new THREE.Mesh(archGeo, archMat);
     arch.position.y = 4;
     arch.rotation.z = Math.PI;
     group.add(arch);
 
-    // Gate barrier (red = locked)
+    // Gate barrier - soft coral when locked (not harsh red)
     const barrierGeo = new THREE.PlaneGeometry(3, 4);
     const barrierMat = new THREE.MeshBasicMaterial({
-      color: 0xff0000,
+      color: 0xFFB5A7,      // Soft coral (locked)
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.6,
       side: THREE.DoubleSide
     });
     const barrier = new THREE.Mesh(barrierGeo, barrierMat);

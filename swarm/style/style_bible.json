@@ -1,0 +1,114 @@
+{
+  "target_mood": "painterly whimsical garden",
+  "description": "BotW-inspired cel-shaded aesthetic with lush vegetation, warm golden hour lighting, and regal Victorian garden architecture.",
+
+  "palette": {
+    "primary": ["#2D5A27", "#1E4620", "#3D7A37"],
+    "accent": ["#C41E3A", "#FFD700", "#FFFFFF"],
+    "shadow_tint": "#4A3B5C",
+    "fog_color": "#E8F4E8"
+  },
+
+  "lighting": {
+    "sun_angle": 25,
+    "sun_color": "#FFF4E0",
+    "sun_intensity": 1.2,
+    "ambient_color": "#8FAADC",
+    "ambient_intensity": 0.4,
+    "shadow_type": "BasicShadowMap",
+    "shadow_bias": -0.0001,
+    "shadow_map_size": 2048
+  },
+
+  "cel_shader": {
+    "steps": 3,
+    "shadow_color": "#4A3B5C",
+    "highlight_color": "#FFF8E7",
+    "rim_color": "#88CCAA",
+    "rim_power": 3.0
+  },
+
+  "outline": {
+    "color": "#2D3748",
+    "thickness_platforms": 0.02,
+    "thickness_npcs": 0.015,
+    "thickness_props": 0.012
+  },
+
+  "fog": {
+    "type": "Fog",
+    "near": 40,
+    "far": 120
+  },
+
+  "materials": {
+    "hedge": {
+      "color": "#2D5A27",
+      "shadow": "#1A3518",
+      "rim": "#88CC88",
+      "description": "Dense green hedges forming garden walls"
+    },
+    "rose_red": {
+      "color": "#C41E3A",
+      "shadow": "#8B0000",
+      "rim": "#FF6B6B",
+      "emissive": 0.1,
+      "description": "Vibrant red roses, slight glow"
+    },
+    "rose_white": {
+      "color": "#FAFAFA",
+      "shadow": "#E8E8E8",
+      "rim": "#FFFFFF",
+      "description": "White roses (being painted red)"
+    },
+    "stone_path": {
+      "color": "#D2B48C",
+      "shadow": "#8B7355",
+      "rim": "#E8DCC4",
+      "description": "Cobblestone garden paths"
+    },
+    "marble": {
+      "color": "#FAFAFA",
+      "shadow": "#C0C0C0",
+      "rim": "#FFFFFF",
+      "description": "White marble for fountains and statues"
+    },
+    "gold_trim": {
+      "color": "#FFD700",
+      "shadow": "#B8860B",
+      "rim": "#FFEC8B",
+      "emissive": 0.05,
+      "description": "Gold accents on regal elements"
+    },
+    "grass": {
+      "color": "#4A7C3F",
+      "shadow": "#2D5A27",
+      "rim": "#7CCD7C",
+      "description": "Lush lawn grass"
+    },
+    "wood_dark": {
+      "color": "#5D4037",
+      "shadow": "#3E2723",
+      "rim": "#8D6E63",
+      "description": "Dark wood for gazebos and furniture"
+    }
+  },
+
+  "rules": [
+    "No pure black shadows - always purple-tinted (#4A3B5C base)",
+    "Bloom only on emissive elements (roses, lanterns, gold) - never full-screen",
+    "Fog separates foreground from background for depth",
+    "Maximum 3 dominant hues per scene/room",
+    "Outlines are dark blue-gray (#2D3748), 0.012-0.02 thickness by object type",
+    "Rim lighting always present for silhouette clarity",
+    "Stepped lighting (3 bands) for cel-shaded look",
+    "Golden hour warm tones - sun is low and warm (#FFF4E0)"
+  ],
+
+  "performance_budget": {
+    "max_draw_calls": 150,
+    "max_triangles": 200000,
+    "max_texture_memory_mb": 128,
+    "target_fps": 60
+  }
+}
