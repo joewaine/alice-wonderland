@@ -48,6 +48,36 @@ export class AssetLoader {
   }
 
   /**
+   * Load a GLB model with animations (for characters)
+   * Returns both the model and animation clips
+   */
+  async loadModelWithAnimations(path: string): Promise<{
+    model: THREE.Group;
+    animations: THREE.AnimationClip[];
+  }> {
+    try {
+      const gltf = await this.gltfLoader.loadAsync(path);
+      const model = gltf.scene;
+
+      // Enable shadows
+      model.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+        }
+      });
+
+      return {
+        model,
+        animations: gltf.animations || []
+      };
+    } catch (error) {
+      console.warn(`Failed to load animated model ${path}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Load model with fallback to primitive
    */
   async loadModelWithFallback(

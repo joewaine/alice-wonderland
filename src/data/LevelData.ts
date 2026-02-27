@@ -17,6 +17,60 @@ export interface Platform {
   type: 'solid' | 'bouncy';
   color?: string;  // Hex color
   requires_size?: 'small' | 'normal' | 'large';
+  breakable?: boolean;  // Can be destroyed by ground pound
+  break_requires_size?: 'large';  // Size required to break
+  asset_id?: string;  // Garden asset ID (e.g., "hedge_straight", "fountain")
+  rotation?: Vector3;  // Rotation in degrees (y-axis rotation most common)
+}
+
+export interface AirCurrent {
+  position: Vector3;
+  size: Vector3;
+  force: number;  // Negative = slows fall, positive = speeds up
+}
+
+export interface WaterZone {
+  position: Vector3;
+  size: Vector3;
+  surface_y: number;  // Y position of water surface
+  current?: Vector3;  // Optional water current direction/strength
+}
+
+export interface SpeedBoost {
+  position: Vector3;
+  size: Vector3;
+  direction: Vector3;  // Direction of boost (normalized)
+  force: number;       // Boost strength
+}
+
+export interface Checkpoint {
+  position: Vector3;
+  radius: number;
+  order: number;  // 0 = start/finish, 1+ = checkpoints
+}
+
+export interface WonderStar {
+  id: string;
+  name: string;
+  position: Vector3;
+  challenge_type: 'exploration' | 'race' | 'puzzle' | 'collection' | 'skill';
+  requirements: {
+    // For exploration - reach a specific location
+    reach_position?: Vector3;
+    reach_radius?: number;
+    // For race - beat a time
+    beat_time?: number;
+    // For puzzle - activate switches or break platforms
+    break_platforms?: number;
+    // For collection - collect items
+    collect_stars?: number;
+    collect_cards?: number;
+    // For skill - perform specific moves
+    perform_ground_pounds?: number;
+    perform_long_jumps?: number;
+  };
+  hint: string;
+  spawn_near?: Vector3;  // Optional spawn point when selecting this star
 }
 
 export interface Collectible {
@@ -31,6 +85,59 @@ export interface NPC {
   position: Vector3;
   model_id?: string;
   dialogue: string[];
+  quest_ids?: string[];            // Quests this NPC can give
+  appears_after_quest?: string;    // Only visible after this quest is complete
+}
+
+// ============================================================================
+// Quest System Types - For story-driven progression
+// ============================================================================
+
+export interface QuestRequirements {
+  talk_to_npc?: string;            // Must talk to this NPC
+  reach_position?: Vector3;        // Must reach this location
+  reach_radius?: number;           // Radius for reach_position check
+  collect_items?: { type: string; count: number }[];
+  complete_quest?: string;         // Prerequisite quest ID
+}
+
+export interface QuestRewards {
+  unlock_area?: string;            // Area ID to make accessible
+  spawn_npc?: string;              // Make NPC appear
+  give_item?: string;              // Item to add to inventory
+}
+
+export interface Quest {
+  id: string;                      // "quest_find_rabbit"
+  name: string;                    // "Find the White Rabbit"
+  giver_npc: string;               // NPC ID who gives quest
+  dialogue_before: string[];       // Lines before accepting
+  dialogue_during: string[];       // Lines while in progress
+  dialogue_after: string[];        // Lines after completion
+  requirements: QuestRequirements;
+  rewards: QuestRewards;
+}
+
+// ============================================================================
+// Area Types - For zone-based level structure
+// ============================================================================
+
+export interface AreaBounds {
+  min: Vector3;
+  max: Vector3;
+}
+
+export interface AreaCameraConfig {
+  targetDistance: number;
+  heightOffset: number;
+}
+
+export interface Area {
+  id: string;                      // "tea_party_terrace"
+  name: string;                    // "Tea Party Terrace"
+  bounds: AreaBounds;
+  locked_by_quest?: string;        // Quest that must be complete to access
+  camera_config?: AreaCameraConfig;
 }
 
 export interface SizePuzzle {
@@ -51,8 +158,7 @@ export interface Atmosphere {
 }
 
 export interface LevelData {
-  chapter_number: number;
-  chapter_title: string;
+  title: string;
   setting: string;
 
   atmosphere: Atmosphere;
@@ -65,6 +171,17 @@ export interface LevelData {
   gate_position: Vector3;
 
   size_puzzles: SizePuzzle[];
+
+  // Optional chapter-specific features
+  air_currents?: AirCurrent[];
+  water_zones?: WaterZone[];
+  speed_boosts?: SpeedBoost[];
+  checkpoints?: Checkpoint[];
+  wonder_stars?: WonderStar[];
+
+  // Quest system (optional - for story-driven levels like Queen's Garden)
+  areas?: Area[];
+  quests?: Quest[];
 }
 
 /**
@@ -76,8 +193,7 @@ export function validateLevelData(data: unknown): data is LevelData {
   const level = data as LevelData;
 
   // Check required fields
-  if (typeof level.chapter_number !== 'number') return false;
-  if (typeof level.chapter_title !== 'string') return false;
+  if (typeof level.title !== 'string') return false;
   if (typeof level.setting !== 'string') return false;
 
   // Check arrays exist

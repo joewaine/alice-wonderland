@@ -43,11 +43,10 @@ export class MusicManager {
   }
 
   /**
-   * Set mood based on chapter
+   * Set mood for The Queen's Garden - whimsical and adventurous
    */
-  setChapterMood(chapterNum: number): void {
-    const moods: ChapterMood[] = ['mysterious', 'playful', 'dreamy', 'adventurous'];
-    this.currentMood = moods[(chapterNum - 1) % moods.length];
+  setGardenMood(): void {
+    this.currentMood = 'adventurous';
 
     // If playing, restart with new mood
     if (this.isPlaying) {

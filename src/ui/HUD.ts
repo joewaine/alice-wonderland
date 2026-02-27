@@ -10,11 +10,14 @@ export class HUD {
   private container: HTMLDivElement;
   private chapterTitle: HTMLDivElement;
   private collectiblesDisplay: HTMLDivElement;
+  private starCounter: HTMLDivElement | null = null;
   private messageDisplay: HTMLDivElement;
   private muteIndicator: HTMLDivElement;
   private sizeIndicator: HTMLDivElement;
   private fadeOverlay: HTMLDivElement;
   private messageTimeout: number | null = null;
+  private previousStarCount: number = 0;
+  private popAnimationStyle: HTMLStyleElement | null = null;
 
   constructor() {
     // Main container
@@ -130,6 +133,20 @@ export class HUD {
 
     document.body.appendChild(this.container);
 
+    // Add CSS animation for star counter pop effect
+    this.popAnimationStyle = document.createElement('style');
+    this.popAnimationStyle.textContent = `
+      @keyframes starPop {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.3); color: #fff700; }
+        100% { transform: scale(1); }
+      }
+      .star-pop {
+        animation: starPop 0.2s ease-out;
+      }
+    `;
+    document.head.appendChild(this.popAnimationStyle);
+
     // Initialize display
     this.updateCollectibles({
       hasKey: false,
@@ -162,18 +179,45 @@ export class HUD {
   updateCollectibles(state: CollectionState): void {
     const keyIcon = state.hasKey ? '🔑' : '🔒';
     const keyColor = state.hasKey ? '#ffd700' : '#666';
+    const shouldPopStar = state.stars > this.previousStarCount;
 
     this.collectiblesDisplay.innerHTML = `
       <div style="margin-bottom: 8px;">
         <span style="color: ${keyColor}">${keyIcon} Key</span>
       </div>
-      <div style="margin-bottom: 8px; color: #ffff00">
+      <div id="star-counter" style="margin-bottom: 8px; color: #ffff00; display: inline-block;">
         ⭐ ${state.stars} / ${state.totalStars}
       </div>
       <div style="color: #ff6b6b">
         🃏 ${state.cards} / ${state.totalCards}
       </div>
     `;
+
+    // Get reference to star counter element
+    this.starCounter = this.collectiblesDisplay.querySelector('#star-counter');
+
+    // Trigger pop animation if stars increased
+    if (shouldPopStar && this.starCounter) {
+      this.popStarCounter();
+    }
+
+    this.previousStarCount = state.stars;
+  }
+
+  /**
+   * Trigger pop animation on star counter
+   */
+  private popStarCounter(): void {
+    if (!this.starCounter) return;
+
+    // Remove class first to allow re-triggering
+    this.starCounter.classList.remove('star-pop');
+
+    // Force reflow to restart animation
+    void this.starCounter.offsetWidth;
+
+    // Add animation class
+    this.starCounter.classList.add('star-pop');
   }
 
   /**
@@ -231,6 +275,44 @@ export class HUD {
     setTimeout(() => {
       this.sizeIndicator.style.transform = 'scale(1)';
     }, 200);
+  }
+
+  /**
+   * Brief white screen flash (for checkpoint hit)
+   * Quick pulse: ~0.1s to peak, ~0.2s total fade
+   */
+  flashScreen(): void {
+    // Create a temporary white overlay for the flash
+    const flashOverlay = document.createElement('div');
+    flashOverlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 999;
+    `;
+    this.container.appendChild(flashOverlay);
+
+    // Animate: quick fade in to 0.35 opacity, then fade out
+    requestAnimationFrame(() => {
+      flashOverlay.style.transition = 'opacity 0.1s ease-out';
+      flashOverlay.style.opacity = '0.35';
+
+      // After peak, fade out
+      setTimeout(() => {
+        flashOverlay.style.transition = 'opacity 0.15s ease-in';
+        flashOverlay.style.opacity = '0';
+
+        // Remove element after animation completes
+        setTimeout(() => {
+          this.container.removeChild(flashOverlay);
+        }, 150);
+      }, 100);
+    });
   }
 
   /**
@@ -356,11 +438,117 @@ export class HUD {
   }
 
   /**
+   * Show level complete celebration (single level mode)
+   */
+  showLevelComplete(
+    levelName: string,
+    stats: { stars: number; totalStars: number; cards: number; totalCards: number },
+    onComplete: () => void
+  ): void {
+    // Create celebration overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Georgia', serif;
+      z-index: 500;
+      opacity: 0;
+      transition: opacity 0.5s;
+    `;
+
+    // Title
+    const title = document.createElement('h1');
+    title.textContent = 'Level Complete!';
+    title.style.cssText = `
+      font-size: 56px;
+      color: #ffd700;
+      text-shadow: 0 0 30px #ffd700;
+      margin: 0 0 20px 0;
+      animation: levelCelebrate 0.5s ease-out;
+    `;
+    overlay.appendChild(title);
+
+    // Level name
+    const levelNameElem = document.createElement('p');
+    levelNameElem.textContent = levelName;
+    levelNameElem.style.cssText = `
+      font-size: 28px;
+      color: #e94560;
+      margin: 0 0 40px 0;
+      font-style: italic;
+    `;
+    overlay.appendChild(levelNameElem);
+
+    // Stats
+    const statsDiv = document.createElement('div');
+    statsDiv.style.cssText = `
+      font-size: 24px;
+      color: white;
+      text-align: center;
+      margin-bottom: 40px;
+    `;
+    statsDiv.innerHTML = `
+      <p style="margin: 10px 0; color: #ffff00">Stars: ${stats.stars} / ${stats.totalStars}</p>
+      <p style="margin: 10px 0; color: #ff6b6b">Cards: ${stats.cards} / ${stats.totalCards}</p>
+    `;
+    overlay.appendChild(statsDiv);
+
+    // Completion message
+    const completeText = document.createElement('p');
+    completeText.textContent = 'You conquered Wonderland!';
+    completeText.style.cssText = `
+      font-size: 20px;
+      color: #9370db;
+      font-style: italic;
+    `;
+    overlay.appendChild(completeText);
+
+    // Add animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes levelCelebrate {
+        0% { transform: scale(0.5); opacity: 0; }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    document.body.appendChild(overlay);
+
+    // Fade in
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+
+    // Wait then fade out and callback
+    setTimeout(() => {
+      overlay.style.opacity = '0';
+      setTimeout(() => {
+        document.body.removeChild(overlay);
+        document.head.removeChild(style);
+        onComplete();
+      }, 500);
+    }, 4000);
+  }
+
+  /**
    * Clean up
    */
   dispose(): void {
     if (this.messageTimeout) {
       clearTimeout(this.messageTimeout);
+    }
+    if (this.popAnimationStyle) {
+      document.head.removeChild(this.popAnimationStyle);
     }
     document.body.removeChild(this.container);
   }
