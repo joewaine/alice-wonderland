@@ -54,29 +54,31 @@ export class AnimationStateManager {
   // Callback when animation completes (for auto-transitions)
   private onAnimationComplete: ((state: AnimationState) => void) | null = null;
 
+  // Stored handler ref for cleanup
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private handleFinished = (e: any) => {
+    const action = e.action as THREE.AnimationAction;
+    const state = this.findStateForAction(action);
+
+    if (state && state === this.currentState) {
+      const nextState = AUTO_TRANSITIONS[state];
+      if (nextState && this.animations.has(nextState)) {
+        this.setState(nextState);
+      }
+
+      if (this.onAnimationComplete) {
+        this.onAnimationComplete(state);
+      }
+    }
+  };
+
   constructor(mixer: THREE.AnimationMixer, options: AnimationStateManagerOptions = {}) {
     this.mixer = mixer;
     this.defaultCrossfade = options.defaultCrossfade ?? 0.2;
     this.speedScale = options.speedScale ?? 1.0;
 
     // Listen for animation completion
-    this.mixer.addEventListener('finished', (e) => {
-      const action = e.action as THREE.AnimationAction;
-      const state = this.findStateForAction(action);
-
-      if (state && state === this.currentState) {
-        // Check for auto-transition
-        const nextState = AUTO_TRANSITIONS[state];
-        if (nextState && this.animations.has(nextState)) {
-          this.setState(nextState);
-        }
-
-        // Notify callback
-        if (this.onAnimationComplete) {
-          this.onAnimationComplete(state);
-        }
-      }
-    });
+    this.mixer.addEventListener('finished', this.handleFinished);
   }
 
   /**
@@ -261,6 +263,7 @@ export class AnimationStateManager {
    * Dispose of the animation manager
    */
   dispose(): void {
+    this.mixer.removeEventListener('finished', this.handleFinished);
     this.stopAll();
     this.animations.clear();
   }
