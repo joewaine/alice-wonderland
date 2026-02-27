@@ -169,7 +169,7 @@ Swap procedural canvas skybox for beautiful AI-generated fairytale garden cubema
   - Resolution: 1024x1024 or 2048x2048 per face
   - Save to `public/assets/skyboxes/garden/` as `px.png`, `nx.png`, `py.png`, `ny.png`, `pz.png`, `nz.png`
 
-- [ ] `src/engine/SceneManager.ts` — Replace `createGardenSkybox()` (~lines 175-336):
+- [x] `src/engine/SceneManager.ts` — Replace `createGardenSkybox()` (~lines 175-336):
   ```typescript
   private loadSkybox(): void {
     const loader = new THREE.CubeTextureLoader();

@@ -22,7 +22,7 @@ export class SceneManager {
   private hud: HUD;
   private gate: Gate | null = null;
   private currentLevel: BuiltLevel | null = null;
-  private currentSkyboxTexture: THREE.Texture | null = null;
+  private currentSkyboxTexture: THREE.Texture | THREE.CubeTexture | null = null;
   private skyboxMesh: THREE.Mesh | null = null;
   private currentLevelData: LevelData | null = null;
 
@@ -134,7 +134,7 @@ export class SceneManager {
   }
 
   /**
-   * Load skybox — procedural lush garden scene
+   * Load skybox — tries cubemap images first, falls back to procedural
    */
   private async loadSkybox(): Promise<void> {
     // Dispose previous skybox
@@ -148,8 +148,28 @@ export class SceneManager {
       (this.skyboxMesh.material as THREE.Material).dispose();
       this.skyboxMesh = null;
     }
+    this.scene.background = null;
 
-    this.createGardenSkybox();
+    // Try loading cubemap images (AI-generated faces)
+    try {
+      const loader = new THREE.CubeTextureLoader();
+      loader.setPath('assets/skyboxes/garden/');
+      const cubeTexture = await new Promise<THREE.CubeTexture>((resolve, reject) => {
+        loader.load(
+          ['px.png', 'nx.png', 'py.png', 'ny.png', 'pz.png', 'nz.png'],
+          resolve,
+          undefined,
+          reject
+        );
+      });
+      cubeTexture.colorSpace = THREE.SRGBColorSpace;
+      this.scene.background = cubeTexture;
+      this.currentSkyboxTexture = cubeTexture;
+      console.log('Loaded cubemap skybox from images');
+    } catch {
+      // Fallback to procedural skybox
+      this.createGardenSkybox();
+    }
   }
 
   /**
@@ -894,6 +914,7 @@ export class SceneManager {
       this.skyboxMesh.geometry.dispose();
       (this.skyboxMesh.material as THREE.Material).dispose();
     }
+    this.scene.background = null;
     this.hud.dispose();
   }
 }
