@@ -102,7 +102,7 @@ export class ParticleManager {
    * Grows the pool if empty. Only for effects with count <= POOL_MAX_PARTICLES.
    *
    * Use pooled systems for high-frequency effects (>1/sec): footstep dust, run dust,
-   * landing dust, collect burst, size change, wall slide. Non-pooled allocation is
+   * landing dust, collect burst, size change. Non-pooled allocation is
    * acceptable for rare/large bursts (quest complete, gate unlock, death/respawn).
    */
   private acquireSystem(
@@ -245,7 +245,7 @@ export class ParticleManager {
     position: THREE.Vector3,
     growing: boolean
   ): void {
-    const count = 24;
+    const count = 20;
     const system = this.acquireSystem(count, {
       size: 0.3,
       blending: THREE.AdditiveBlending,
@@ -1415,9 +1415,9 @@ export class ParticleManager {
 
   /**
    * Collect trail - particles arc upward toward top-left of screen (UI counter location)
-   * Called when collecting stars/cards to visually connect pickup to HUD
+   * Called when collecting cards to visually connect pickup to HUD
    * @param startPos - World position where collectible was picked up
-   * @param color - Particle color matching collectible type (gold for stars, red for cards)
+   * @param color - Particle color matching collectible type (red for cards)
    */
   createCollectTrail(startPos: THREE.Vector3, color: number): void {
     const count = 6;  // 5-6 particles

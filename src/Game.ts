@@ -276,7 +276,7 @@ export class Game {
         this.cameraController?.kickFOV(62, 0.2);
       } else {
         audioManager.playCollect();
-        // Small screen shake for star/card collection
+        // Small screen shake for card collection
         this.cameraController?.shake(0.1);
       }
     };
@@ -1387,7 +1387,7 @@ export class Game {
       <p style="margin:0"><b>WASD</b> - Move</p>
       <p style="margin:5px 0"><b>Arrow Keys</b> - Camera</p>
       <p style="margin:5px 0"><b>Space</b> - Jump</p>
-      <p style="margin:5px 0"><b>Shift</b> - Ground Pound</p>
+      <p style="margin:5px 0"><b>Shift</b> - Sprint</p>
       <p style="margin:5px 0"><b>Q/R</b> - Shrink/Grow</p>
       <p style="margin:5px 0"><b>E</b> - Talk to NPCs</p>
       <p style="margin:5px 0"><b>M</b> - Mute</p>
