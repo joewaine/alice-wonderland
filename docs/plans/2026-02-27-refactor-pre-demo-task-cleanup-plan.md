@@ -1,7 +1,7 @@
 ---
 title: "Pre-Demo Task Cleanup Sprint"
 type: refactor
-status: active
+status: completed
 date: 2026-02-27
 ---
 
@@ -86,7 +86,7 @@ Group tasks into **6 waves** ordered by priority and natural file groupings. Eac
 
 **Why last:** Verify nothing is broken. This is the most important wave.
 
-- [ ] Run `npm run build` — confirm zero TypeScript errors
+- [x] Run `npm run build` — confirm zero TypeScript errors
 - [ ] Play through Chapter 1 (Vertical Descent) — test jumping, air currents, particles
 - [ ] Play through Chapter 2 (Swimming) — test water physics, buoyancy effects
 - [ ] Play through Chapter 3 (Racing) — test speed boosts, star collection

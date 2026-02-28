@@ -16,7 +16,7 @@ export class AssetLoader {
 
   constructor() {
     this.dracoLoader = new DRACOLoader();
-    this.dracoLoader.setDecoderPath('/draco/');
+    this.dracoLoader.setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
 
     this.gltfLoader = new GLTFLoader();
     this.gltfLoader.setDRACOLoader(this.dracoLoader);

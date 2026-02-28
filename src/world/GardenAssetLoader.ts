@@ -8,47 +8,33 @@
 import * as THREE from 'three';
 import { assetLoader } from '../engine/AssetLoader';
 import { createCelShaderMaterial } from '../shaders/CelShaderMaterial';
-import { addOutlinesToObject } from '../shaders/OutlineEffect';
+import { getTexture, type SurfaceTextureType } from './TextureGenerator';
 
-// Asset ID to path mapping
-const GARDEN_ASSETS: Record<string, string> = {
+
+// Asset ID to path mapping (paths are relative, BASE_URL prepended at load time)
+const GARDEN_ASSET_IDS = [
   // Platforms / Walls
-  'hedge_straight': 'assets/models/garden/hedge_straight.glb',
-  'hedge_corner': 'assets/models/garden/hedge_corner.glb',
-  'hedge_tjunction': 'assets/models/garden/hedge_tjunction.glb',
-  'stone_path': 'assets/models/garden/stone_path.glb',
-  'stone_path_curved': 'assets/models/garden/stone_path_curved.glb',
-  'grass_platform': 'assets/models/garden/grass_platform.glb',
-
+  'hedge_straight', 'hedge_corner', 'hedge_tjunction',
+  'stone_path', 'stone_path_curved', 'grass_platform',
   // Centerpieces
-  'fountain': 'assets/models/garden/fountain.glb',
-  'gazebo': 'assets/models/garden/gazebo.glb',
-  'throne': 'assets/models/garden/throne.glb',
-
+  'fountain', 'gazebo', 'throne',
   // Decorations
-  'rose_bush_red': 'assets/models/garden/rose_bush_red.glb',
-  'rose_bush_white': 'assets/models/garden/rose_bush_white.glb',
-  'rose_bush_pink': 'assets/models/garden/rose_bush_pink.glb',
-  'topiary_sphere': 'assets/models/garden/topiary_sphere.glb',
-  'topiary_spiral': 'assets/models/garden/topiary_spiral.glb',
-  'topiary_heart': 'assets/models/garden/topiary_heart.glb',
-
+  'rose_bush_red', 'rose_bush_white', 'rose_bush_pink',
+  'topiary_sphere', 'topiary_spiral', 'topiary_heart',
   // Props
-  'garden_bench': 'assets/models/garden/garden_bench.glb',
-  'lantern': 'assets/models/garden/lantern.glb',
-  'tea_table': 'assets/models/garden/tea_table.glb',
-  'chair_ornate': 'assets/models/garden/chair_ornate.glb',
-  'playing_card': 'assets/models/garden/playing_card.glb',
-
+  'garden_bench', 'lantern', 'tea_table', 'chair_ornate', 'playing_card',
   // Stairs
-  'stairs_stone': 'assets/models/garden/stairs_stone.glb',
-  'stairs_grass': 'assets/models/garden/stairs_grass.glb',
-
+  'stairs_stone', 'stairs_grass',
   // Additional structures
-  'hedge_arch': 'assets/models/garden/hedge_arch.glb',
-  'pillar_stone': 'assets/models/garden/pillar_stone.glb',
-  'gate_ornate': 'assets/models/garden/gate_ornate.glb',
-};
+  'hedge_arch', 'pillar_stone', 'gate_ornate',
+] as const;
+
+function getGardenAssetPath(assetId: string): string | undefined {
+  if ((GARDEN_ASSET_IDS as readonly string[]).includes(assetId)) {
+    return `${import.meta.env.BASE_URL}assets/models/garden/${assetId}.glb`;
+  }
+  return undefined;
+}
 
 // Material presets based on style_bible.json
 const MATERIAL_PRESETS: Record<string, {
@@ -66,6 +52,19 @@ const MATERIAL_PRESETS: Record<string, {
   'gold': { color: 0xFFD700, shadowColor: 0xB8860B, rimColor: 0xFFEC8B, emissive: 0.05 },
   'grass': { color: 0x4A7C3F, shadowColor: 0x2D5A27, rimColor: 0x7CCD7C },
   'wood': { color: 0x5D4037, shadowColor: 0x3E2723, rimColor: 0x8D6E63 },
+};
+
+// Map material preset names to texture types
+const PRESET_TEXTURE_MAP: Record<string, SurfaceTextureType> = {
+  'hedge': 'hedge',
+  'rose_red': 'hedge',
+  'rose_white': 'hedge',
+  'rose_pink': 'hedge',
+  'stone': 'stone',
+  'marble': 'marble',
+  'gold': 'marble',
+  'grass': 'grass',
+  'wood': 'wood',
 };
 
 // Map asset prefixes to material presets
@@ -86,7 +85,7 @@ function getMaterialPreset(assetId: string): keyof typeof MATERIAL_PRESETS {
  * Load a garden asset by ID, applying cel-shader and outlines
  */
 export async function loadGardenAsset(assetId: string): Promise<THREE.Group> {
-  const path = GARDEN_ASSETS[assetId];
+  const path = getGardenAssetPath(assetId);
 
   if (!path) {
     console.warn(`GardenAssetLoader: Unknown asset ID "${assetId}", using fallback`);
@@ -98,7 +97,7 @@ export async function loadGardenAsset(assetId: string): Promise<THREE.Group> {
     applyGardenStyling(model, assetId);
     return model;
   } catch (error) {
-    console.warn(`GardenAssetLoader: Failed to load "${assetId}", using fallback`);
+    console.warn(`GardenAssetLoader: Failed to load "${assetId}" from ${path}:`, error);
     return createFallbackAsset(assetId);
   }
 }
@@ -109,6 +108,8 @@ export async function loadGardenAsset(assetId: string): Promise<THREE.Group> {
 function applyGardenStyling(model: THREE.Group, assetId: string): void {
   const presetName = getMaterialPreset(assetId);
   const preset = MATERIAL_PRESETS[presetName];
+  const textureType = PRESET_TEXTURE_MAP[presetName] || 'stone';
+  const texture = getTexture(textureType);
 
   model.traverse((child) => {
     if (child instanceof THREE.Mesh) {
@@ -129,9 +130,10 @@ function applyGardenStyling(model: THREE.Group, assetId: string): void {
         originalMat.dispose();
       }
 
-      // Create cel-shader material
+      // Create cel-shader material with procedural texture
       child.material = createCelShaderMaterial({
         color: new THREE.Color(color),
+        map: texture,
         shadowColor: preset.shadowColor,
         highlightColor: 0xFFF8E7,
         rimColor: preset.rimColor,
@@ -143,12 +145,8 @@ function applyGardenStyling(model: THREE.Group, assetId: string): void {
     }
   });
 
-  // Add outlines
-  const outlineThickness = assetId.includes('rose') ? 0.012 : 0.015;
-  addOutlinesToObject(model, {
-    color: 0x2D3748,
-    thickness: outlineThickness,
-  });
+  // Skip outlines on garden assets — they're background props and outlines
+  // double the mesh count, which is expensive with complex GLB models.
 }
 
 /**
@@ -174,7 +172,6 @@ function createFallbackAsset(assetId: string): THREE.Group {
   mesh.receiveShadow = true;
   group.add(mesh);
 
-  addOutlinesToObject(group, { color: 0x2D3748, thickness: 0.015 });
   return group;
 }
 
@@ -182,5 +179,5 @@ function createFallbackAsset(assetId: string): THREE.Group {
  * Check if an asset ID has a registered path
  */
 export function hasGardenAsset(assetId: string): boolean {
-  return assetId in GARDEN_ASSETS;
+  return (GARDEN_ASSET_IDS as readonly string[]).includes(assetId);
 }
