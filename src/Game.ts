@@ -28,6 +28,7 @@ import { AreaGate } from './world/AreaGate';
 import { QuestNotification } from './ui/QuestNotification';
 import { FoliageAnimator } from './effects/FoliageAnimator';
 import { AreaIndicator } from './ui/AreaIndicator';
+import { MissionSelect } from './ui/MissionSelect';
 
 export class Game {
   // Three.js core
@@ -123,6 +124,7 @@ export class Game {
   private areaGates: AreaGate[] = [];
   private questNotification: QuestNotification;
   private areaIndicator: AreaIndicator;
+  private missionSelect: MissionSelect;
 
   // Performance stats overlay
   private statsOverlay: HTMLDivElement | null = null;
@@ -205,6 +207,9 @@ export class Game {
 
     // Area name indicator
     this.areaIndicator = new AreaIndicator();
+
+    // Mission select screen
+    this.missionSelect = new MissionSelect();
 
     // Handle window resize
     window.addEventListener('resize', () => this.onResize());
@@ -320,8 +325,7 @@ export class Game {
     this.mainMenu.onStart = async () => {
       audioManager.init(); // Initialize audio on first user interaction
       await this.loadLevel();
-      musicManager.play(); // Start background music
-      this.start();
+      this.showMissionSelect();
     };
 
     this.mainMenu.onResume = () => {
@@ -332,9 +336,29 @@ export class Game {
 
     this.mainMenu.onRestart = async () => {
       await this.loadLevel();
-      this.isRunning = true;
-      this.lastTime = performance.now();
-      this.gameLoop();
+      this.showMissionSelect();
+    };
+
+    // Mission select callback
+    this.missionSelect.onMissionSelected = (questId: string) => {
+      this.missionSelect.hide();
+      this.mainMenu.pauseEnabled = true;
+
+      // Start the selected quest
+      if (this.questManager) {
+        this.questManager.startQuest(questId);
+      }
+
+      // Show objective reminder
+      const quest = this.questManager?.getQuest(questId);
+      if (quest && this.sceneManager) {
+        const objective = this.getMissionObjectiveText(quest);
+        this.sceneManager.showMessage(`${quest.name}: ${objective}`);
+      }
+
+      // Start game loop
+      musicManager.play();
+      this.start();
     };
 
     // Complete loading and show main menu
@@ -417,6 +441,33 @@ export class Game {
     } catch (error) {
       console.error(`Failed to load The Queen's Garden:`, error);
     }
+  }
+
+  /**
+   * Show mission select screen with current quest data
+   */
+  private showMissionSelect(): void {
+    if (!this.questManager) {
+      // No quests — skip mission select, start directly
+      musicManager.play();
+      this.start();
+      return;
+    }
+
+    this.mainMenu.pauseEnabled = false;
+    const missions = this.questManager.getAllQuests();
+    this.missionSelect.show(missions);
+  }
+
+  /**
+   * Get human-readable objective text for a quest
+   */
+  private getMissionObjectiveText(quest: import('./data/LevelData').Quest): string {
+    const req = quest.requirements;
+    if (req.talk_to_npc) return `Find and talk to ${req.talk_to_npc}`;
+    if (req.reach_position) return 'Reach the gazebo on the hill';
+    if (req.complete_quest) return 'Complete the prerequisite quest first';
+    return quest.dialogue_before[0] || 'Complete the mission objectives';
   }
 
   /**

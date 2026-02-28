@@ -122,18 +122,21 @@ export class DialogueUI {
 
   /**
    * Show dialogue with optional portrait
+   * portraitDataUrl: if provided, used directly as the portrait image src
    */
-  show(name: string, text: string, portraitId?: string, autoDismissMs: number = 5000): void {
+  show(name: string, text: string, portraitId?: string, autoDismissMs: number = 5000, portraitDataUrl?: string): void {
     this.nameElement.textContent = name;
     this.textElement.textContent = `"${text}"`;
 
-    // Load portrait if available
-    if (portraitId) {
+    // Load portrait — prefer rendered data URL, then file, then placeholder
+    if (portraitDataUrl) {
+      this.portraitElement.src = portraitDataUrl;
+      this.portraitElement.style.display = 'block';
+    } else if (portraitId) {
       // Try to load portrait image, fallback to placeholder
       const portraitPath = `${import.meta.env.BASE_URL}assets/portraits/${portraitId}.png`;
       this.portraitElement.src = portraitPath;
       this.portraitElement.onerror = () => {
-        // Use a data URL placeholder (simple colored circle with initial)
         this.setPlaceholderPortrait(name);
       };
       this.portraitElement.style.display = 'block';
