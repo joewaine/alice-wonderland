@@ -28,7 +28,6 @@ import { AreaGate } from './world/AreaGate';
 import { QuestNotification } from './ui/QuestNotification';
 import { FoliageAnimator } from './effects/FoliageAnimator';
 import { AreaIndicator } from './ui/AreaIndicator';
-import { MissionSelect } from './ui/MissionSelect';
 
 export class Game {
   // Three.js core
@@ -124,7 +123,6 @@ export class Game {
   private areaGates: AreaGate[] = [];
   private questNotification: QuestNotification;
   private areaIndicator: AreaIndicator;
-  private missionSelect: MissionSelect;
 
   // Performance stats overlay
   private statsOverlay: HTMLDivElement | null = null;
@@ -208,8 +206,6 @@ export class Game {
     // Area name indicator
     this.areaIndicator = new AreaIndicator();
 
-    // Mission select screen
-    this.missionSelect = new MissionSelect();
 
     // Handle window resize
     window.addEventListener('resize', () => this.onResize());
@@ -325,7 +321,7 @@ export class Game {
     this.mainMenu.onStart = async () => {
       audioManager.init(); // Initialize audio on first user interaction
       await this.loadLevel();
-      this.showMissionSelect();
+      this.startFirstAvailableQuest();
     };
 
     this.mainMenu.onResume = () => {
@@ -336,29 +332,7 @@ export class Game {
 
     this.mainMenu.onRestart = async () => {
       await this.loadLevel();
-      this.showMissionSelect();
-    };
-
-    // Mission select callback
-    this.missionSelect.onMissionSelected = (questId: string) => {
-      this.missionSelect.hide();
-      this.mainMenu.pauseEnabled = true;
-
-      // Start the selected quest
-      if (this.questManager) {
-        this.questManager.startQuest(questId);
-      }
-
-      // Show objective reminder
-      const quest = this.questManager?.getQuest(questId);
-      if (quest && this.sceneManager) {
-        const objective = this.getMissionObjectiveText(quest);
-        this.sceneManager.showMessage(`${quest.name}: ${objective}`);
-      }
-
-      // Start game loop
-      musicManager.play();
-      this.start();
+      this.startFirstAvailableQuest();
     };
 
     // Complete loading and show main menu
@@ -444,19 +418,23 @@ export class Game {
   }
 
   /**
-   * Show mission select screen with current quest data
+   * Auto-start the first available quest and begin gameplay
    */
-  private showMissionSelect(): void {
-    if (!this.questManager) {
-      // No quests — skip mission select, start directly
-      musicManager.play();
-      this.start();
-      return;
+  private startFirstAvailableQuest(): void {
+    this.mainMenu.pauseEnabled = true;
+
+    if (this.questManager) {
+      const missions = this.questManager.getAllQuests();
+      const firstAvailable = missions.find(m => m.status === 'available');
+      if (firstAvailable) {
+        this.questManager.startQuest(firstAvailable.quest.id);
+        const objective = this.getMissionObjectiveText(firstAvailable.quest);
+        this.sceneManager?.showMessage(`${firstAvailable.quest.name}: ${objective}`);
+      }
     }
 
-    this.mainMenu.pauseEnabled = false;
-    const missions = this.questManager.getAllQuests();
-    this.missionSelect.show(missions);
+    musicManager.play();
+    this.start();
   }
 
   /**
