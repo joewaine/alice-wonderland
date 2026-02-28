@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "mkdir -p public/draco && cp -r node_modules/three/examples/jsm/libs/draco/ public/draco/",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
