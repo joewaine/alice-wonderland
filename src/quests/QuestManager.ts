@@ -308,6 +308,18 @@ export class QuestManager {
   // ===== Query Methods =====
 
   /**
+   * Get all quests with their current status (for mission select UI)
+   */
+  getAllQuests(): { quest: Quest, status: QuestStatus }[] {
+    const result: { quest: Quest, status: QuestStatus }[] = [];
+    for (const [questId, quest] of this.quests) {
+      const state = this.questStates.get(questId);
+      result.push({ quest, status: state?.status ?? 'locked' });
+    }
+    return result;
+  }
+
+  /**
    * Check if an area is unlocked
    */
   isAreaUnlocked(areaId: string): boolean {

@@ -11,6 +11,7 @@ import type { NPCObject } from '../world/LevelBuilder';
 import { DialogueUI } from './DialogueUI';
 import type { QuestManager } from '../quests/QuestManager';
 import type { ParticleManager } from '../effects/ParticleManager';
+import { PortraitRenderer } from '../ui/PortraitRenderer';
 
 export class NPCController {
   private npcs: NPCObject[] = [];
@@ -57,8 +58,15 @@ export class NPCController {
   };
   private frameCount: number = 0;
 
+  // Portrait rendering from 3D models
+  private portraitRenderer: PortraitRenderer = new PortraitRenderer();
+
   // Performance: Mesh cache for avoiding traversal
   private meshCache: Map<NPCObject, THREE.Mesh[]> = new Map();
+
+  // Pre-allocated vector to avoid per-frame GC pressure
+  private directionCache: THREE.Vector3 = new THREE.Vector3();
+  private readonly NPC_ROTATION_SPEED = 5; // radians/sec for smooth turning
 
   // Proximity particle effect
   private particleManager: ParticleManager | null = null;
@@ -147,6 +155,12 @@ export class NPCController {
 
     this.npcs = npcs;
     this.currentNPC = null;
+
+    // Pre-render portraits from 3D models
+    const portraitBatch = npcs
+      .filter(npc => npc.modelId)
+      .map(npc => ({ key: npc.modelId!, mesh: npc.mesh }));
+    this.portraitRenderer.renderBatch(portraitBatch);
 
     // Create speech bubbles for each NPC, detect animated NPCs, cache meshes, and assign breathing phase
     for (const npc of npcs) {
@@ -315,12 +329,14 @@ export class NPCController {
    * Full-tier NPC update: animation + facing + speech bubble
    */
   private updateNPCFull(npc: NPCObject, playerPosition: THREE.Vector3, dt: number): void {
-    // Face player
-    const direction = new THREE.Vector3()
-      .subVectors(playerPosition, npc.position)
-      .normalize();
-    const angle = Math.atan2(direction.x, direction.z);
-    npc.mesh.rotation.y = angle;
+    // Smooth turn to face player
+    this.directionCache.subVectors(playerPosition, npc.position).normalize();
+    const targetAngle = Math.atan2(this.directionCache.x, this.directionCache.z);
+    let angleDiff = targetAngle - npc.mesh.rotation.y;
+    // Wrap to shortest path [-PI, PI]
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+    npc.mesh.rotation.y += angleDiff * Math.min(1, this.NPC_ROTATION_SPEED * dt);
 
     // Apply breathing animation (subtle Y scale oscillation)
     const breathingPhase = this.breathingPhaseOffsets.get(npc) || 0;
@@ -402,7 +418,8 @@ export class NPCController {
     this.playNPCAnimation(npc, 'talk');
 
     const line = this.currentDialogue[0] || 'Hello there!';
-    this.dialogueUI.show(npc.name, line, npc.modelId);
+    const portraitUrl = npc.modelId ? this.portraitRenderer.getPortrait(npc.modelId, npc.mesh) : undefined;
+    this.dialogueUI.show(npc.name, line, npc.modelId, undefined, portraitUrl);
 
     // Notify dialogue started (for camera focus)
     this.onDialogueStart?.();
@@ -465,7 +482,8 @@ export class NPCController {
     } else {
       // Show next line
       const line = this.currentDialogue[this.currentNPC.dialogueIndex];
-      this.dialogueUI.show(this.currentNPC.name, line, this.currentNPC.modelId);
+      const portraitUrl = this.currentNPC.modelId ? this.portraitRenderer.getPortrait(this.currentNPC.modelId, this.currentNPC.mesh) : undefined;
+      this.dialogueUI.show(this.currentNPC.name, line, this.currentNPC.modelId, undefined, portraitUrl);
     }
   }
 
@@ -525,6 +543,7 @@ export class NPCController {
    */
   dispose(): void {
     this.dialogueUI.dispose();
+    this.portraitRenderer.dispose();
     this.clearSpeechBubbles();
     if (this.bubbleTexture) {
       this.bubbleTexture.dispose();
