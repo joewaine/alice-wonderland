@@ -325,7 +325,8 @@ export class SceneManager {
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       side: THREE.FrontSide,
-      depthWrite: false
+      depthWrite: false,
+      fog: false
     });
 
     this.skyboxMesh = new THREE.Mesh(geometry, material);
