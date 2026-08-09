@@ -13,6 +13,7 @@ export class MainMenu {
   private container: HTMLDivElement;
   private pauseOverlay: HTMLDivElement;
   private isPaused: boolean = false;
+  public pauseEnabled: boolean = true;
 
   // Callbacks
   public onStart: (() => void) | null = null;
@@ -176,6 +177,7 @@ export class MainMenu {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (this.container.style.display !== 'none') return; // Don't pause on main menu
+        if (!this.pauseEnabled) return; // Don't pause during mission select
         if (this.isPaused) {
           this.unpause();
           if (this.onResume) this.onResume();

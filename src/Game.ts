@@ -215,6 +215,7 @@ export class Game {
     // Area name indicator
     this.areaIndicator = new AreaIndicator();
 
+
     // Handle window resize
     window.addEventListener('resize', () => this.onResize());
 
@@ -329,8 +330,7 @@ export class Game {
     this.mainMenu.onStart = async () => {
       audioManager.init(); // Initialize audio on first user interaction
       await this.loadLevel();
-      musicManager.play(); // Start background music
-      this.start();
+      this.startFirstAvailableQuest();
     };
 
     this.mainMenu.onResume = () => {
@@ -341,9 +341,7 @@ export class Game {
 
     this.mainMenu.onRestart = async () => {
       await this.loadLevel();
-      this.isRunning = true;
-      this.lastTime = performance.now();
-      this.gameLoop();
+      this.startFirstAvailableQuest();
     };
 
     // Complete loading and show main menu
@@ -426,6 +424,37 @@ export class Game {
     } catch (error) {
       console.error(`Failed to load The Queen's Garden:`, error);
     }
+  }
+
+  /**
+   * Auto-start the first available quest and begin gameplay
+   */
+  private startFirstAvailableQuest(): void {
+    this.mainMenu.pauseEnabled = true;
+
+    if (this.questManager) {
+      const missions = this.questManager.getAllQuests();
+      const firstAvailable = missions.find(m => m.status === 'available');
+      if (firstAvailable) {
+        this.questManager.startQuest(firstAvailable.quest.id);
+        const objective = this.getMissionObjectiveText(firstAvailable.quest);
+        this.sceneManager?.showMessage(`${firstAvailable.quest.name}: ${objective}`);
+      }
+    }
+
+    musicManager.play();
+    this.start();
+  }
+
+  /**
+   * Get human-readable objective text for a quest
+   */
+  private getMissionObjectiveText(quest: import('./data/LevelData').Quest): string {
+    const req = quest.requirements;
+    if (req.talk_to_npc) return `Find and talk to ${req.talk_to_npc}`;
+    if (req.reach_position) return 'Reach the gazebo on the hill';
+    if (req.complete_quest) return 'Complete the prerequisite quest first';
+    return quest.dialogue_before[0] || 'Complete the mission objectives';
   }
 
   /**
