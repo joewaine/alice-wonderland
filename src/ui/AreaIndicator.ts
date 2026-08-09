@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import type { Area } from '../data/LevelData';
+import { injectTheme } from './theme';
 
 export class AreaIndicator {
   private container: HTMLDivElement;
@@ -17,6 +18,8 @@ export class AreaIndicator {
   private hideTimeout: number | null = null;
 
   constructor() {
+    injectTheme();
+
     // Create container
     this.container = document.createElement('div');
     this.container.style.cssText = `
@@ -33,23 +36,22 @@ export class AreaIndicator {
 
     // Area name
     this.nameElement = document.createElement('div');
+    this.nameElement.className = 'aw-display';
     this.nameElement.style.cssText = `
-      font-family: 'Georgia', serif;
-      font-size: 28px;
-      font-weight: bold;
-      color: white;
-      text-shadow: 2px 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5);
-      letter-spacing: 2px;
+      font-size: 30px;
+      color: var(--aw-parchment);
+      text-shadow: 0 2px 14px rgba(0, 0, 0, 0.8), 0 0 36px rgba(212, 175, 95, 0.3);
+      letter-spacing: 0.14em;
     `;
 
     // Subtitle (optional)
     this.subtitleElement = document.createElement('div');
     this.subtitleElement.style.cssText = `
-      font-family: 'Georgia', serif;
-      font-size: 14px;
+      font-family: var(--aw-font-text);
+      font-size: 16px;
       font-style: italic;
-      color: rgba(255,255,255,0.8);
-      text-shadow: 1px 1px 4px rgba(0,0,0,0.8);
+      color: var(--aw-lilac);
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
       margin-top: 4px;
     `;
 

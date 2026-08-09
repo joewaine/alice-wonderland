@@ -11,6 +11,7 @@ import type { NPCObject } from '../world/LevelBuilder';
 import { DialogueUI } from './DialogueUI';
 import type { QuestManager } from '../quests/QuestManager';
 import type { ParticleManager } from '../effects/ParticleManager';
+import { injectTheme } from '../ui/theme';
 
 export class NPCController {
   private npcs: NPCObject[] = [];
@@ -71,17 +72,17 @@ export class NPCController {
 
     // Create interaction prompt
     this.promptElement = document.createElement('div');
-    this.promptElement.style.cssText = `
+    injectTheme();
+    this.promptElement.className = 'aw-panel';
+    this.promptElement.style.cssText += `
       position: absolute;
       bottom: 200px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0,0,0,0.8);
-      color: white;
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-family: monospace;
-      font-size: 16px;
+      padding: 10px 22px;
+      font-size: 17px;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
       opacity: 0;
       transition: opacity 0.2s;
       pointer-events: none;
@@ -266,7 +267,8 @@ export class NPCController {
 
     // Show/hide interaction prompt
     if (nearestNPC && !this.dialogueUI.getIsVisible()) {
-      this.promptElement.textContent = `Press E to talk to ${nearestNPC.name}`;
+      this.promptElement.innerHTML =
+        `<span class="aw-kbd">E</span> <span style="font-style: italic; opacity: 0.9;">Talk to ${nearestNPC.name}</span>`;
       this.promptElement.style.opacity = '1';
     } else {
       this.promptElement.style.opacity = '0';

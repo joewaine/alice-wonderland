@@ -1,11 +1,15 @@
 /**
  * CelShaderMaterial - Breath of the Wild-inspired cel-shading
  *
- * Features:
- * - 3-step diffuse lighting (shadow, mid, highlight)
- * - Rim lighting for depth and character pop
- * - Texture support with cel-shaded lighting
- * - Hard shadow cutoff for stylized look
+ * Built on MeshToonMaterial with a shared 3-step gradient ramp, so cel
+ * surfaces get everything the old hand-rolled ShaderMaterial lacked:
+ * cast/received shadows, fog, and correct color management. A rim-light
+ * term is injected via onBeforeCompile for the characteristic sky-bounce
+ * edge glow.
+ *
+ * The factory keeps the original createCelShaderMaterial(options) API;
+ * shadowColor/highlightColor are accepted for compatibility but banding
+ * now comes from the gradient ramp.
  */
 
 import * as THREE from 'three';
@@ -13,137 +17,78 @@ import * as THREE from 'three';
 export interface CelShaderOptions {
   color?: THREE.Color | number;
   map?: THREE.Texture | null;
-  shadowColor?: THREE.Color | number;
-  highlightColor?: THREE.Color | number;
+  shadowColor?: THREE.Color | number;    // Accepted for API compatibility
+  highlightColor?: THREE.Color | number; // Accepted for API compatibility
   rimColor?: THREE.Color | number;
   rimPower?: number;
   transparent?: boolean;
   opacity?: number;
 }
 
-// Cel-shading uses exactly 3 steps (shadow/mid/highlight) — the color band
-// thresholds in the fragment shader are hardcoded to match.
-const CEL_STEPS = 3;
-
-const defaultOptions: Required<CelShaderOptions> = {
-  color: new THREE.Color(0xffffff),
-  map: null,
-  shadowColor: new THREE.Color(0x6b5b7a),    // Purple-ish shadow (BotW style)
-  highlightColor: new THREE.Color(0xfff8e7), // Warm highlight
-  rimColor: new THREE.Color(0xadd8e6),       // Soft blue rim
+const defaultOptions = {
+  color: 0xffffff as THREE.Color | number,
+  map: null as THREE.Texture | null,
+  rimColor: 0xadd8e6 as THREE.Color | number, // Soft blue rim
   rimPower: 2.0,
   transparent: false,
   opacity: 1.0,
 };
 
-// Vertex shader - passes normals and view direction to fragment
-const vertexShader = /* glsl */ `
-  varying vec3 vNormal;
-  varying vec3 vViewPosition;
-  varying vec2 vUv;
+// Shared 3-step toon ramp: shadow / mid / highlight
+let sharedGradientMap: THREE.DataTexture | null = null;
 
-  void main() {
-    vUv = uv;
-    vNormal = normalize(normalMatrix * normal);
-
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    vViewPosition = -mvPosition.xyz;
-
-    gl_Position = projectionMatrix * mvPosition;
+function getGradientMap(): THREE.DataTexture {
+  if (!sharedGradientMap) {
+    const data = new Uint8Array([150, 215, 255]);
+    sharedGradientMap = new THREE.DataTexture(data, 3, 1, THREE.RedFormat);
+    sharedGradientMap.minFilter = THREE.NearestFilter;
+    sharedGradientMap.magFilter = THREE.NearestFilter;
+    sharedGradientMap.needsUpdate = true;
   }
-`;
-
-// Fragment shader - stepped lighting with rim
-const fragmentShader = /* glsl */ `
-  uniform vec3 uColor;
-  uniform vec3 uShadowColor;
-  uniform vec3 uHighlightColor;
-  uniform vec3 uRimColor;
-  uniform float uRimPower;
-  uniform float uSteps;
-  uniform sampler2D uMap;
-  uniform bool uHasMap;
-  uniform vec3 uLightDirection;
-  uniform float uAmbientIntensity;
-  uniform float uOpacity;
-
-  varying vec3 vNormal;
-  varying vec3 vViewPosition;
-  varying vec2 vUv;
-
-  void main() {
-    // Base color (from texture or uniform)
-    vec3 baseColor = uHasMap ? texture2D(uMap, vUv).rgb * uColor : uColor;
-
-    // Diffuse lighting - dot product with light direction
-    vec3 normal = normalize(vNormal);
-    vec3 lightDir = normalize(uLightDirection);
-    float NdotL = dot(normal, lightDir);
-
-    // Step the lighting for cel-shaded look
-    // Map from [-1, 1] to [0, 1] then quantize
-    float lightIntensity = (NdotL + 1.0) * 0.5;
-    lightIntensity = floor(lightIntensity * uSteps) / uSteps;
-
-    // Create color bands: shadow -> mid -> highlight
-    vec3 shadedColor;
-    if (lightIntensity < 0.33) {
-      // Shadow band - mix shadow color with base
-      shadedColor = mix(uShadowColor, baseColor, 0.3);
-    } else if (lightIntensity < 0.66) {
-      // Mid band - base color
-      shadedColor = baseColor;
-    } else {
-      // Highlight band - mix with highlight color
-      shadedColor = mix(baseColor, uHighlightColor, 0.3);
-    }
-
-    // Add ambient to prevent pure black shadows
-    shadedColor = mix(shadedColor, baseColor, uAmbientIntensity);
-
-    // Rim lighting - fresnel-like effect at grazing angles
-    vec3 viewDir = normalize(vViewPosition);
-    float rimFactor = 1.0 - max(dot(normal, viewDir), 0.0);
-    rimFactor = pow(rimFactor, uRimPower);
-
-    // Apply rim only on lit side (subtle)
-    rimFactor *= smoothstep(0.0, 0.3, NdotL + 0.3);
-    vec3 finalColor = mix(shadedColor, uRimColor, rimFactor * 0.5);
-
-    gl_FragColor = vec4(finalColor, uOpacity);
-  }
-`;
+  return sharedGradientMap;
+}
 
 /**
  * Create a cel-shaded material
  */
-export function createCelShaderMaterial(options: CelShaderOptions = {}): THREE.ShaderMaterial {
+export function createCelShaderMaterial(options: CelShaderOptions = {}): THREE.MeshToonMaterial {
   const opts = { ...defaultOptions, ...options };
 
-  const color = opts.color instanceof THREE.Color ? opts.color : new THREE.Color(opts.color);
-  const shadowColor = opts.shadowColor instanceof THREE.Color ? opts.shadowColor : new THREE.Color(opts.shadowColor);
-  const highlightColor = opts.highlightColor instanceof THREE.Color ? opts.highlightColor : new THREE.Color(opts.highlightColor);
-  const rimColor = opts.rimColor instanceof THREE.Color ? opts.rimColor : new THREE.Color(opts.rimColor);
+  const color = opts.color instanceof THREE.Color ? opts.color.clone() : new THREE.Color(opts.color);
+  const rimColor = opts.rimColor instanceof THREE.Color ? opts.rimColor.clone() : new THREE.Color(opts.rimColor);
+  const rimPower = opts.rimPower;
 
-  const material = new THREE.ShaderMaterial({
-    vertexShader,
-    fragmentShader,
-    uniforms: {
-      uColor: { value: color },
-      uShadowColor: { value: shadowColor },
-      uHighlightColor: { value: highlightColor },
-      uRimColor: { value: rimColor },
-      uRimPower: { value: opts.rimPower },
-      uSteps: { value: CEL_STEPS },
-      uMap: { value: opts.map },
-      uHasMap: { value: opts.map !== null },
-      uLightDirection: { value: new THREE.Vector3(0.5, 1, 0.3).normalize() },
-      uAmbientIntensity: { value: 0.3 },
-      uOpacity: { value: opts.opacity },
-    },
+  const material = new THREE.MeshToonMaterial({
+    color,
+    map: opts.map ?? null,
+    gradientMap: getGradientMap(),
     transparent: opts.transparent,
+    opacity: opts.opacity,
     side: opts.transparent ? THREE.DoubleSide : THREE.FrontSide,
   });
+
+  // Inject rim lighting just before the final color write
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uRimColor = { value: rimColor };
+    shader.uniforms.uRimPower = { value: rimPower };
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nuniform vec3 uRimColor;\nuniform float uRimPower;'
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        /* glsl */ `
+        {
+          vec3 rimView = normalize( vViewPosition );
+          float rimFactor = pow( 1.0 - saturate( dot( normalize( normal ), rimView ) ), uRimPower );
+          outgoingLight = mix( outgoingLight, uRimColor, rimFactor * 0.3 );
+        }
+        #include <opaque_fragment>`
+      );
+  };
+  // Distinguish the patched program in three's shader cache
+  material.customProgramCacheKey = () => 'cel-rim';
 
   return material;
 }
@@ -176,17 +121,13 @@ export function applyCelShaderToObject(
 }
 
 /**
- * Update light direction for all cel-shaded materials in scene
+ * Legacy hook: the old ShaderMaterial needed its light direction synced by
+ * hand. MeshToonMaterial is lit by the scene's real lights, so this is a
+ * no-op kept for call-site compatibility.
  */
 export function updateCelShaderLightDirection(
-  scene: THREE.Scene,
-  lightDirection: THREE.Vector3
+  _scene: THREE.Scene,
+  _lightDirection: THREE.Vector3
 ): void {
-  scene.traverse((child) => {
-    if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
-      if (child.material.uniforms.uLightDirection) {
-        child.material.uniforms.uLightDirection.value.copy(lightDirection).normalize();
-      }
-    }
-  });
+  // Intentionally a no-op
 }

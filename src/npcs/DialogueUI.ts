@@ -5,6 +5,8 @@
  * Auto-dismisses after timeout or when player walks away.
  */
 
+import { injectTheme } from '../ui/theme';
+
 export class DialogueUI {
   private container: HTMLDivElement;
   private contentWrapper: HTMLDivElement;
@@ -19,37 +21,23 @@ export class DialogueUI {
   public onDismiss: (() => void) | null = null;
 
   constructor() {
-    // Inject pop-in animation keyframes
-    this.styleElement = document.createElement('style');
-    this.styleElement.textContent = `
-      @keyframes dialoguePopIn {
-        0% { transform: scale(0.8); opacity: 0; }
-        70% { transform: scale(1.05); opacity: 1; }
-        100% { transform: scale(1); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(this.styleElement);
+    injectTheme();
 
     // Create container
     this.container = document.createElement('div');
-    this.container.style.cssText = `
+    this.container.className = 'aw-panel';
+    this.container.style.cssText += `
       position: absolute;
       bottom: 100px;
       left: 50%;
       transform: translateX(-50%);
       width: 650px;
       max-width: 90vw;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      border: 3px solid #e94560;
-      border-radius: 12px;
-      padding: 20px;
-      font-family: 'Georgia', serif;
-      color: white;
+      padding: 22px 26px;
       opacity: 0;
       transition: opacity 0.3s;
       pointer-events: none;
       z-index: 200;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
     `;
 
     // Content wrapper (portrait + text side by side)
@@ -67,9 +55,10 @@ export class DialogueUI {
       width: 100px;
       height: 100px;
       border-radius: 50%;
-      border: 3px solid #e94560;
+      border: 2px solid var(--aw-gold);
+      box-shadow: 0 0 18px rgba(212, 175, 95, 0.25);
       object-fit: cover;
-      background: #2a2a4e;
+      background: var(--aw-ink);
       flex-shrink: 0;
     `;
     this.portraitElement.alt = 'Character portrait';
@@ -86,35 +75,34 @@ export class DialogueUI {
 
     // Character name
     this.nameElement = document.createElement('div');
+    this.nameElement.className = 'aw-display aw-gold-text';
     this.nameElement.style.cssText = `
-      font-size: 18px;
-      font-weight: bold;
-      color: #e94560;
+      font-size: 22px;
       margin-bottom: 10px;
-      text-transform: uppercase;
-      letter-spacing: 2px;
+      letter-spacing: 0.16em;
     `;
     this.textWrapper.appendChild(this.nameElement);
 
     // Dialogue text
     this.textElement = document.createElement('div');
     this.textElement.style.cssText = `
-      font-size: 20px;
+      font-size: 21px;
       line-height: 1.6;
       font-style: italic;
-      color: #eee;
+      color: var(--aw-parchment);
     `;
     this.textWrapper.appendChild(this.textElement);
 
     // Press E hint
     const hint = document.createElement('div');
     hint.style.cssText = `
-      font-size: 12px;
-      color: #888;
-      margin-top: 15px;
+      font-size: 14px;
+      color: var(--aw-parchment);
+      opacity: 0.45;
+      margin-top: 14px;
       text-align: right;
     `;
-    hint.textContent = 'Press E or walk away to dismiss';
+    hint.innerHTML = `<span class="aw-kbd">E</span> or walk away to dismiss`;
     this.container.appendChild(hint);
 
     document.body.appendChild(this.container);
@@ -148,7 +136,7 @@ export class DialogueUI {
     this.textWrapper.style.animation = 'none';
     // Force reflow to restart animation
     void this.textWrapper.offsetHeight;
-    this.textWrapper.style.animation = 'dialoguePopIn 0.15s ease-out forwards';
+    this.textWrapper.style.animation = 'awPopIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards';
 
     // Clear previous timeout
     if (this.dismissTimeout) {

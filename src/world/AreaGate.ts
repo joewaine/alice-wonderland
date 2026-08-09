@@ -57,7 +57,7 @@ export class AreaGate {
    * Create the gate visual and physics
    */
   private createGate(config: AreaGateConfig): void {
-    const { position, size, visible = true, color = 0x2D5A27 } = config;
+    const { position, size, visible = true, color = 0x3E7A34 } = config;
 
     // Create visual mesh if visible
     if (visible) {

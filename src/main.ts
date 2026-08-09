@@ -5,8 +5,10 @@
  */
 
 import { Game } from './Game';
+import { injectTheme } from './ui/theme';
 
 async function main() {
+  injectTheme();
   console.log('Starting Alice in Wonderland...');
 
   // Create and initialize game

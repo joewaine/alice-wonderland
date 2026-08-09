@@ -28,6 +28,8 @@ import { AreaGate } from './world/AreaGate';
 import { QuestNotification } from './ui/QuestNotification';
 import { FoliageAnimator } from './effects/FoliageAnimator';
 import { AreaIndicator } from './ui/AreaIndicator';
+import { PostProcessing } from './rendering/PostProcessing';
+import { WonderlandSky } from './rendering/WonderlandSky';
 
 export class Game {
   // Three.js core
@@ -131,10 +133,13 @@ export class Game {
   private frameTimeHistory: number[] = [];
   private lastStatsUpdate: number = 0;
 
-  // Screen vignette overlay
-  private vignetteOverlay: HTMLDivElement | null = null;
-  private currentVignetteIntensity: number = 0.3;  // Base vignette darkness
-  private targetVignetteIntensity: number = 0.3;
+  // Post-processing vignette (speed tunnel-vision effect)
+  private currentVignetteIntensity: number = 0.32;  // Base vignette darkness
+  private targetVignetteIntensity: number = 0.32;
+
+  // Cinematic pipeline
+  private post: PostProcessing | null = null;
+  private sky: WonderlandSky | null = null;
 
   // Slow motion effect (for water entry, etc.)
   private timeScale: number = 1.0;
@@ -146,12 +151,15 @@ export class Game {
   private bouncePadCooldown: number = 0;
 
   constructor() {
-    // Create renderer - BasicShadowMap for hard cel-shaded shadows
+    // Create renderer - filmic tone mapping + soft shadows for the painterly look
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.BasicShadowMap; // Hard edges for cel-shading
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Tone mapping stays off: the post pipeline grades in display space
+    // (see PostProcessing.ts) — materials here are authored for direct output.
+    this.renderer.toneMapping = THREE.NoToneMapping;
 
     // Setup DOM
     document.body.innerHTML = '';
@@ -165,11 +173,12 @@ export class Game {
 
     // Golden hour sky (warm and inviting)
     const skyColor = new THREE.Color(0xFAD7A0);   // Golden
-    const fogColor = new THREE.Color(0xFFE8C8);   // Warm peach fog
-    this.scene.background = skyColor;  // Overridden by skybox when loaded
+    const fogColor = new THREE.Color(0xEFD3AC);   // Warm amber haze
+    this.scene.background = skyColor;  // Overridden by shader sky when created
 
-    // Atmospheric fog for depth - warm golden haze
-    this.scene.fog = new THREE.Fog(fogColor, 40, 180);
+    // Atmospheric fog for depth - starts well past the playfield so it
+    // reads as distance, not as a white veil over everything
+    this.scene.fog = new THREE.Fog(fogColor, 75, 320);
 
     // Create camera
     this.camera = new THREE.PerspectiveCamera(
@@ -215,8 +224,8 @@ export class Game {
     // Create performance stats overlay (hidden by default)
     this.createStatsOverlay();
 
-    // Create cinematic vignette overlay
-    this.createVignetteOverlay();
+    // Cinematic post-processing pipeline (bloom, tone map, grade)
+    this.post = new PostProcessing(this.renderer, this.scene, this.camera);
   }
 
   /**
@@ -467,7 +476,7 @@ export class Game {
             size: gateSize,
             areaId: area.id,
             visible: true,
-            color: 0x2D5A27  // Hedge green
+            color: 0x3E7A34  // Hedge green
           });
 
           this.areaGates.push(gate);
@@ -604,29 +613,35 @@ export class Game {
    * Warm, dramatic late-afternoon lighting with BotW cel-shaded style
    */
   private setupLighting(): void {
-    // Warm ambient - golden hour glow (slightly brighter to compensate for no bloom)
-    const ambient = new THREE.AmbientLight(0xFFF8E0, 0.4);
+    // Warm ambient - golden hour glow
+    const ambient = new THREE.AmbientLight(0xFFF8E0, 0.5);
     this.scene.add(ambient);
 
     // Golden sun at low angle for dramatic shadows
     const sun = new THREE.DirectionalLight(0xFFE4B5, 1.3);
     sun.position.set(25, 20, 20);  // Lower angle for longer shadows
     sun.castShadow = true;
-    sun.shadow.mapSize.width = 2048;
-    sun.shadow.mapSize.height = 2048;
+    sun.shadow.mapSize.width = 4096;
+    sun.shadow.mapSize.height = 4096;
     sun.shadow.camera.near = 0.5;
     sun.shadow.camera.far = 200;
     sun.shadow.camera.left = -60;
     sun.shadow.camera.right = 60;
     sun.shadow.camera.top = 60;
     sun.shadow.camera.bottom = -60;
+    sun.shadow.radius = 4;
+    sun.shadow.bias = -0.0002;
     this.scene.add(sun);
 
     // Store sun reference for cel-shader light direction sync
     this.sunLight = sun;
 
+    // Animated shader sky, lit from the same sun direction
+    this.sky = new WonderlandSky(this.scene, sun.position);
+    this.scene.background = null;
+
     // Sky/ground hemisphere - warm sky, green garden bounce
-    const hemi = new THREE.HemisphereLight(0xFAD7A0, 0x7CB342, 0.4);
+    const hemi = new THREE.HemisphereLight(0xFAD7A0, 0x7CB342, 0.55);
     this.scene.add(hemi);
 
     // Subtle fill light from opposite side (bounced light effect)
@@ -1029,7 +1044,7 @@ export class Game {
 
     // Check if paused
     if (this.mainMenu.getIsPaused()) {
-      this.renderer.render(this.scene, this.camera);
+      this.post?.render(0);
       return;
     }
 
@@ -1055,8 +1070,11 @@ export class Game {
     this.updateParticles(scaledDt);
     this.updatePhysics();
 
-    // Render
-    this.renderer.render(this.scene, this.camera);
+    // Animate the sky dome (follows camera, drifting clouds)
+    this.sky?.update(scaledDt, this.camera.position);
+
+    // Render through the cinematic pipeline
+    this.post?.render(dt);
 
     // Update performance stats overlay
     this.updateStats(dt);
@@ -1383,6 +1401,7 @@ export class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.post?.setSize(window.innerWidth, window.innerHeight);
   }
 
   /**
@@ -1390,28 +1409,32 @@ export class Game {
    */
   private showInstructions(): void {
     this.instructionsDiv = document.createElement('div');
-    this.instructionsDiv.style.cssText = `
+    this.instructionsDiv.className = 'aw-panel';
+    this.instructionsDiv.style.cssText += `
       position: absolute;
       bottom: 20px;
       left: 20px;
-      color: white;
-      font-family: monospace;
-      font-size: 14px;
-      background: rgba(0,0,0,0.7);
-      padding: 15px;
-      border-radius: 8px;
+      font-size: 15px;
+      line-height: 2;
+      padding: 14px 18px;
       pointer-events: none;
+      z-index: 100;
     `;
-    this.instructionsDiv.innerHTML = `
-      <p style="margin:0"><b>WASD</b> - Move</p>
-      <p style="margin:5px 0"><b>Arrow Keys</b> - Camera</p>
-      <p style="margin:5px 0"><b>Space</b> - Jump</p>
-      <p style="margin:5px 0"><b>Shift</b> - Sprint</p>
-      <p style="margin:5px 0"><b>Q/R</b> - Shrink/Grow</p>
-      <p style="margin:5px 0"><b>E</b> - Talk to NPCs</p>
-      <p style="margin:5px 0"><b>V</b> - Toggle View (1st/3rd Person)</p>
-      <p style="margin:5px 0"><b>M</b> - Mute</p>
-    `;
+    const rows: Array<[string, string]> = [
+      ['WASD', 'Move'],
+      ['Arrows', 'Camera'],
+      ['Space', 'Jump'],
+      ['Shift', 'Sprint'],
+      ['Q / R', 'Shrink / Grow'],
+      ['E', 'Talk'],
+      ['V', 'Toggle View'],
+      ['M', 'Mute'],
+    ];
+    this.instructionsDiv.innerHTML = rows
+      .map(([key, label]) =>
+        `<div><span class="aw-kbd">${key}</span> <span style="opacity:0.8">${label}</span></div>`
+      )
+      .join('');
     document.body.appendChild(this.instructionsDiv);
   }
 
@@ -1435,29 +1458,6 @@ export class Game {
       min-width: 150px;
     `;
     document.body.appendChild(this.statsOverlay);
-  }
-
-  /**
-   * Create cinematic vignette overlay
-   * Subtle darkening at screen edges to draw focus to center
-   */
-  private createVignetteOverlay(): void {
-    this.vignetteOverlay = document.createElement('div');
-    this.vignetteOverlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      background: radial-gradient(
-        ellipse at center,
-        transparent 50%,
-        rgba(0, 0, 0, 0.3) 100%
-      );
-      z-index: 100;
-    `;
-    document.body.appendChild(this.vignetteOverlay);
   }
 
   /**
@@ -1517,24 +1517,21 @@ export class Game {
    * At high speeds (>80% max), darken and tighten the vignette for a "tunnel vision" effect
    */
   private updateSpeedVignette(velX: number, velZ: number, dt: number): void {
-    if (!this.vignetteOverlay) return;
+    if (!this.post) return;
 
     const horizontalSpeed = Math.sqrt(velX * velX + velZ * velZ);
     const maxSpeed = 11;
     const speedThreshold = maxSpeed * 0.8;  // Effect starts at 80% max speed
 
     // Base vignette intensity (always present)
-    const baseIntensity = 0.3;
-    // Max additional intensity at full speed
-    const maxSpeedIntensity = 0.5;
+    const baseIntensity = 0.32;
+    // Max intensity at full speed
+    const maxSpeedIntensity = 0.55;
 
     if (horizontalSpeed > speedThreshold) {
-      // Calculate how far above threshold (0 to 1)
       const speedFactor = Math.min((horizontalSpeed - speedThreshold) / (maxSpeed - speedThreshold), 1);
-      // Target intensity increases with speed
       this.targetVignetteIntensity = baseIntensity + (maxSpeedIntensity - baseIntensity) * speedFactor;
     } else {
-      // Return to base intensity
       this.targetVignetteIntensity = baseIntensity;
     }
 
@@ -1542,18 +1539,10 @@ export class Game {
     const lerpSpeed = 5;  // Higher = faster response
     this.currentVignetteIntensity += (this.targetVignetteIntensity - this.currentVignetteIntensity) * lerpSpeed * dt;
 
-    // Also tighten the vignette radius at high speeds for more pronounced tunnel effect
-    // Base: 50% transparent center, at high speed: 35% transparent center
-    const baseRadius = 50;
-    const minRadius = 35;
+    // Tighten the vignette radius as intensity rises for the tunnel-vision feel
     const speedFactor = (this.currentVignetteIntensity - baseIntensity) / (maxSpeedIntensity - baseIntensity);
-    const currentRadius = baseRadius - (baseRadius - minRadius) * speedFactor;
+    const radius = 0.78 - 0.2 * speedFactor;
 
-    // Update CSS gradient
-    this.vignetteOverlay.style.background = `radial-gradient(
-      ellipse at center,
-      transparent ${currentRadius}%,
-      rgba(0, 0, 0, ${this.currentVignetteIntensity.toFixed(2)}) 100%
-    )`;
+    this.post.setVignette(this.currentVignetteIntensity, radius);
   }
 }

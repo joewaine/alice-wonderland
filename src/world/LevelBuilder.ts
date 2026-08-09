@@ -295,11 +295,17 @@ export class LevelBuilder {
         const defaultColor = celColors[Math.floor(Math.random() * celColors.length)];
         const color = platform.color ? new THREE.Color(platform.color) : new THREE.Color(defaultColor);
 
-        // Determine surface texture type from color
+        // Determine surface texture type from color.
+        // Clone the shared texture so each platform gets its own tiling —
+        // .repeat on the cached instance would be overwritten by every
+        // subsequent platform. Floor at 1 repeat so small platforms don't
+        // stretch single texture features across their whole surface.
         const surfaceType = this.getSurfaceTextureType(color);
-        const texture = getTexture(surfaceType);
-        // Tile based on platform dimensions (1 repeat per ~4 world units)
-        texture.repeat.set(platform.size.x / 4, platform.size.z / 4);
+        const texture = getTexture(surfaceType).clone();
+        texture.repeat.set(
+          Math.max(1, Math.round(platform.size.x / 4)),
+          Math.max(1, Math.round(platform.size.z / 4))
+        );
 
         // Use cel-shader material for BotW look
         const material = createCelShaderMaterial({
@@ -347,10 +353,10 @@ export class LevelBuilder {
       // Bouncy platforms - warm orange color for visibility
       if (platform.type === 'bouncy') {
         colliderDesc.setRestitution(1.5);
-        // Update cel-shader color uniform for bouncy platforms
-        const shaderMat = mesh.material as THREE.ShaderMaterial;
-        if (shaderMat.uniforms?.uColor) {
-          shaderMat.uniforms.uColor.value.set(0xffa07a); // Light salmon
+        // Tint bouncy platforms for visibility
+        const toonMat = mesh.material as THREE.MeshToonMaterial;
+        if (toonMat.color) {
+          toonMat.color.set(0xffa07a); // Light salmon
         }
 
         // Track for animation
@@ -366,10 +372,9 @@ export class LevelBuilder {
       // Track breakable platforms
       if (platform.breakable) {
         // Make breakable platforms visually distinct (darker, cracked appearance)
-        const shaderMat = mesh.material as THREE.ShaderMaterial;
-        if (shaderMat.uniforms?.uColor) {
-          const currentColor = shaderMat.uniforms.uColor.value as THREE.Color;
-          currentColor.multiplyScalar(0.7);
+        const toonMat = mesh.material as THREE.MeshToonMaterial;
+        if (toonMat.color) {
+          toonMat.color.multiplyScalar(0.7);
         }
 
         const halfSize = new THREE.Vector3(
@@ -736,21 +741,35 @@ export class LevelBuilder {
         puzzle.area_bounds.max.z
       );
 
-      // Visual indicator (wireframe box)
+      // Visual indicator: a faint enchanted volume — soft tinted glass with
+      // barely-there edges, instead of a debug wireframe
       const size = new THREE.Vector3().subVectors(max, min);
       const center = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5);
+      const zoneColor = puzzle.required_size === 'small' ? 0xff6b6b : 0x6bcfff;
 
       const geo = new THREE.BoxGeometry(size.x, size.y, size.z);
-      const mat = new THREE.MeshBasicMaterial({
-        color: puzzle.required_size === 'small' ? 0xff6b6b : 0x6bcfff,
-        wireframe: true,
+      const fillMat = new THREE.MeshBasicMaterial({
+        color: zoneColor,
         transparent: true,
-        opacity: 0.5
+        opacity: 0.05,
+        depthWrite: false,
+        side: THREE.DoubleSide,
       });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(geo, fillMat);
       mesh.position.copy(center);
       this.scene.add(mesh);
       this.createdMeshes.push(mesh);
+
+      const edgeGeo = new THREE.EdgesGeometry(geo);
+      const edgeMat = new THREE.LineBasicMaterial({
+        color: zoneColor,
+        transparent: true,
+        opacity: 0.18,
+      });
+      const edges = new THREE.LineSegments(edgeGeo, edgeMat);
+      edges.position.copy(center);
+      this.scene.add(edges);
+      this.createdMeshes.push(edges as unknown as THREE.Mesh);
 
       zones.push({
         bounds: new THREE.Box3(min, max),

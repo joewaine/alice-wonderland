@@ -1,11 +1,13 @@
 /**
  * MainMenu - Title screen and pause menu
  *
- * Shows "Alice in Wonderland" title with "Begin Journey" button.
- * Also handles pause menu with ESC key.
+ * Gilded Storybook treatment: deep ink backdrop with a radial candle-glow,
+ * drifting gold motes, an Italiana wordmark with a live gold shimmer, and
+ * ornamented chapter-plate framing. Same public API as before.
  */
 
 import { audioManager } from '../audio/AudioManager';
+import { injectTheme } from './theme';
 
 export class MainMenu {
   private container: HTMLDivElement;
@@ -18,76 +20,84 @@ export class MainMenu {
   public onRestart: (() => void) | null = null;
 
   constructor() {
+    injectTheme();
+
     // Main menu container
     this.container = document.createElement('div');
     this.container.style.cssText = `
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(180deg, #1a0a2e 0%, #2d1b4e 50%, #4a2c6e 100%);
+      inset: 0;
+      background:
+        radial-gradient(ellipse 90% 60% at 50% 38%, rgba(212, 175, 95, 0.12), transparent 60%),
+        radial-gradient(ellipse 120% 80% at 50% 110%, rgba(62, 139, 102, 0.14), transparent 55%),
+        linear-gradient(180deg, #0e0a18 0%, #171122 55%, #241a38 100%);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-family: 'Georgia', serif;
       z-index: 1000;
+      overflow: hidden;
     `;
 
-    // Decorative stars
-    this.addStars();
+    // Drifting gold motes
+    this.addMotes(this.container, 26);
 
-    // Title
+    // Kicker line above the title
+    const kicker = document.createElement('p');
+    kicker.textContent = 'Down the rabbit hole';
+    kicker.className = 'aw-kicker';
+    kicker.style.cssText = `
+      font-size: 19px;
+      margin: 0 0 18px 0;
+      text-transform: lowercase;
+      animation: awFadeUp 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+    `;
+    this.container.appendChild(kicker);
+
+    // Title wordmark
     const title = document.createElement('h1');
     title.textContent = 'Alice in Wonderland';
+    title.className = 'aw-display aw-gold-text';
     title.style.cssText = `
-      font-size: 64px;
-      color: #ffd700;
-      text-shadow: 0 0 20px #ffd700, 0 4px 8px rgba(0,0,0,0.5);
-      margin: 0 0 10px 0;
-      letter-spacing: 4px;
-      animation: float 3s ease-in-out infinite;
+      font-size: clamp(48px, 8vw, 96px);
+      margin: 0;
+      text-align: center;
+      line-height: 1.05;
+      animation: awFadeUp 0.9s 0.12s cubic-bezier(0.22, 1, 0.36, 1) both;
     `;
     this.container.appendChild(title);
 
+    // Ornamented divider
+    const ornament = document.createElement('div');
+    ornament.className = 'aw-ornament';
+    ornament.textContent = '❦';
+    ornament.style.cssText = `
+      width: min(420px, 60vw);
+      margin: 26px 0;
+      animation: awFadeUp 0.9s 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+    `;
+    this.container.appendChild(ornament);
+
     // Subtitle
     const subtitle = document.createElement('p');
-    subtitle.textContent = 'A Wonderland Platformer';
+    subtitle.textContent = 'A platformer through the Queen’s Garden';
     subtitle.style.cssText = `
-      font-size: 24px;
-      color: #e0b0ff;
-      margin: 0 0 60px 0;
+      font-family: var(--aw-font-text);
       font-style: italic;
+      font-size: 22px;
+      color: var(--aw-parchment);
+      opacity: 0.75;
+      margin: 0 0 56px 0;
+      animation: awFadeUp 0.9s 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
     `;
     this.container.appendChild(subtitle);
 
     // Start button
     const startBtn = document.createElement('button');
-    startBtn.textContent = 'Begin Journey';
-    startBtn.style.cssText = `
-      font-family: 'Georgia', serif;
-      font-size: 28px;
-      padding: 20px 50px;
-      background: linear-gradient(135deg, #9370db 0%, #6b4e9e 100%);
-      color: white;
-      border: 3px solid #ffd700;
-      border-radius: 30px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-    `;
-    startBtn.onmouseenter = () => {
-      audioManager.playUIHover();
-    };
-    startBtn.onmouseover = () => {
-      startBtn.style.transform = 'scale(1.1)';
-      startBtn.style.boxShadow = '0 8px 30px rgba(255,215,0,0.4)';
-    };
-    startBtn.onmouseout = () => {
-      startBtn.style.transform = 'scale(1)';
-      startBtn.style.boxShadow = '0 6px 20px rgba(0,0,0,0.4)';
-    };
+    startBtn.textContent = 'Begin the Journey';
+    startBtn.className = 'aw-btn';
+    startBtn.style.animation = 'awFadeUp 0.9s 0.44s cubic-bezier(0.22, 1, 0.36, 1) both';
+    startBtn.onmouseenter = () => audioManager.playUIHover();
     startBtn.onclick = () => {
       this.hide();
       if (this.onStart) this.onStart();
@@ -97,54 +107,54 @@ export class MainMenu {
     // Controls hint
     const controls = document.createElement('p');
     controls.innerHTML = `
-      <span style="color: #888;">WASD</span> Move &nbsp;
-      <span style="color: #888;">Space</span> Jump &nbsp;
-      <span style="color: #888;">Q/R</span> Shrink/Grow &nbsp;
-      <span style="color: #888;">E</span> Talk
+      <span class="aw-kbd">WASD</span> Move
+      <span style="opacity:0.35; margin: 0 10px;">·</span>
+      <span class="aw-kbd">Space</span> Jump
+      <span style="opacity:0.35; margin: 0 10px;">·</span>
+      <span class="aw-kbd">Q</span><span class="aw-kbd">R</span> Shrink / Grow
+      <span style="opacity:0.35; margin: 0 10px;">·</span>
+      <span class="aw-kbd">E</span> Talk
     `;
     controls.style.cssText = `
       position: absolute;
-      bottom: 40px;
-      font-size: 16px;
-      color: #aaa;
+      bottom: 36px;
+      font-family: var(--aw-font-text);
+      font-size: 17px;
+      color: var(--aw-parchment);
+      opacity: 0.65;
+      animation: awFadeUp 0.9s 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
     `;
     this.container.appendChild(controls);
-
-    // Add keyframe animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes float {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
-      }
-    `;
-    document.head.appendChild(style);
 
     // Pause overlay (hidden by default)
     this.pauseOverlay = document.createElement('div');
     this.pauseOverlay.style.cssText = `
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.8);
+      inset: 0;
+      background: rgba(14, 10, 24, 0.72);
+      -webkit-backdrop-filter: blur(10px) saturate(1.1);
+      backdrop-filter: blur(10px) saturate(1.1);
       display: none;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-family: 'Georgia', serif;
       z-index: 900;
     `;
 
     const pauseTitle = document.createElement('h2');
     pauseTitle.textContent = 'Paused';
+    pauseTitle.className = 'aw-display aw-gold-text';
     pauseTitle.style.cssText = `
-      font-size: 48px;
-      color: #ffd700;
-      margin-bottom: 40px;
+      font-size: 56px;
+      margin: 0 0 8px 0;
     `;
     this.pauseOverlay.appendChild(pauseTitle);
+
+    const pauseOrnament = document.createElement('div');
+    pauseOrnament.className = 'aw-ornament';
+    pauseOrnament.textContent = '❦';
+    pauseOrnament.style.cssText = 'width: 260px; margin: 12px 0 36px 0;';
+    this.pauseOverlay.appendChild(pauseOrnament);
 
     // Resume button
     const resumeBtn = this.createMenuButton('Resume', () => {
@@ -177,34 +187,30 @@ export class MainMenu {
   }
 
   /**
-   * Add decorative floating stars
+   * Add drifting gold motes to a container
    */
-  private addStars(): void {
-    for (let i = 0; i < 30; i++) {
-      const star = document.createElement('div');
-      star.style.cssText = `
+  private addMotes(parent: HTMLElement, count: number): void {
+    for (let i = 0; i < count; i++) {
+      const mote = document.createElement('div');
+      const size = Math.random() * 3 + 1.5;
+      mote.style.cssText = `
         position: absolute;
-        width: ${Math.random() * 4 + 2}px;
-        height: ${Math.random() * 4 + 2}px;
-        background: white;
+        width: ${size}px;
+        height: ${size}px;
+        background: var(--aw-gold-bright);
         border-radius: 50%;
-        opacity: ${Math.random() * 0.5 + 0.3};
-        top: ${Math.random() * 100}%;
+        box-shadow: 0 0 ${size * 3}px rgba(243, 212, 137, 0.8);
         left: ${Math.random() * 100}%;
-        animation: twinkle ${Math.random() * 2 + 1}s ease-in-out infinite;
-        animation-delay: ${Math.random() * 2}s;
+        top: ${Math.random() * 100}%;
+        opacity: ${Math.random() * 0.4 + 0.15};
+        animation:
+          awTwinkle ${Math.random() * 3 + 2}s ease-in-out infinite,
+          awFloat ${Math.random() * 6 + 6}s ease-in-out infinite;
+        animation-delay: ${Math.random() * 4}s, ${Math.random() * 6}s;
+        pointer-events: none;
       `;
-      this.container.appendChild(star);
+      parent.appendChild(mote);
     }
-
-    const twinkleStyle = document.createElement('style');
-    twinkleStyle.textContent = `
-      @keyframes twinkle {
-        0%, 100% { opacity: 0.3; }
-        50% { opacity: 0.8; }
-      }
-    `;
-    document.head.appendChild(twinkleStyle);
   }
 
   /**
@@ -213,27 +219,9 @@ export class MainMenu {
   private createMenuButton(text: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.textContent = text;
-    btn.style.cssText = `
-      font-family: 'Georgia', serif;
-      font-size: 24px;
-      padding: 15px 40px;
-      margin: 10px;
-      background: linear-gradient(135deg, #9370db 0%, #6b4e9e 100%);
-      color: white;
-      border: 2px solid #ffd700;
-      border-radius: 20px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    `;
-    btn.onmouseenter = () => {
-      audioManager.playUIHover();
-    };
-    btn.onmouseover = () => {
-      btn.style.transform = 'scale(1.05)';
-    };
-    btn.onmouseout = () => {
-      btn.style.transform = 'scale(1)';
-    };
+    btn.className = 'aw-btn aw-btn--small';
+    btn.style.margin = '10px';
+    btn.onmouseenter = () => audioManager.playUIHover();
     btn.onclick = onClick;
     return btn;
   }

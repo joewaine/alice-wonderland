@@ -1,10 +1,12 @@
 /**
  * HUD - Heads-Up Display for game UI
  *
+ * Gilded Storybook treatment: glass panels, serif typography, gold accents.
  * Shows collectible counts, chapter info, and messages.
  */
 
 import type { CollectionState } from '../world/Collectible';
+import { injectTheme } from './theme';
 
 export class HUD {
   private container: HTMLDivElement;
@@ -15,9 +17,10 @@ export class HUD {
   private sizeIndicator: HTMLDivElement;
   private fadeOverlay: HTMLDivElement;
   private messageTimeout: number | null = null;
-  private celebrateStyle: HTMLStyleElement | null = null;
 
   constructor() {
+    injectTheme();
+
     // Main container
     this.container = document.createElement('div');
     this.container.style.cssText = `
@@ -26,7 +29,7 @@ export class HUD {
       left: 0;
       right: 0;
       pointer-events: none;
-      font-family: monospace;
+      font-family: var(--aw-font-text);
       z-index: 100;
     `;
 
@@ -34,83 +37,78 @@ export class HUD {
     this.chapterTitle = document.createElement('div');
     this.chapterTitle.style.cssText = `
       position: absolute;
-      top: 20px;
+      top: 34px;
       left: 50%;
       transform: translateX(-50%);
-      color: white;
-      font-size: 24px;
-      font-weight: bold;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
       text-align: center;
       opacity: 0;
-      transition: opacity 0.5s;
+      transition: opacity 0.8s ease;
+      white-space: nowrap;
     `;
     this.container.appendChild(this.chapterTitle);
 
     // Collectibles display (top right)
     this.collectiblesDisplay = document.createElement('div');
-    this.collectiblesDisplay.style.cssText = `
+    this.collectiblesDisplay.className = 'aw-panel';
+    this.collectiblesDisplay.style.cssText += `
       position: absolute;
       top: 20px;
       right: 20px;
-      color: white;
-      font-size: 16px;
-      background: rgba(0,0,0,0.7);
-      padding: 15px;
-      border-radius: 8px;
+      padding: 14px 20px;
+      font-size: 18px;
       text-align: right;
+      min-width: 110px;
     `;
     this.container.appendChild(this.collectiblesDisplay);
 
     // Message display (center)
     this.messageDisplay = document.createElement('div');
+    this.messageDisplay.className = 'aw-display';
     this.messageDisplay.style.cssText = `
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      color: white;
-      font-size: 28px;
-      font-weight: bold;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      color: var(--aw-parchment);
+      font-size: 32px;
+      letter-spacing: 0.08em;
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.75), 0 0 40px rgba(212, 175, 95, 0.25);
       text-align: center;
       opacity: 0;
       transition: opacity 0.3s;
+      white-space: nowrap;
     `;
     this.container.appendChild(this.messageDisplay);
 
     // Mute indicator (top left)
     this.muteIndicator = document.createElement('div');
-    this.muteIndicator.style.cssText = `
+    this.muteIndicator.className = 'aw-panel';
+    this.muteIndicator.style.cssText += `
       position: absolute;
       top: 20px;
       left: 20px;
-      color: white;
-      font-size: 24px;
-      background: rgba(0,0,0,0.7);
-      padding: 8px 12px;
-      border-radius: 8px;
+      font-size: 17px;
+      padding: 10px 16px;
       opacity: 0;
       transition: opacity 0.3s;
     `;
-    this.muteIndicator.textContent = '🔇 Muted (M)';
+    this.muteIndicator.innerHTML = `🔇 Muted <span class="aw-kbd" style="margin-left:6px">M</span>`;
     this.container.appendChild(this.muteIndicator);
 
-    // Size indicator (bottom right, above instructions)
+    // Size indicator (bottom right)
     this.sizeIndicator = document.createElement('div');
-    this.sizeIndicator.style.cssText = `
+    this.sizeIndicator.className = 'aw-panel';
+    this.sizeIndicator.style.cssText += `
       position: absolute;
       bottom: 140px;
       right: 20px;
-      color: white;
       font-size: 18px;
-      background: rgba(0,0,0,0.7);
-      padding: 10px 15px;
-      border-radius: 8px;
+      padding: 10px 18px;
       text-align: center;
-      transition: all 0.3s ease;
+      letter-spacing: 0.08em;
+      transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
     `;
-    this.sizeIndicator.innerHTML = '👤 Normal';
+    this.sizeIndicator.textContent = 'Normal';
     this.container.appendChild(this.sizeIndicator);
 
     // Fade overlay for death/respawn transitions
@@ -121,7 +119,7 @@ export class HUD {
       left: 0;
       width: 100%;
       height: 100%;
-      background: black;
+      background: var(--aw-ink-deep);
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.5s ease-in-out;
@@ -130,22 +128,6 @@ export class HUD {
     this.container.appendChild(this.fadeOverlay);
 
     document.body.appendChild(this.container);
-
-    // Add CSS animations for celebration overlays (created once, not per-invocation)
-    this.celebrateStyle = document.createElement('style');
-    this.celebrateStyle.textContent = `
-      @keyframes celebrate {
-        0% { transform: scale(0.5); opacity: 0; }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
-      }
-      @keyframes levelCelebrate {
-        0% { transform: scale(0.5); opacity: 0; }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(this.celebrateStyle);
 
     // Initialize display
     this.updateCollectibles({
@@ -160,36 +142,53 @@ export class HUD {
    */
   showChapterTitle(title: string, subtitle?: string): void {
     this.chapterTitle.textContent = '';
+
     const titleDiv = document.createElement('div');
     titleDiv.textContent = title;
+    titleDiv.className = 'aw-display aw-gold-text';
+    titleDiv.style.cssText = 'font-size: 44px;';
     this.chapterTitle.appendChild(titleDiv);
+
     if (subtitle) {
+      const ornament = document.createElement('div');
+      ornament.className = 'aw-ornament';
+      ornament.textContent = '❦';
+      ornament.style.cssText = 'width: 240px; margin: 8px auto; font-size: 13px;';
+      this.chapterTitle.appendChild(ornament);
+
       const subtitleDiv = document.createElement('div');
-      subtitleDiv.style.cssText = 'font-size: 16px; margin-top: 5px; font-weight: normal';
       subtitleDiv.textContent = subtitle;
+      subtitleDiv.style.cssText = `
+        font-family: var(--aw-font-text);
+        font-style: italic;
+        font-size: 19px;
+        color: var(--aw-parchment);
+        opacity: 0.85;
+        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+      `;
       this.chapterTitle.appendChild(subtitleDiv);
     }
     this.chapterTitle.style.opacity = '1';
 
-    // Fade out after 3 seconds
+    // Fade out after 4 seconds
     setTimeout(() => {
       this.chapterTitle.style.opacity = '0';
-    }, 3000);
+    }, 4000);
   }
 
   /**
    * Update collectibles display
    */
   updateCollectibles(state: CollectionState): void {
-    const keyIcon = state.hasKey ? '🔑' : '🔒';
-    const keyColor = state.hasKey ? '#ffd700' : '#666';
+    const keyColor = state.hasKey ? 'var(--aw-gold-bright)' : 'rgba(246, 238, 221, 0.35)';
+    const keyGlow = state.hasKey ? 'text-shadow: 0 0 12px rgba(243, 212, 137, 0.6);' : '';
 
     this.collectiblesDisplay.innerHTML = `
-      <div style="margin-bottom: 8px;">
-        <span style="color: ${keyColor}">${keyIcon} Key</span>
+      <div style="margin-bottom: 8px; color: ${keyColor}; ${keyGlow} letter-spacing: 0.06em;">
+        🗝 ${state.hasKey ? 'Golden Key' : 'Key not found'}
       </div>
-      <div style="color: #ff6b6b">
-        🃏 ${state.cards} / ${state.totalCards}
+      <div style="color: var(--aw-rose); letter-spacing: 0.1em;">
+        🃏 ${state.cards} <span style="opacity: 0.55">/ ${state.totalCards}</span>
       </div>
     `;
   }
@@ -215,10 +214,10 @@ export class HUD {
    * Show hint message (smaller, longer duration)
    */
   showHint(text: string): void {
-    this.messageDisplay.style.fontSize = '18px';
+    this.messageDisplay.style.fontSize = '20px';
     this.showMessage(text, 4000);
     setTimeout(() => {
-      this.messageDisplay.style.fontSize = '28px';
+      this.messageDisplay.style.fontSize = '32px';
     }, 4100);
   }
 
@@ -234,29 +233,26 @@ export class HUD {
    */
   updateSize(size: 'small' | 'normal' | 'large'): void {
     const sizeInfo = {
-      small: { icon: '🐁', label: 'Small', color: '#ff69b4' },
-      normal: { icon: '👤', label: 'Normal', color: '#ffffff' },
-      large: { icon: '🦣', label: 'Large', color: '#9370db' }
+      small: { label: 'Small', color: 'var(--aw-rose)' },
+      normal: { label: 'Normal', color: 'var(--aw-parchment)' },
+      large: { label: 'Grand', color: 'var(--aw-lilac)' }
     };
 
     const info = sizeInfo[size];
-    this.sizeIndicator.innerHTML = `${info.icon} ${info.label}`;
+    this.sizeIndicator.textContent = info.label;
     this.sizeIndicator.style.color = info.color;
-    this.sizeIndicator.style.borderColor = info.color;
 
     // Flash effect on change
-    this.sizeIndicator.style.transform = 'scale(1.2)';
+    this.sizeIndicator.style.transform = 'scale(1.18)';
     setTimeout(() => {
       this.sizeIndicator.style.transform = 'scale(1)';
-    }, 200);
+    }, 220);
   }
 
   /**
-   * Brief white screen flash (for checkpoint hit)
-   * Quick pulse: ~0.1s to peak, ~0.2s total fade
+   * Brief warm screen flash (for checkpoint hit)
    */
   flashScreen(): void {
-    // Create a temporary white overlay for the flash
     const flashOverlay = document.createElement('div');
     flashOverlay.style.cssText = `
       position: absolute;
@@ -264,24 +260,21 @@ export class HUD {
       left: 0;
       width: 100%;
       height: 100%;
-      background: white;
+      background: radial-gradient(ellipse at center, rgba(243, 212, 137, 0.9), rgba(255, 255, 255, 0.6));
       opacity: 0;
       pointer-events: none;
       z-index: 999;
     `;
     this.container.appendChild(flashOverlay);
 
-    // Animate: quick fade in to 0.35 opacity, then fade out
     requestAnimationFrame(() => {
       flashOverlay.style.transition = 'opacity 0.1s ease-out';
       flashOverlay.style.opacity = '0.35';
 
-      // After peak, fade out
       setTimeout(() => {
         flashOverlay.style.transition = 'opacity 0.15s ease-in';
         flashOverlay.style.opacity = '0';
 
-        // Remove element after animation completes
         setTimeout(() => {
           this.container.removeChild(flashOverlay);
         }, 150);
@@ -317,85 +310,7 @@ export class HUD {
     stats: { cards: number; totalCards: number },
     onComplete: () => void
   ): void {
-    // Create celebration overlay
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.8);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Georgia', serif;
-      z-index: 500;
-      opacity: 0;
-      transition: opacity 0.5s;
-    `;
-
-    // Title
-    const title = document.createElement('h1');
-    title.textContent = 'Chapter Complete!';
-    title.style.cssText = `
-      font-size: 56px;
-      color: #ffd700;
-      text-shadow: 0 0 30px #ffd700;
-      margin: 0 0 20px 0;
-      animation: celebrate 0.5s ease-out;
-    `;
-    overlay.appendChild(title);
-
-    // Chapter name
-    const chapterName = document.createElement('p');
-    chapterName.textContent = `Chapter ${chapterNum}`;
-    chapterName.style.cssText = `
-      font-size: 24px;
-      color: #e0b0ff;
-      margin: 0 0 40px 0;
-    `;
-    overlay.appendChild(chapterName);
-
-    // Stats
-    const statsDiv = document.createElement('div');
-    statsDiv.style.cssText = `
-      font-size: 24px;
-      color: white;
-      text-align: center;
-      margin-bottom: 40px;
-    `;
-    statsDiv.innerHTML = `
-      <p style="margin: 10px 0; color: #ff6b6b">🃏 Cards: ${stats.cards} / ${stats.totalCards}</p>
-    `;
-    overlay.appendChild(statsDiv);
-
-    // Continue text
-    const continueText = document.createElement('p');
-    continueText.textContent = 'Entering next chapter...';
-    continueText.style.cssText = `
-      font-size: 18px;
-      color: #888;
-      font-style: italic;
-    `;
-    overlay.appendChild(continueText);
-
-    document.body.appendChild(overlay);
-
-    // Fade in
-    requestAnimationFrame(() => {
-      overlay.style.opacity = '1';
-    });
-
-    // Wait then fade out and continue
-    setTimeout(() => {
-      overlay.style.opacity = '0';
-      setTimeout(() => {
-        document.body.removeChild(overlay);
-        onComplete();
-      }, 500);
-    }, 3000);
+    this.showCelebration('Chapter Complete', `Chapter ${chapterNum}`, stats, 'Entering the next chapter…', 3000, onComplete);
   }
 
   /**
@@ -406,68 +321,82 @@ export class HUD {
     stats: { cards: number; totalCards: number },
     onComplete: () => void
   ): void {
-    // Create celebration overlay
+    this.showCelebration('Curtain Call', levelName, stats, 'You conquered Wonderland!', 4000, onComplete);
+  }
+
+  /**
+   * Shared celebration overlay
+   */
+  private showCelebration(
+    heading: string,
+    subheading: string,
+    stats: { cards: number; totalCards: number },
+    closingLine: string,
+    holdMs: number,
+    onComplete: () => void
+  ): void {
     const overlay = document.createElement('div');
     overlay.style.cssText = `
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.85);
+      inset: 0;
+      background: rgba(14, 10, 24, 0.82);
+      -webkit-backdrop-filter: blur(10px) saturate(1.1);
+      backdrop-filter: blur(10px) saturate(1.1);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-family: 'Georgia', serif;
       z-index: 500;
       opacity: 0;
       transition: opacity 0.5s;
     `;
 
-    // Title
     const title = document.createElement('h1');
-    title.textContent = 'Level Complete!';
+    title.textContent = heading;
+    title.className = 'aw-display aw-gold-text';
     title.style.cssText = `
-      font-size: 56px;
-      color: #ffd700;
-      text-shadow: 0 0 30px #ffd700;
-      margin: 0 0 20px 0;
-      animation: levelCelebrate 0.5s ease-out;
+      font-size: 64px;
+      margin: 0 0 6px 0;
+      animation: awPopIn 0.6s cubic-bezier(0.22, 1, 0.36, 1);
     `;
     overlay.appendChild(title);
 
-    // Level name
-    const levelNameElem = document.createElement('p');
-    levelNameElem.textContent = levelName;
-    levelNameElem.style.cssText = `
-      font-size: 28px;
-      color: #e94560;
-      margin: 0 0 40px 0;
-      font-style: italic;
-    `;
-    overlay.appendChild(levelNameElem);
+    const ornament = document.createElement('div');
+    ornament.className = 'aw-ornament';
+    ornament.textContent = '❦';
+    ornament.style.cssText = 'width: 300px; margin: 10px 0 24px 0;';
+    overlay.appendChild(ornament);
 
-    // Stats
+    const nameElem = document.createElement('p');
+    nameElem.textContent = subheading;
+    nameElem.style.cssText = `
+      font-family: var(--aw-font-text);
+      font-style: italic;
+      font-size: 28px;
+      color: var(--aw-lilac);
+      margin: 0 0 36px 0;
+    `;
+    overlay.appendChild(nameElem);
+
     const statsDiv = document.createElement('div');
     statsDiv.style.cssText = `
+      font-family: var(--aw-font-text);
       font-size: 24px;
-      color: white;
-      text-align: center;
-      margin-bottom: 40px;
+      color: var(--aw-rose);
+      letter-spacing: 0.1em;
+      margin-bottom: 36px;
     `;
-    statsDiv.innerHTML = `
-      <p style="margin: 10px 0; color: #ff6b6b">Cards: ${stats.cards} / ${stats.totalCards}</p>
-    `;
+    statsDiv.textContent = `🃏 Cards ${stats.cards} / ${stats.totalCards}`;
     overlay.appendChild(statsDiv);
 
-    // Completion message
     const completeText = document.createElement('p');
-    completeText.textContent = 'You conquered Wonderland!';
+    completeText.textContent = closingLine;
     completeText.style.cssText = `
-      font-size: 20px;
-      color: #9370db;
+      font-family: var(--aw-font-text);
       font-style: italic;
+      font-size: 20px;
+      color: var(--aw-parchment);
+      opacity: 0.7;
     `;
     overlay.appendChild(completeText);
 
@@ -485,7 +414,7 @@ export class HUD {
         document.body.removeChild(overlay);
         onComplete();
       }, 500);
-    }, 4000);
+    }, holdMs);
   }
 
   /**
@@ -494,9 +423,6 @@ export class HUD {
   dispose(): void {
     if (this.messageTimeout) {
       clearTimeout(this.messageTimeout);
-    }
-    if (this.celebrateStyle) {
-      document.head.removeChild(this.celebrateStyle);
     }
     document.body.removeChild(this.container);
   }

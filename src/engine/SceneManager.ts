@@ -22,8 +22,6 @@ export class SceneManager {
   private hud: HUD;
   private gate: Gate | null = null;
   private currentLevel: BuiltLevel | null = null;
-  private currentSkyboxTexture: THREE.Texture | THREE.CubeTexture | null = null;
-  private skyboxMesh: THREE.Mesh | null = null;
   private currentLevelData: LevelData | null = null;
 
   // Pre-allocated objects to avoid per-frame GC pressure
@@ -110,9 +108,6 @@ export class SceneManager {
 
     this.currentLevelData = levelData;
 
-    // Load skybox
-    await this.loadSkybox();
-
     // Show welcome title
     this.hud.showChapterTitle(
       "The Queen's Garden",
@@ -125,285 +120,6 @@ export class SceneManager {
     }
 
     console.log(`Loaded: The Queen's Garden`);
-  }
-
-  /**
-   * Load skybox — tries cubemap images first, falls back to procedural
-   */
-  private async loadSkybox(): Promise<void> {
-    // Dispose previous skybox
-    if (this.currentSkyboxTexture) {
-      this.currentSkyboxTexture.dispose();
-      this.currentSkyboxTexture = null;
-    }
-    if (this.skyboxMesh) {
-      this.scene.remove(this.skyboxMesh);
-      this.skyboxMesh.geometry.dispose();
-      (this.skyboxMesh.material as THREE.Material).dispose();
-      this.skyboxMesh = null;
-    }
-    this.scene.background = null;
-
-    // Try loading cubemap images (AI-generated faces)
-    try {
-      const loader = new THREE.CubeTextureLoader();
-      loader.setPath('assets/skyboxes/garden/');
-      const cubeTexture = await new Promise<THREE.CubeTexture>((resolve, reject) => {
-        loader.load(
-          ['px.png', 'nx.png', 'py.png', 'ny.png', 'pz.png', 'nz.png'],
-          resolve,
-          undefined,
-          reject
-        );
-      });
-      cubeTexture.colorSpace = THREE.SRGBColorSpace;
-      this.scene.background = cubeTexture;
-      this.currentSkyboxTexture = cubeTexture;
-      console.log('Loaded cubemap skybox from images');
-    } catch {
-      // Fallback to procedural skybox
-      this.createGardenSkybox();
-    }
-  }
-
-  /**
-   * Create lush procedural garden skybox — Queen's Garden golden hour
-   * 2048x2048 canvas with sky gradient, sun, clouds, rolling hills, distant trees, and flowers
-   */
-  private createGardenSkybox(): void {
-    const W = 2048;
-    const H = 2048;
-    const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext('2d')!;
-
-    // --- Sky gradient: warm golden hour ---
-    const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#4A90C4');     // Deep blue at zenith
-    sky.addColorStop(0.15, '#6BB3D9');  // Mid blue
-    sky.addColorStop(0.35, '#A8D8EA');  // Light blue
-    sky.addColorStop(0.50, '#F5E6C8');  // Warm golden
-    sky.addColorStop(0.60, '#FFD89B');  // Amber
-    sky.addColorStop(0.68, '#FFCC80');  // Warm orange
-    sky.addColorStop(0.75, '#E8C4A0');  // Peachy horizon
-    sky.addColorStop(1.0, '#D4E8C4');   // Green-ish below horizon
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, W, H);
-
-    // --- Sun with layered glow ---
-    const sunX = W * 0.72;
-    const sunY = H * 0.48;
-
-    // Outer glow
-    const outerGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 250);
-    outerGlow.addColorStop(0, 'rgba(255, 250, 220, 0.4)');
-    outerGlow.addColorStop(0.4, 'rgba(255, 230, 160, 0.15)');
-    outerGlow.addColorStop(1, 'rgba(255, 200, 100, 0)');
-    ctx.fillStyle = outerGlow;
-    ctx.fillRect(0, 0, W, H);
-
-    // Inner glow
-    const innerGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 120);
-    innerGlow.addColorStop(0, 'rgba(255, 252, 240, 0.9)');
-    innerGlow.addColorStop(0.3, 'rgba(255, 240, 190, 0.5)');
-    innerGlow.addColorStop(0.7, 'rgba(255, 220, 140, 0.15)');
-    innerGlow.addColorStop(1, 'rgba(255, 200, 100, 0)');
-    ctx.fillStyle = innerGlow;
-    ctx.fillRect(0, 0, W, H);
-
-    // Sun disk
-    const diskGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 50);
-    diskGrad.addColorStop(0, 'rgba(255, 255, 245, 1)');
-    diskGrad.addColorStop(0.7, 'rgba(255, 248, 220, 0.95)');
-    diskGrad.addColorStop(1, 'rgba(255, 240, 200, 0.3)');
-    ctx.fillStyle = diskGrad;
-    ctx.beginPath();
-    ctx.arc(sunX, sunY, 50, 0, Math.PI * 2);
-    ctx.fill();
-
-    // --- Clouds at multiple depths ---
-    // Far clouds (smaller, more transparent)
-    ctx.globalAlpha = 0.4;
-    this.drawCloud(ctx, W * 0.10, H * 0.15, 60);
-    this.drawCloud(ctx, W * 0.30, H * 0.12, 45);
-    this.drawCloud(ctx, W * 0.55, H * 0.20, 50);
-    this.drawCloud(ctx, W * 0.82, H * 0.18, 55);
-
-    // Mid clouds
-    ctx.globalAlpha = 0.6;
-    this.drawCloud(ctx, W * 0.05, H * 0.28, 90);
-    this.drawCloud(ctx, W * 0.25, H * 0.22, 75);
-    this.drawCloud(ctx, W * 0.50, H * 0.30, 85);
-    this.drawCloud(ctx, W * 0.90, H * 0.25, 80);
-
-    // Near clouds (larger, more opaque)
-    ctx.globalAlpha = 0.75;
-    this.drawCloud(ctx, W * 0.15, H * 0.35, 110);
-    this.drawCloud(ctx, W * 0.42, H * 0.38, 100);
-    this.drawCloud(ctx, W * 0.68, H * 0.33, 95);
-    this.drawCloud(ctx, W * 0.88, H * 0.40, 80);
-    ctx.globalAlpha = 1;
-
-    // --- Rolling hills silhouette ---
-    const horizonY = H * 0.68;
-
-    // Far hills (lighter green)
-    ctx.fillStyle = '#8CB878';
-    ctx.beginPath();
-    ctx.moveTo(0, horizonY);
-    for (let x = 0; x <= W; x += 4) {
-      const h = Math.sin(x * 0.003) * 40 + Math.sin(x * 0.008 + 1) * 25 + Math.sin(x * 0.015) * 12;
-      ctx.lineTo(x, horizonY - 30 - h);
-    }
-    ctx.lineTo(W, H);
-    ctx.lineTo(0, H);
-    ctx.fill();
-
-    // Mid hills (medium green)
-    ctx.fillStyle = '#6B9F58';
-    ctx.beginPath();
-    ctx.moveTo(0, horizonY);
-    for (let x = 0; x <= W; x += 4) {
-      const h = Math.sin(x * 0.004 + 2) * 35 + Math.sin(x * 0.01 + 0.5) * 20 + Math.sin(x * 0.02 + 3) * 10;
-      ctx.lineTo(x, horizonY - 10 - h);
-    }
-    ctx.lineTo(W, H);
-    ctx.lineTo(0, H);
-    ctx.fill();
-
-    // Near hills (darker green)
-    ctx.fillStyle = '#4A7C3F';
-    ctx.beginPath();
-    ctx.moveTo(0, horizonY + 15);
-    for (let x = 0; x <= W; x += 4) {
-      const h = Math.sin(x * 0.005 + 4) * 30 + Math.sin(x * 0.012 + 1.5) * 18 + Math.sin(x * 0.025) * 8;
-      ctx.lineTo(x, horizonY + 15 - h);
-    }
-    ctx.lineTo(W, H);
-    ctx.lineTo(0, H);
-    ctx.fill();
-
-    // --- Distant trees along the hills ---
-    this.drawTreeLine(ctx, W, horizonY - 50, '#3D6B33', 0.6, 18);
-    this.drawTreeLine(ctx, W, horizonY - 25, '#2D5A27', 0.75, 25);
-    this.drawTreeLine(ctx, W, horizonY + 5, '#1F4A1C', 0.85, 30);
-
-    // --- Ground fill below horizon ---
-    const groundGrad = ctx.createLinearGradient(0, horizonY + 30, 0, H);
-    groundGrad.addColorStop(0, '#4A7C3F');
-    groundGrad.addColorStop(0.3, '#3D6B33');
-    groundGrad.addColorStop(1, '#2D5520');
-    ctx.fillStyle = groundGrad;
-    ctx.fillRect(0, horizonY + 30, W, H - horizonY - 30);
-
-    // --- Flower dots along the horizon ---
-    const flowerColors = [
-      'rgba(220, 60, 80, 0.7)',   // Red roses
-      'rgba(255, 180, 200, 0.7)', // Pink roses
-      'rgba(255, 255, 240, 0.6)', // White roses
-      'rgba(255, 220, 100, 0.5)', // Yellow
-      'rgba(200, 130, 220, 0.5)', // Purple
-    ];
-    for (let i = 0; i < 200; i++) {
-      const fx = (i * 37 + Math.sin(i * 7.3) * 60) % W;
-      const fy = horizonY + 10 + Math.sin(i * 3.1) * 25 + Math.sin(i * 0.7) * 15;
-      const fr = 2 + (i % 3);
-      ctx.fillStyle = flowerColors[i % flowerColors.length];
-      ctx.beginPath();
-      ctx.arc(fx, fy, fr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // --- Create sky dome mesh ---
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-
-    const geometry = new THREE.SphereGeometry(500, 64, 32);
-    geometry.scale(-1, 1, 1);
-
-    const material = new THREE.MeshBasicMaterial({
-      map: texture,
-      side: THREE.FrontSide,
-      depthWrite: false
-    });
-
-    this.skyboxMesh = new THREE.Mesh(geometry, material);
-    this.skyboxMesh.renderOrder = -1;
-    this.scene.add(this.skyboxMesh);
-    this.scene.background = null;
-
-    this.currentSkyboxTexture = texture;
-    console.log('Created lush garden skybox');
-  }
-
-  /**
-   * Draw a line of tree silhouettes along the hills
-   */
-  private drawTreeLine(
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    baseY: number,
-    color: string,
-    alpha: number,
-    spacing: number
-  ): void {
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
-
-    for (let x = 0; x < width; x += spacing) {
-      const offset = Math.sin(x * 0.01 + baseY * 0.1) * 8;
-      const treeH = 15 + Math.abs(Math.sin(x * 0.037)) * 25;
-      const treeW = 8 + Math.abs(Math.sin(x * 0.023)) * 10;
-      const ty = baseY + offset;
-
-      // Triangle tree (simple stylized)
-      ctx.beginPath();
-      ctx.moveTo(x, ty);
-      ctx.lineTo(x - treeW / 2, ty + treeH);
-      ctx.lineTo(x + treeW / 2, ty + treeH);
-      ctx.closePath();
-      ctx.fill();
-
-      // Second layer for fullness
-      ctx.beginPath();
-      ctx.moveTo(x, ty + 5);
-      ctx.lineTo(x - treeW * 0.4, ty + treeH * 0.8);
-      ctx.lineTo(x + treeW * 0.4, ty + treeH * 0.8);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    ctx.globalAlpha = 1;
-  }
-
-  /**
-   * Draw a stylized puffy cloud
-   */
-  private drawCloud(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
-    const cloudColor = 'rgba(255, 255, 255, 0.9)';
-    const shadowColor = 'rgba(200, 200, 220, 0.4)';
-
-    // Cloud shadow
-    ctx.fillStyle = shadowColor;
-    ctx.beginPath();
-    ctx.arc(x + size * 0.05, y + size * 0.1, size * 0.4, 0, Math.PI * 2);
-    ctx.arc(x + size * 0.45, y + size * 0.12, size * 0.35, 0, Math.PI * 2);
-    ctx.arc(x - size * 0.35, y + size * 0.08, size * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Cloud body — overlapping circles
-    ctx.fillStyle = cloudColor;
-    ctx.beginPath();
-    ctx.arc(x, y, size * 0.4, 0, Math.PI * 2);
-    ctx.arc(x + size * 0.4, y + size * 0.05, size * 0.35, 0, Math.PI * 2);
-    ctx.arc(x - size * 0.4, y, size * 0.3, 0, Math.PI * 2);
-    ctx.arc(x + size * 0.15, y - size * 0.2, size * 0.3, 0, Math.PI * 2);
-    ctx.arc(x - size * 0.15, y - size * 0.15, size * 0.25, 0, Math.PI * 2);
-    // Extra puffs for more detail
-    ctx.arc(x + size * 0.55, y - size * 0.05, size * 0.2, 0, Math.PI * 2);
-    ctx.arc(x - size * 0.5, y - size * 0.1, size * 0.2, 0, Math.PI * 2);
-    ctx.fill();
   }
 
   /**
@@ -494,9 +210,11 @@ export class SceneManager {
         checkpoint.passed = true;
 
         // Visual feedback: change checkpoint color to gold
-        const material = checkpoint.mesh.material as THREE.ShaderMaterial;
-        if (material.uniforms?.uColor) {
+        const material = checkpoint.mesh.material as THREE.ShaderMaterial | THREE.MeshToonMaterial;
+        if (material instanceof THREE.ShaderMaterial && material.uniforms?.uColor) {
           material.uniforms.uColor.value.setHex(0xFFD700);
+        } else if ('color' in material && material.color instanceof THREE.Color) {
+          material.color.setHex(0xFFD700);
         }
 
         // Trigger callback
@@ -843,15 +561,6 @@ export class SceneManager {
     if (this.currentLevel) {
       this.currentLevel.cleanup();
     }
-    if (this.currentSkyboxTexture) {
-      this.currentSkyboxTexture.dispose();
-    }
-    if (this.skyboxMesh) {
-      this.scene.remove(this.skyboxMesh);
-      this.skyboxMesh.geometry.dispose();
-      (this.skyboxMesh.material as THREE.Material).dispose();
-    }
-    this.scene.background = null;
     this.hud.dispose();
   }
 }

@@ -1,138 +1,117 @@
 /**
  * LoadingScreen - Shows loading progress while game initializes
  *
- * Displays "Loading Wonderland..." with animated progress bar
- * and whimsical Alice-themed visuals.
+ * Gilded Storybook treatment: ink backdrop, shimmering wordmark, a thin
+ * gold progress filament, and card suits drifting up like embers.
  */
+
+import { injectTheme } from './theme';
 
 export class LoadingScreen {
   private container: HTMLDivElement;
-  private progressBar: HTMLDivElement;
   private progressFill: HTMLDivElement;
   private statusText: HTMLDivElement;
   private progress: number = 0;
 
   constructor() {
+    injectTheme();
+
     // Container
     this.container = document.createElement('div');
     this.container.style.cssText = `
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(180deg, #1a0a2e 0%, #2d1b4e 50%, #4a2c6e 100%);
+      inset: 0;
+      background:
+        radial-gradient(ellipse 90% 60% at 50% 40%, rgba(212, 175, 95, 0.10), transparent 60%),
+        linear-gradient(180deg, #0e0a18 0%, #171122 55%, #241a38 100%);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-family: 'Georgia', serif;
       z-index: 2000;
+      overflow: hidden;
     `;
 
-    // Add floating particles
+    // Drifting card suits
     this.addParticles();
 
     // Title
     const title = document.createElement('h1');
     title.textContent = 'Alice in Wonderland';
+    title.className = 'aw-display aw-gold-text';
     title.style.cssText = `
-      font-size: 48px;
-      color: #ffd700;
-      text-shadow: 0 0 20px #ffd700;
-      margin: 0 0 10px 0;
-      letter-spacing: 3px;
+      font-size: clamp(40px, 6vw, 64px);
+      margin: 0 0 6px 0;
+      text-align: center;
     `;
     this.container.appendChild(title);
 
     // Loading text
     const loadingText = document.createElement('p');
-    loadingText.textContent = 'Loading Wonderland...';
+    loadingText.textContent = 'Falling into Wonderland…';
+    loadingText.className = 'aw-kicker';
     loadingText.style.cssText = `
       font-size: 20px;
-      color: #e0b0ff;
-      margin: 0 0 30px 0;
-      font-style: italic;
+      margin: 0 0 48px 0;
+      animation: awBreathe 2.4s ease-in-out infinite;
     `;
     this.container.appendChild(loadingText);
 
-    // Progress bar container
-    this.progressBar = document.createElement('div');
-    this.progressBar.style.cssText = `
-      width: 300px;
-      height: 20px;
-      background: rgba(0,0,0,0.5);
-      border: 2px solid #ffd700;
-      border-radius: 10px;
-      overflow: hidden;
-      margin-bottom: 20px;
+    // Progress filament: a thin gold line that fills left to right
+    const progressTrack = document.createElement('div');
+    progressTrack.style.cssText = `
+      width: min(340px, 70vw);
+      height: 2px;
+      background: rgba(212, 175, 95, 0.18);
+      border-radius: 2px;
+      overflow: visible;
+      margin-bottom: 22px;
     `;
-    this.container.appendChild(this.progressBar);
+    this.container.appendChild(progressTrack);
 
-    // Progress fill
     this.progressFill = document.createElement('div');
     this.progressFill.style.cssText = `
       width: 0%;
       height: 100%;
-      background: linear-gradient(90deg, #9370db 0%, #ffd700 100%);
-      border-radius: 8px;
-      transition: width 0.3s ease;
+      background: linear-gradient(90deg, var(--aw-gold-dim), var(--aw-gold-bright));
+      border-radius: 2px;
+      box-shadow: 0 0 12px rgba(243, 212, 137, 0.7);
+      transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
     `;
-    this.progressBar.appendChild(this.progressFill);
+    progressTrack.appendChild(this.progressFill);
 
     // Status text
     this.statusText = document.createElement('p');
-    this.statusText.textContent = 'Initializing...';
+    this.statusText.textContent = 'Initializing…';
     this.statusText.style.cssText = `
-      font-size: 14px;
-      color: #888;
+      font-family: var(--aw-font-text);
+      font-size: 16px;
+      color: var(--aw-parchment);
+      opacity: 0.55;
       margin: 0;
+      letter-spacing: 0.06em;
     `;
     this.container.appendChild(this.statusText);
-
-    // Rabbit icon (CSS art)
-    const rabbit = document.createElement('div');
-    rabbit.innerHTML = '🐰';
-    rabbit.style.cssText = `
-      font-size: 40px;
-      margin-top: 30px;
-      animation: bounce 1s ease-in-out infinite;
-    `;
-    this.container.appendChild(rabbit);
-
-    // Add bounce animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
-      }
-      @keyframes float-particle {
-        0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
-        10% { opacity: 1; }
-        90% { opacity: 1; }
-        100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
-      }
-    `;
-    document.head.appendChild(style);
   }
 
   /**
-   * Add floating particles
+   * Add drifting card-suit particles
    */
   private addParticles(): void {
-    const symbols = ['♠', '♥', '♦', '♣', '🗝️', '⭐'];
+    const symbols = ['♠', '♥', '♦', '♣', '❦'];
 
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 14; i++) {
       const particle = document.createElement('div');
       particle.textContent = symbols[Math.floor(Math.random() * symbols.length)];
+      const isRed = particle.textContent === '♥' || particle.textContent === '♦';
       particle.style.cssText = `
         position: absolute;
-        font-size: ${Math.random() * 20 + 15}px;
-        color: rgba(255,215,0,0.3);
+        font-size: ${Math.random() * 16 + 12}px;
+        color: ${isRed ? 'rgba(216, 90, 116, 0.28)' : 'rgba(212, 175, 95, 0.25)'};
         left: ${Math.random() * 100}%;
-        animation: float-particle ${Math.random() * 10 + 10}s linear infinite;
-        animation-delay: ${Math.random() * 10}s;
+        animation: awDriftUp ${Math.random() * 12 + 12}s linear infinite;
+        animation-delay: ${Math.random() * 12}s;
+        pointer-events: none;
       `;
       this.container.appendChild(particle);
     }
